@@ -1,0 +1,13 @@
+node_modules
+.expo
+dist
+ios
+android
+package-lock.json
+
+# Planning and architecture artifacts - authored/reviewed outside the
+# app-source formatting pipeline, not application code.
+docs
+plans
+errors
+reports
