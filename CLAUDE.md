@@ -6,12 +6,37 @@ reference, not a replacement. Section numbers below refer to `docs/ARCHITECTURE.
 
 ## Status
 
-P0 (project foundation) is complete. No feature code exists yet - `features/*` are
-empty skeleton directories (components/hooks/screens/services/domain/repository/
-types/index.ts subfolders, no implementation). `app/index.tsx` is a real, finished
-minimal Home screen, not a placeholder. Implementation proceeds one roadmap phase at
-a time per `docs/ROADMAP.md` (P0-P16) - never skip ahead to a later phase's feature
-before the current phase is committed.
+P0 (project foundation) and P1 (design system and UI primitives) are complete. No
+feature code exists yet - `features/*` are empty skeleton directories
+(components/hooks/screens/services/domain/repository/types/index.ts subfolders, no
+implementation). `app/index.tsx` is a real, finished minimal Home screen, not a
+placeholder. Implementation proceeds one roadmap phase at a time per
+`docs/ROADMAP.md` (P0-P16) - never skip ahead to a later phase's feature before the
+current phase is committed.
+
+`theme/tokens.ts` carries the full token set from ARCHITECTURE.md section 11
+(color, space, radius, elevation, font, motion, hitSlop), not P0's bootstrap subset.
+`components/ui` (22 primitives), `components/layout`, `components/feedback`
+(including toast/sheet stores and root hosts), and `components/gestures`
+(`SwipeableRow`, `DraggableList`, `PressScale`) are populated with real,
+accessibility-audited implementations - no empty skeletons remain in those four
+directories. `services/haptics` is a semantic wrapper (`setCompleted`,
+`personalRecord`, `adjust`, `select`, `destructive`, `timerFinished`) that no-ops when
+the haptics setting is off. `i18n/` provides a typed `t()` over an English-only
+catalog (`i18n/catalogs/en.ts`) plus `expo-localization` for device-locale reads;
+see the i18n note below for why it's hand-rolled rather than a library. A dev-only
+`/dev/gallery` route (`app/dev/gallery.tsx`, `__DEV__`-guarded via `Redirect`) renders
+every primitive in every variant and state - the review surface for design-system
+changes going forward.
+
+**i18n choice**: `t()` is a small, hand-rolled, compile-time-checked lookup
+(`i18n/translate.ts` derives a `TranslationKey` union from the catalog's own shape,
+so a typo or renamed key is a type error, not a runtime miss) rather than
+i18next/i18n-js. Reasoning: v1 ships English-only (D-11), so a full i18n library's
+runtime, context/provider surface, and plugin ecosystem buys nothing yet. Adding a
+Polish catalog later is a data-only addition (a new file under `i18n/catalogs/`) with
+no call-site refactor - revisit the library question only if a second locale or
+plural rules beyond `one`/`other` are actually needed.
 
 ## Product
 
@@ -155,6 +180,26 @@ already has real fast-check property tests, not filler.
   and the only `Sentry.init()` call site land in P15 (settings) - do not add error
   boundaries or capture call sites before then, there's no feature code to
   instrument yet.
+
+## Known gaps (tracked, non-blocking)
+
+- **`components/gestures/DraggableList.tsx` has no non-gesture reorder
+  alternative.** It is gesture-only today - no consumer exists yet, so this doesn't
+  block P1, but it is a real accessibility gap for whichever feature phase consumes
+  it for actual reordering (the roadmap's `plans` feature, reordering exercises
+  within a plan day, is the likely first consumer). That phase MUST add an
+  accessibility-action-based alternative (e.g. move-up/move-down actions) before
+  shipping - mirror how `SwipeableRow` exposes its swipe actions via
+  `accessibilityActions`/`onAccessibilityAction` (see `SwipeableRow.tsx`'s
+  `cloneElement`-based merge onto a single child, not the outer `View`). Do not ship
+  drag-only reordering as the final state. Source: accessibility audit finding
+  A11Y-005, `reports/accessibility-2026-08-05-p1.md`.
+- **No icon library chosen yet.** Every icon-accepting prop across `components/ui`
+  is typed `ReactNode`, with `Text`-glyph placeholders standing in (e.g. `Checkbox`'s
+  checkmark, `DraggableList`'s grip dots). The first feature phase that needs real
+  iconography must make this choice. `react-native-svg` is already a dependency, so
+  a hand-built SVG icon set or `@expo/vector-icons` are the live options - pick one
+  and use it everywhere, don't let two icon systems coexist.
 
 ## Further reading
 
