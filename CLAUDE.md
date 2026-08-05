@@ -6,11 +6,16 @@ reference, not a replacement. Section numbers below refer to `docs/ARCHITECTURE.
 
 ## Status
 
-P0 (project foundation) and P1 (design system and UI primitives) are complete. No
-feature code exists yet - `features/*` are empty skeleton directories
-(components/hooks/screens/services/domain/repository/types/index.ts subfolders, no
-implementation). `app/index.tsx` is a real, finished minimal Home screen, not a
-placeholder. Implementation proceeds one roadmap phase at a time per
+P0 (project foundation), P1 (design system and UI primitives), and P2 (persistence
+foundation) are complete. No feature screens exist yet - `features/*` are still empty
+skeleton directories (components/hooks/screens/services/domain/repository/types/
+index.ts subfolders, no implementation); P2 built the data layer and infrastructure
+those features will sit on, not feature code itself. `app/index.tsx` is a real,
+finished minimal Home screen, not a placeholder. A dev-only `/dev/db-health` route
+(`app/dev/db-health.tsx`, same `__DEV__`-guarded `Redirect` pattern as `/dev/gallery`)
+shows schema version, last migration, per-table row counts, file size, `PRAGMA
+integrity_check`, SQLite version/compile options, and FTS5/partial-index
+availability. Implementation proceeds one roadmap phase at a time per
 `docs/ROADMAP.md` (P0-P16) - never skip ahead to a later phase's feature before the
 current phase is committed.
 
@@ -47,8 +52,10 @@ cloud sync. Dark mode only. Bundle id `com.konradmalinowski.gymtracker`. Min OS:
 ## Stack
 
 Expo + TypeScript (strict) + Expo Router (typed routes) + Zustand (ephemeral UI
-state only) + TanStack Query + Expo SQLite + React Hook Form + Zod + MMKV +
-FlashList + Reanimated + Gesture Handler + Victory Native XL (wrapped in a
+state only) + TanStack Query + Expo SQLite + React Hook Form + Zod + MMKV (requires
+`react-native-nitro-modules` as its native peer - a pod install/prebuild step
+before the next device run) + FlashList + Reanimated + Gesture Handler + Victory
+Native XL (wrapped in a
 `components/charts` adapter per ADR-0010) + React Native SVG + Expo Notifications +
 Expo Haptics + Expo FileSystem + NativeWind (`tailwind.config.js` imports
 `theme/tokens.ts`, never duplicates values).
@@ -133,32 +140,80 @@ Eleven features total: `onboarding`, `profile`, `exercise-library`, `plans`,
 
 ## Data layer (sections 7-8)
 
-**Not yet implemented** - designed in `docs/ARCHITECTURE.md` but no schema, no
-migrations, no repository implementations exist yet. Lands in P3 (database schema +
-migrations). Key decisions to know ahead of time:
+Built in P2 (persistence foundation) - `database/schema.sql` and
+`database/migrations/001_initial.ts` implement the full schema from
+`docs/ARCHITECTURE.md` section 7 in one migration (every table, index, and view),
+applied through a migration runner over `PRAGMA user_version` with a
+`migration_history` table and a forward-version guard. No feature repository lives
+on top of this yet (that's each feature phase's job, one at a time); P2 shipped the
+schema, the shared repository infrastructure, and the settings repository only.
 
 - SQLite via Expo SQLite, UUIDv7 TEXT primary keys everywhere (sync-readiness).
 - Timestamps: epoch ms UTC plus a separate `local_date` (`YYYY-MM-DD`) column on
   every entity the user perceives as "a day."
 - Units always stored as kg (weight) / cm (length). Unit conversion happens **only**
-  in `domain/Weight.ts` and `domain/Length.ts` - already enforced today, even before
-  the rest of the data layer exists, by the `gymtracker/unit-conversion-boundary`
-  ESLint block (`no-restricted-syntax`, banning the known kg<->lb and cm<->in
-  conversion-factor literals - `2.20462`, `0.45359237`, `2.54`, `0.393701` -
-  anywhere outside those two files, via
+  in `domain/Weight.ts` and `domain/Length.ts`, enforced by the
+  `gymtracker/unit-conversion-boundary` ESLint block (`no-restricted-syntax`,
+  banning the known kg<->lb and cm<->in conversion-factor literals - `2.20462`,
+  `0.45359237`, `2.54`, `0.393701` - anywhere outside those two files, via
   `gymtracker/unit-conversion-boundary-exemptions`).
 - Exercise catalog data (`exercise`) is separated from user data
   (`exercise_user_data`) so a catalog update never destroys favorites/notes.
 - No `change_log` table or `findChangedSince()` - only sync-readiness primitives
   that pay for themselves today (ADR-0004).
+- Three partial unique indexes enforce single-active-row invariants at the SQLite
+  level: `ux_plan_single_active`, `ux_session_single_in_progress`, `ux_pr_current`
+  (`docs/ROADMAP.md`'s P2 prose says "two" - section 7 of
+  `docs/ARCHITECTURE.md` is the authoritative source and defines three; the
+  roadmap wording is stale).
+- `database/client.ts` opens the connection with WAL journaling, `synchronous=FULL`,
+  `foreign_keys=ON`, a busy timeout, and `temp_store=MEMORY`, and exposes
+  `ExpoSqlExecutor`. `database/node/NodeSqlExecutor.ts` runs the same schema on
+  `node:sqlite` for tests/CI/benchmarks - chosen over `better-sqlite3` to avoid a
+  native compile step (CI already pins Node 24 for `node:sqlite` support).
+- `database/diagnostics.ts` reports schema version, per-table row counts, file size,
+  `PRAGMA integrity_check`, last migration, SQLite version/compile options, and
+  FTS5/partial-index availability - backs the `/dev/db-health` route.
+- `repositories/contracts/` defines `SqlExecutor`/`DatabaseContext`/
+  `ReadRepository`/`WriteRepository` (section 8.2). `repositories/base/
+BaseSqliteRepository` handles id generation, audit stamping, injected-`Clock`
+  `local_date` computation, and generic soft delete/restore/purge.
+  `repositories/mapping/` holds case-conversion and bool/JSON codecs.
+  `repositories/query/` provides a parameterized `WhereClause`, a whitelisted
+  `orderBy`, and clamped limit/offset.
+- `repositories/settings/SqliteSettingsRepository` covers all 14 v1 settings keys,
+  Zod-validated with default-fallback on a missing or corrupt stored value. It sits
+  as a top-level sibling of `repositories/{base,mapping,query}` rather than under a
+  feature - cross-cutting, and it doesn't fit the `ReadRepository`/`WriteRepository`
+  shape - the same kind of deviation as the root `domain/` folder noted above.
+- `services/container.ts` (`AppContainer`/`createContainer`/`ContainerProvider`/
+  `useContainer`) is the composition root. It's deliberately smaller than section
+  8.4's full shape - feature repositories (`exercises`, `plans`, `sessions`, etc.)
+  don't exist yet and land one at a time from P4 onward, each phase extending
+  `AppContainer` rather than replacing it. `services/kv` is intentionally not a
+  container member (ADR-0008: MMKV holds boot-critical flags read before the
+  database opens).
+- Exercise catalog: `scripts/build-catalog.ts` fetches from `yuhonas/free-exercise-db`,
+  downscales imagery to 512px WebP via `sharp`, content-hash-dedupes, and emits
+  `assets/data/exercises.catalog.json` (deterministic, Zod-validated) plus empty
+  `exercises.pl.json`/`exercises.videos.json` overlays for a future phase to fill.
+  `CATALOG_VERSION` is currently hardcoded `"1"`. An idempotent, versioned
+  `catalogSeeder` loads the catalog into the DB without touching
+  `exercise_user_data`.
 
 ## Testing strategy (section 14)
 
 Domain layer: property-based tests (fast-check) for calculators - highest-value
 tests in the app. Repository layer: integration tests against real `schema.sql` via
-better-sqlite3, not mocks. Component layer: React Native Testing Library. E2E:
-Maestro. `jest.config.js` + `jest-expo` are already wired (P0); `domain/Weight.ts`
-already has real fast-check property tests, not filler.
+`NodeSqlExecutor` (`node:sqlite`), not mocks - chosen over `better-sqlite3` to skip a
+native compile step. Component layer: React Native Testing Library. E2E: Maestro.
+`jest.config.js` + `jest-expo` are already wired (P0); `domain/Weight.ts` already has
+real fast-check property tests, not filler. `__tests__/database/benchmarks.perf.test.ts`
+is a CI performance-regression suite (ADR-0014) with real assertions for what P2
+ships (previous-performance lookup, session detail load, one-year volume
+aggregation); two benchmarks are `test.skip`'d with a comment naming the future
+phase that implements them (exercise search - P4, JSON export - P9), not silently
+omitted.
 
 ## Tooling and CI (section 15, built in P0)
 

@@ -52,3 +52,26 @@ stops being a scaffold placeholder.
   English-only catalog, plus `expo-localization` for device-locale reads (P1)
 - Dev-only `/dev/gallery` route reviewing every primitive, variant, and state,
   excluded from production builds via a `__DEV__` guard (P1)
+- Full SQLite schema (`database/schema.sql`, `database/migrations/001_initial.ts`)
+  per `docs/ARCHITECTURE.md` section 7, applied through a migration runner with a
+  forward-version guard (P2)
+- `database/client.ts` and `ExpoSqlExecutor`, plus a `node:sqlite`-backed
+  `NodeSqlExecutor` for tests/CI/benchmarks, and `database/diagnostics.ts` (schema
+  version, row counts, file size, integrity check, SQLite build info) (P2)
+- Shared repository infrastructure: `repositories/contracts`, `repositories/base`
+  (`BaseSqliteRepository`), `repositories/mapping`, and `repositories/query` (P2)
+- `services/id` (UUIDv7), `services/clock`, `services/kv` (typed MMKV wrapper),
+  `services/files`, `services/logging`, and `services/container.ts` as the
+  composition root (P2)
+- `repositories/settings/SqliteSettingsRepository`, covering all 14 v1 settings
+  keys with Zod validation and default-fallback (P2)
+- Exercise catalog build pipeline (`scripts/build-catalog.ts`) fetching from
+  `yuhonas/free-exercise-db`, downscaling imagery to 512px WebP, and emitting a
+  deterministic, Zod-validated catalog (873 exercises, 1721 deduplicated images),
+  plus an idempotent, versioned `catalogSeeder` (P2)
+- `scripts/generate-perf-fixture.ts` and a CI performance-regression benchmark
+  suite (`__tests__/database/benchmarks.perf.test.ts`) per `docs/adr/0014` (P2)
+- Dev-only `/dev/db-health` route showing schema version, row counts, file size,
+  integrity check, and SQLite build info, reusing existing P1 primitives (P2)
+- New dependencies: `react-native-nitro-modules` (MMKV's native peer) and `sharp`
+  (build-time-only, exercise catalog image processing) (P2)
