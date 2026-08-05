@@ -21,7 +21,30 @@ module.exports = {
   // ARCHITECTURE.md section 14.2 the repository tests will need exactly that.
   testMatch: ['**/__tests__/**/*.test.ts?(x)', '**/*.test.ts?(x)'],
 
+  // Gesture Handler's own jestSetup mocks its native module (`SwipeableRow`,
+  // `DraggableList`) the same way `moduleNameMapper` below stands in for
+  // Reanimated's - both are the libraries' own documented Jest entry points,
+  // not hand-rolled mocks.
+  setupFiles: ['react-native-gesture-handler/jestSetup'],
+
   clearMocks: true,
+
+  // Reanimated 4 / react-native-worklets try to load a real native module at
+  // import time (`NativeWorklets.native.ts`'s `loadUnpackers`), which has no
+  // native side under Jest's Node environment and throws before any test
+  // runs. Both packages ship their own JS-only mock for exactly this
+  // (shared values become plain refs, `useAnimatedStyle` returns a static
+  // style object, `withSpring`/`withTiming` resolve immediately) - but
+  // Reanimated's `mock.js` alone isn't enough on 4.x, since it still imports
+  // its real `./index`, which in turn imports the real (native-module-
+  // touching) `react-native-worklets`. Mocking `react-native-worklets` too
+  // is what actually breaks that chain, letting every component built on
+  // Reanimated (`PressScale`, `SegmentedControl`, `SwipeableRow`,
+  // `DraggableList`) render under RNTL without a real worklets runtime.
+  moduleNameMapper: {
+    '^react-native-worklets$': 'react-native-worklets/lib/module/mock',
+    '^react-native-reanimated$': 'react-native-reanimated/mock',
+  },
 
   collectCoverageFrom: [
     'domain/**/*.ts',

@@ -6,8 +6,9 @@ lives on the device. The app is dark-mode only and is designed around one core p
 logging a set should take 2-3 seconds. Bundle identifier:
 `com.konradmalinowski.gymtracker`. Minimum OS: iOS 15+, Android 8 / API 26+.
 
-The project is at the P0 (project foundation) phase of its roadmap: the scaffold,
-tooling, and CI are in place, but no feature screens exist yet. See
+The project has completed P0 (project foundation) and P1 (design system and UI
+primitives) of its roadmap: the scaffold, tooling, CI, design tokens, and UI
+component library are in place, but no feature screens exist yet. See
 [docs/ROADMAP.md](docs/ROADMAP.md) for what's next.
 
 ## Prerequisites

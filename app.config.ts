@@ -24,6 +24,10 @@ const config: ExpoConfig = {
   plugins: [
     'expo-router',
     'expo-sqlite',
+    // Device-locale detection for the P1 i18n layer (@/i18n) - only the
+    // English catalog ships in v1 (D-11), but reading the device locale now
+    // means a future Polish catalog is a data-only addition, not a refactor.
+    'expo-localization',
     [
       'expo-splash-screen',
       {

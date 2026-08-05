@@ -22,6 +22,7 @@ module.exports = function (api) {
             '@/repositories': './repositories',
             '@/stores': './stores',
             '@/domain': './domain',
+            '@/i18n': './i18n',
           },
         },
       ],

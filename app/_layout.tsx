@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 
+import { SheetHost, ToastHost } from '@/components/feedback';
 import { color } from '@/theme/tokens';
 
 // Keep the native splash screen mounted until the root view has laid out.
@@ -35,6 +36,11 @@ export default function RootLayout() {
               contentStyle: { backgroundColor: color.background },
             }}
           />
+          {/* Single root-level hosts (ARCHITECTURE.md section 11.7) - every
+              feature triggers a toast/sheet through stores/toastStore.ts and
+              stores/sheetStore.ts rather than mounting its own. */}
+          <ToastHost />
+          <SheetHost />
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
