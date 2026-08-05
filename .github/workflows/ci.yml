@@ -1,0 +1,92 @@
+name: CI
+
+# ARCHITECTURE.md section 15.1, "CI: verify". Triggering on PRs into `main` plus
+# pushes to `main` itself covers every path code can take into the default branch
+# without running the same commit twice (a `push: ['**']` trigger would duplicate
+# every run once a PR is open). `workflow_dispatch` is there because this is a
+# solo-developer repo where a manual re-run is occasionally the fastest way to
+# clear a flaky network step.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Superseded runs on the same branch are wasted minutes and noisy red crosses.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # Skip the `prepare` script's git-hook install: hooks are a local
+      # pre-commit concern and have nothing to do in a CI checkout.
+      HUSKY: 0
+      # Keep the run non-interactive and quiet.
+      CI: true
+      EXPO_NO_TELEMETRY: 1
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          # Tracks the version the project is developed against. `cache: npm`
+          # caches the npm *download* cache (~/.npm) keyed on package-lock.json,
+          # which is the right layer for `npm ci` - caching node_modules itself
+          # would defeat the point of `ci` (a clean, lock-exact install) and
+          # would carry platform-specific binaries across runs.
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Every check below runs even if an earlier one failed, so a single push
+      # reports all its problems at once instead of one per round-trip. The job
+      # still fails if any of them fail.
+      - name: Typecheck
+        if: ${{ !cancelled() }}
+        run: npm run typecheck
+
+      - name: Lint
+        if: ${{ !cancelled() }}
+        run: npm run lint
+
+      - name: Format check
+        if: ${{ !cancelled() }}
+        run: npm run format:check
+
+      - name: Test
+        if: ${{ !cancelled() }}
+        run: npm run test:ci
+
+      - name: Expo doctor
+        if: ${{ !cancelled() }}
+        run: npx expo-doctor
+
+      # Fails the build on High and Critical advisories only. Moderate findings
+      # in this project are transitive Expo tooling dependencies with no fix
+      # short of downgrading the SDK, so gating on them would mean a permanently
+      # red pipeline that everyone learns to ignore.
+      - name: Dependency audit
+        if: ${{ !cancelled() }}
+        run: npm run audit:ci
+
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+          if-no-files-found: error
