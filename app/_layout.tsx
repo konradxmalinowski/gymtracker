@@ -13,7 +13,7 @@ import { color } from '@/theme/tokens';
 // P0 bundles no custom fonts or bootstrap assets to wait on, so "ready" is
 // the first layout pass; P1 extends this gate with `useFonts` once
 // assets/fonts/ has real font files to load.
-void SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // One QueryClient instance for the app's lifetime. Server/DB-read state goes
 // through TanStack Query per feature hooks (ARCHITECTURE.md section 3.1, rule
@@ -22,7 +22,7 @@ const queryClient = new QueryClient();
 
 export default function RootLayout() {
   const onLayoutRootView = useCallback(() => {
-    void SplashScreen.hideAsync();
+    void SplashScreen.hideAsync().catch(() => {});
   }, []);
 
   return (
