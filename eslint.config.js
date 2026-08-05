@@ -133,6 +133,13 @@ module.exports = [
                 "expo-sqlite may only be imported from database/ or a feature's repository/*.ts (ARCHITECTURE.md section 3.1, rule 2).",
             },
           ],
+          patterns: [
+            {
+              group: ['expo-sqlite/*'],
+              message:
+                "expo-sqlite may only be imported from database/ or a feature's repository/*.ts (ARCHITECTURE.md section 3.1, rule 2).",
+            },
+          ],
         },
       ],
     },
