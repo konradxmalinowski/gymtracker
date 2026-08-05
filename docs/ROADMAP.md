@@ -185,7 +185,7 @@ Acceptance:
 - Re-running it with a bumped version updates catalog rows and leaves
   `exercise_user_data` untouched (asserted by a test).
 - Every table, constraint, partial index and view in ARCHITECTURE.md section 7 exists and
-  has a test asserting its behavior, including the two partial unique indexes.
+  has a test asserting its behavior, including the three partial unique indexes.
 - Repository tests run in Node in under 2 seconds.
 - The benchmark suite runs in CI and reports baseline numbers.
 
