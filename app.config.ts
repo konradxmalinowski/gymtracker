@@ -3,7 +3,7 @@ import type { ExpoConfig } from 'expo/config';
 const config: ExpoConfig = {
   name: 'GymTracker',
   slug: 'gymtracker',
-  owner: 'konradxmalinowski',
+  owner: 'konradxmalinowski-2',
   version: '1.0.0',
   orientation: 'portrait',
   scheme: 'gymtracker',
@@ -28,6 +28,20 @@ const config: ExpoConfig = {
     // English catalog ships in v1 (D-11), but reading the device locale now
     // means a future Polish catalog is a data-only addition, not a refactor.
     'expo-localization',
+    [
+      // P3: onboarding's optional avatar picker. Only `launchImageLibraryAsync`
+      // is ever called (no camera-capture screen exists) - `cameraPermission:
+      // false` tells the plugin to omit the camera permission/entitlement
+      // entirely (NSCameraUsageDescription on iOS, android.permission.CAMERA
+      // on Android) rather than requesting an access scope the app never
+      // exercises. Add a real `cameraPermission` string only if/when a screen
+      // actually calls `launchCameraAsync`.
+      'expo-image-picker',
+      {
+        photosPermission: 'GymTracker uses your photo library to set a profile avatar.',
+        cameraPermission: false,
+      },
+    ],
     [
       'expo-splash-screen',
       {
@@ -60,7 +74,7 @@ const config: ExpoConfig = {
   ],
   extra: {
     eas: {
-      projectId: '8d2daf31-1534-4a7d-81ed-8ed9eba57f01',
+      projectId: '9c25b5d1-7371-49ec-aaee-f6884a31e820',
     },
     sentry: {
       // P15 (settings) adds the user-facing toggle that overrides this default and is the only place Sentry.init() is ever called.
