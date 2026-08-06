@@ -7,13 +7,13 @@ reference, not a replacement. Section numbers below refer to `docs/ARCHITECTURE.
 ## Status
 
 P0 (project foundation), P1 (design system and UI primitives), P2 (persistence
-foundation), P3 (onboarding, profile and core settings), and P4 (exercise library)
-are complete. The `onboarding`, `profile`, and `exercise-library` features now have
-real implementations (screens, hooks, services, repository); the remaining eight
-features (`plans`, `workout-logging`, `rest-timer`, `records`, `statistics`,
-`body-metrics`, `calendar`, `data-transfer`) are still empty skeleton directories
-(components/hooks/screens/services/domain/repository/types/index.ts subfolders, no
-implementation) awaiting their own phase.
+foundation), P3 (onboarding, profile and core settings), P4 (exercise library), and
+P5 (workout plans) are complete. The `onboarding`, `profile`, `exercise-library`, and
+`plans` features now have real implementations (screens, hooks, services,
+repository); the remaining seven features (`workout-logging`, `rest-timer`,
+`records`, `statistics`, `body-metrics`, `calendar`, `data-transfer`) are still empty
+skeleton directories (components/hooks/screens/services/domain/repository/types/
+index.ts subfolders, no implementation) awaiting their own phase.
 
 The app now boots for real: `app/_layout.tsx` opens the database, runs migrations,
 seeds the exercise catalog (`database/seed/runSeed()`, idempotent - a P2 gap fixed in
@@ -22,8 +22,9 @@ query resolves, then gates to `/onboarding` (no profile yet) or the tab bar.
 `app/index.tsx` no longer exists - the Home screen moved to `app/(tabs)/index.tsx`
 under a 5-tab layout (`app/(tabs)/_layout.tsx`: Home, Plans, Exercises, Stats,
 Profile) using `@expo/vector-icons` (Ionicons; see "Known gaps" history below - this
-resolved the prior no-icon-library gap). The Plans and Stats tabs still render a
-genuine "not built yet" empty state (their features land in P5/P11), not a stub.
+resolved the prior no-icon-library gap). The Stats tab is the only one still
+rendering a genuine "not built yet" empty state (its feature lands in P11), not a
+stub - Plans joined Exercises as a real nested Stack navigator in P5 (see below).
 Onboarding (`app/onboarding/index.tsx` + `features/onboarding/*`) collects a required
 nickname and an optional avatar via `expo-image-picker`, is skippable, and handles
 permission denial gracefully. All navigation goes through the typed helpers in
@@ -46,6 +47,16 @@ favorites-first ordering, and FlashList-backed results (FlashList's first real u
   P8. Favorite toggle fires haptics; custom exercise create/edit uses React Hook Form +
   Zod with primary/secondary muscle selection; delete is guarded by
   `listReferencingPlans`, which names the blocking plan rather than failing silently.
+
+The Plans tab (`app/(tabs)/plans/`) is likewise a real nested Stack navigator (list ->
+detail -> day editor) as of P5 - `app/(tabs)/_layout.tsx`'s tab registration changed
+from `name="plans/index"` to `name="plans"`, mirroring the P4 exercises-tab
+restructure exactly. `PlanListScreen` lists plans with day counts, active-plan
+marking, reordering, duplication, and delete; `PlanDetailScreen` shows one plan's days
+with the same operations one level down plus a superset-group editor
+(`SupersetGroupEditor`); `PlanDayEditorScreen` edits a single day's exercises (added
+via the new exercise-picker modal, reordered, given per-exercise sets/rep-range/RPE/
+rest targets, removed). All three screens use `DraggableList` for reordering.
 
 Two pre-existing P2 gaps were fixed as part of P4, not as unrelated drive-by changes:
 catalog seeding (`database/seed/runSeed()`, built in P2 but never wired up) now runs
@@ -119,6 +130,64 @@ repository from presentation, per the "no direct repository access" rule.
 `require()` - the standard React Native pattern for a large set of runtime-keyed
 bundled assets Metro can't resolve dynamically; `assets/exercises/index.ts` exports
 the consumer-facing `getExerciseImageSource()`.
+
+`features/plans/repository/{PlanRepository.ts,SqlitePlanRepository.ts}` is the app's
+first aggregate-root feature repository (ARCHITECTURE.md section 8.3's
+`PlanRepository` - a plan plus its days plus its day-exercises as one transactional
+unit), built on the same `BaseSqliteRepository` foundation as
+`SqliteProfileRepository`/`SqliteExerciseRepository`. Beyond section 8.3's original
+17-method contract it adds five methods, the same kind of addition P4's
+`ExerciseRepository` made with `deleteCustom`: `deletePlan`/`restorePlan` (soft
+delete/undo) and `purgePlan` (hard delete - what the "delete a whole plan" user
+action actually calls, since a hard delete is what's needed to fire
+`workout_session`'s `ON DELETE SET NULL`/`ON DELETE CASCADE` for session-snapshot
+survival), plus `restoreDay`/`restoreDayExercise` (undo pairs for the day/
+day-exercise soft-delete methods already in the literal spec). `PlanService` is
+Zod-validated against the schema's own CHECK constraints and is the only door into
+the repository from presentation, same rule as `ExerciseService`. It routes
+plan-level delete to the hard `purgePlan` (confirm-dialog, no undo -
+`docs/ARCHITECTURE.md` section 10.2's nav rules reserve confirmation dialogs for
+whole-plan delete) and day/day-exercise-level delete to the soft-delete-plus-undo-toast
+pair instead (same nav rules, one tier down). Both `duplicatePlan` and `duplicateDay`
+disambiguate name collisions the repository's own deep-copy leaves unresolved -
+"(copy)", then "(copy 2)", "(copy 3)", ... - scoped globally across all plans for
+`duplicatePlan` and per-plan for `duplicateDay`. `setSupersetGroup` requires at least
+2 exercise ids to form or update a group, but allows exactly 1 to clear a
+day-exercise back to standalone, enforced in the service one level above the
+repository's own same-day invariant check. `services/container.ts` gained
+`planRepository`/`planService`, the third feature repository pair after P3's profile
+and P4's exercise-library ones.
+
+The exercise-picker (`features/exercise-library/screens/ExercisePickerScreen.tsx`,
+new - a multi-select sibling of P4's library screen, reusing its search hooks) is
+reached through the app's first modal route group, `app/(modals)/` (`_layout.tsx` +
+`exercise-picker.tsx`), from the plan day editor's "add exercise" action. Its result
+
+- an unbounded list of selected exercise ids - comes back through a new root-level
+  Zustand store, `stores/exercisePickerStore.ts`, rather than route params: Expo Router
+  has no "push and await a result" primitive, and an unbounded id list has no business
+  round-tripping through a URL query string. The store is scoped to exactly this
+  open/close flow (cleared on both ends, never left holding a stale request) and lives
+  at the project root rather than inside either feature, since `exercise-library` must
+  stay a dependency-free leaf (section 9.1) and `plans` may only depend on it through
+  its barrel - either feature owning the store would violate one of those two rules.
+
+`components/gestures/DraggableList.tsx`'s tracked "Known gaps" item (gesture-only
+reordering, no non-gesture alternative) was closed this phase across two rounds - the
+first pass's fix didn't actually reach a native accessibility node through any of the
+three real row components consuming it, caught by a follow-up accessibility review
+and corrected in a second pass with a real regression test. See "Known gaps" below
+for the full detail; not repeated here.
+
+P5 verification: typecheck, lint, and the full Jest suite (70 suites, 616 tests, 1
+pre-existing skip) are clean; `npx expo export --platform ios` was used again as the
+build-verification proxy (no simulator/emulator available in this environment, same
+constraint as P4); a security review (`reports/security-2026-08-06-p5.md`) found zero
+critical/high/medium findings and one low/informational note (a non-atomic
+multi-exercise-add batch); an accessibility review
+(`reports/accessibility-2026-08-06-p5.md`) caught the `DraggableList` fix's
+first-pass gap described above and blocked on it - zero blocking findings remain
+after the second-pass fix. No new npm dependency was added this phase.
 
 ## Product
 
@@ -326,17 +395,56 @@ benchmark remains `test.skip`'d with a comment naming its future phase (JSON exp
 
 ## Known gaps (tracked, non-blocking)
 
-- **`components/gestures/DraggableList.tsx` has no non-gesture reorder
-  alternative.** It is gesture-only today - no consumer exists yet, so this doesn't
-  block P1, but it is a real accessibility gap for whichever feature phase consumes
-  it for actual reordering (the roadmap's `plans` feature, reordering exercises
-  within a plan day, is the likely first consumer). That phase MUST add an
-  accessibility-action-based alternative (e.g. move-up/move-down actions) before
-  shipping - mirror how `SwipeableRow` exposes its swipe actions via
-  `accessibilityActions`/`onAccessibilityAction` (see `SwipeableRow.tsx`'s
-  `cloneElement`-based merge onto a single child, not the outer `View`). Do not ship
-  drag-only reordering as the final state. Source: accessibility audit finding
-  A11Y-005, `reports/accessibility-2026-08-05-p1.md`.
+- **`dragHandle="handle"` mode's grip is nested inside each row's own
+  already-`accessible` container (`PlanCard`/`PlanDayCard`/
+  `PlanDayExerciseRow`, all three P5 `DraggableList` consumers), which may
+  make the handle - and, by the same mechanism, each row's own nested icon
+  buttons (rename/duplicate/delete/set-active/ungroup/remove) - unreachable
+  as independent VoiceOver/TalkBack stops. Every one of these three row
+  components sets `accessibilityRole="button"`/`"checkbox"` plus an
+  `accessibilityLabel` directly on its own outer `PressScale`, independent
+  of anything `DraggableList` clones onto it - so the row was already a
+  single accessible unit by construction, before the move-up/move-down fix
+  below ever touches it. `DraggableList.tsx`'s move-up/move-down actions
+  are attached to the handle node itself in `"handle"` mode (not to the
+  row) specifically to avoid _compounding_ this with a second collapse
+  point, but that placement does not resolve the pre-existing one: RN
+  Testing Library's tree inspection reads component props directly and
+  cannot simulate the native accessibility engine's subtree-collapsing
+  behavior, so this cannot be confirmed or ruled out without a real device
+  (VoiceOver/TalkBack or the platform accessibility inspectors) - the same
+  category of unverifiable-via-RNTL claim `SwipeableRow.tsx`'s own A11Y-004
+  finding already established for this codebase. If real, the fix is
+  structural (stop wrapping the entire row - including its trailing icon
+  buttons and the drag handle - in one `accessible` `PressScale`; split the
+  row so only the "navigate to detail" tap target carries the row-level
+  role/label, leaving the handle and each icon button as independent,
+  un-collapsed accessible elements), not a prop tweak - do not attempt that
+  restructuring without on-device verification first, to avoid trading a
+  confirmed-safe layout for an unverified one. Source: accessibility audit
+  finding A11Y-P5-002, `reports/accessibility-2026-08-06-p5.md`.
+
+- **`components/gestures/DraggableList.tsx` had no non-gesture reorder
+  alternative.** ~~It is gesture-only today~~ **Resolved as of P5**: every row
+  now exposes a move-up/move-down `accessibilityActions` pair
+  (`attachMoveActions`, mirroring `SwipeableRow`'s `cloneElement`-based
+  merge), and - after a follow-up accessibility review caught the fix not
+  actually reaching a native node through any of P5's three real screens
+  (`PlanCard`/`PlanDayCard`/`PlanDayExerciseRow` had closed prop interfaces
+  with no accessibility pass-through, and neither did the `PressScale` they
+  render onto) - `components/gestures/PressScale.tsx` and those three row
+  components now accept and forward `accessible`/`accessibilityActions`/
+  `onAccessibilityAction`, and `SupersetGroupEditor.tsx` forwards them onto
+  its wrapped child rather than dropping them a fourth time. Verified via
+  integration tests that mount `DraggableList` with the real row components
+  (`__tests__/features/plans/components/{PlanCard,PlanDayCard,
+PlanDayExerciseRow}.test.tsx`), not just a synthetic `<Text>` stand-in -
+  the exact regression class the first pass's own unit tests missed.
+  Original source: accessibility audit finding A11Y-005,
+  `reports/accessibility-2026-08-05-p1.md`; follow-up finding A11Y-P5-001,
+  `reports/accessibility-2026-08-06-p5.md`. See the gap entry above this one
+  for a related, still-open, device-unverified concern this fix did not
+  (and structurally could not, without a device) resolve.
 
 - **`expo-asset` is not hoisted, which breaks Jest module resolution for
   `@expo/vector-icons` inside a rendered RNTL test.** It's present in

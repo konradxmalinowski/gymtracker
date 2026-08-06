@@ -26,6 +26,8 @@ describe('createContainer', () => {
     expect(container.profileService).toBeDefined();
     expect(container.exerciseRepository).toBeDefined();
     expect(container.exerciseService).toBeDefined();
+    expect(container.planRepository).toBeDefined();
+    expect(container.planService).toBeDefined();
 
     expect(typeof container.clock.now()).toBe('number');
     expect(typeof container.idGenerator.generate()).toBe('string');
@@ -57,6 +59,16 @@ describe('createContainer', () => {
 
     const viaRepository = await container.exerciseRepository.findById(created.id);
     expect(viaRepository?.nameEn).toBe('Cable Crossover');
+  });
+
+  it('planService is wired to planRepository - a plan created through the service is visible through the repository directly', async () => {
+    const db = createTestDatabase();
+    const container = createContainer(db);
+
+    const created = await container.planService.createPlan({ name: 'Push Day' });
+
+    const viaRepository = await container.planRepository.getPlan(created.id);
+    expect(viaRepository?.name).toBe('Push Day');
   });
 
   it('lets a caller override any dependency (test containers use this for a frozen Clock and deterministic ids)', async () => {

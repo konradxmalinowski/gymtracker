@@ -11,6 +11,8 @@
 import type { PropsWithChildren } from 'react';
 import {
   Pressable,
+  type AccessibilityActionEvent,
+  type AccessibilityActionInfo,
   type AccessibilityRole,
   type AccessibilityState,
   type StyleProp,
@@ -40,6 +42,23 @@ export interface PressScaleProps extends PropsWithChildren {
   accessibilityLabel?: string | undefined;
   accessibilityHint?: string | undefined;
   accessibilityState?: AccessibilityState | undefined;
+  /**
+   * `accessible`/`accessibilityActions`/`onAccessibilityAction` - a caller
+   * (or a wrapper composing this one, e.g. `DraggableList`'s `cloneElement`-
+   * based accessibility-action merge) needs these to actually land on the
+   * native `Pressable` this component renders, not be silently dropped by a
+   * closed prop interface. `PressScale` had none of the three declared here
+   * before P5's `DraggableList` accessibility fix shipped - every caller
+   * built on it (`Button`, `IconButton`, `Card`, `Chip`, `ListRow`, and every
+   * feature row component built on those) was an unreachable dead end for
+   * cloned-on accessibility actions until this fix (found by an
+   * accessibility review: the mechanism worked in isolation against a bare
+   * `<Text>`, which forwards arbitrary props, but not against any real
+   * component in the app).
+   */
+  accessible?: boolean | undefined;
+  accessibilityActions?: readonly AccessibilityActionInfo[] | undefined;
+  onAccessibilityAction?: ((event: AccessibilityActionEvent) => void) | undefined;
   hitSlop?: number | undefined;
   testID?: string | undefined;
 }
@@ -69,6 +88,9 @@ export function PressScale({
   accessibilityLabel,
   accessibilityHint,
   accessibilityState,
+  accessible,
+  accessibilityActions,
+  onAccessibilityAction,
   hitSlop,
   testID,
 }: PressScaleProps) {
@@ -92,6 +114,9 @@ export function PressScale({
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled, ...accessibilityState }}
+      accessible={accessible}
+      accessibilityActions={accessibilityActions}
+      onAccessibilityAction={onAccessibilityAction}
       hitSlop={hitSlop}
       testID={testID}
       style={[style, animatedStyle]}

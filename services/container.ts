@@ -23,6 +23,9 @@ import type { ProfileRepository } from '@/features/profile/repository/ProfileRep
 import { ExerciseService } from '@/features/exercise-library';
 import { SqliteExerciseRepository } from '@/features/exercise-library/repository/SqliteExerciseRepository';
 import type { ExerciseRepository } from '@/features/exercise-library/repository/ExerciseRepository';
+import { PlanService } from '@/features/plans';
+import { SqlitePlanRepository } from '@/features/plans/repository/SqlitePlanRepository';
+import type { PlanRepository } from '@/features/plans/repository/PlanRepository';
 import type { DatabaseContext } from '@/repositories/contracts/database';
 import { SqliteSettingsRepository, type SettingsRepository } from '@/repositories/settings';
 import { SystemClock, type Clock } from '@/services/clock';
@@ -45,6 +48,10 @@ export interface AppContainer {
   exerciseRepository: ExerciseRepository;
   /** ARCHITECTURE.md section 3.1 rule 3: the only door into `exerciseRepository` for hooks/screens. */
   exerciseService: ExerciseService;
+  /** Feature repository, P5 (plans). Not re-exported for presentation use - go through `planService`. */
+  planRepository: PlanRepository;
+  /** ARCHITECTURE.md section 3.1 rule 3: the only door into `planRepository` for hooks/screens. */
+  planService: PlanService;
 }
 
 export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer>): AppContainer {
@@ -61,6 +68,9 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
     deps?.exerciseRepository ?? new SqliteExerciseRepository({ db, clock, idGenerator });
   const exerciseService =
     deps?.exerciseService ?? new ExerciseService({ repository: exerciseRepository, logging });
+  const planRepository =
+    deps?.planRepository ?? new SqlitePlanRepository({ db, clock, idGenerator });
+  const planService = deps?.planService ?? new PlanService({ repository: planRepository });
 
   return {
     db,
@@ -73,6 +83,8 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
     profileService,
     exerciseRepository,
     exerciseService,
+    planRepository,
+    planService,
   };
 }
 
