@@ -6,18 +6,34 @@ reference, not a replacement. Section numbers below refer to `docs/ARCHITECTURE.
 
 ## Status
 
-P0 (project foundation), P1 (design system and UI primitives), and P2 (persistence
-foundation) are complete. No feature screens exist yet - `features/*` are still empty
-skeleton directories (components/hooks/screens/services/domain/repository/types/
-index.ts subfolders, no implementation); P2 built the data layer and infrastructure
-those features will sit on, not feature code itself. `app/index.tsx` is a real,
-finished minimal Home screen, not a placeholder. A dev-only `/dev/db-health` route
-(`app/dev/db-health.tsx`, same `__DEV__`-guarded `Redirect` pattern as `/dev/gallery`)
-shows schema version, last migration, per-table row counts, file size, `PRAGMA
-integrity_check`, SQLite version/compile options, and FTS5/partial-index
-availability. Implementation proceeds one roadmap phase at a time per
-`docs/ROADMAP.md` (P0-P16) - never skip ahead to a later phase's feature before the
-current phase is committed.
+P0 (project foundation), P1 (design system and UI primitives), P2 (persistence
+foundation), and P3 (onboarding, profile and core settings) are complete. The
+`onboarding` and `profile` features now have real implementations (screens, hooks,
+services, repository); the remaining nine features (`exercise-library`, `plans`,
+`workout-logging`, `rest-timer`, `records`, `statistics`, `body-metrics`, `calendar`,
+`data-transfer`) are still empty skeleton directories (components/hooks/screens/
+services/domain/repository/types/index.ts subfolders, no implementation) awaiting
+their own phase.
+
+The app now boots for real: `app/_layout.tsx` opens the database, runs migrations,
+builds the `AppContainer`, holds the splash screen until the profile query resolves,
+then gates to `/onboarding` (no profile yet) or the tab bar. `app/index.tsx` no
+longer exists - the Home screen moved to `app/(tabs)/index.tsx` under a 5-tab layout
+(`app/(tabs)/_layout.tsx`: Home, Plans, Exercises, Stats, Profile) using
+`@expo/vector-icons` (Ionicons; see "Known gaps" history below - this resolved the
+prior no-icon-library gap). The Plans, Exercises, and Stats tabs render a genuine
+"not built yet" empty state (their features land in P4/P5/P11), not a stub. Onboarding
+(`app/onboarding/index.tsx` + `features/onboarding/*`) collects a required nickname
+and an optional avatar via `expo-image-picker`, is skippable, and handles permission
+denial gracefully. All navigation goes through the typed helpers in
+`navigation/routes.ts` (ARCHITECTURE.md section 10.2) rather than raw string paths.
+
+A dev-only `/dev/db-health` route (`app/dev/db-health.tsx`, same `__DEV__`-guarded
+`Redirect` pattern as `/dev/gallery`) shows schema version, last migration, per-table
+row counts, file size, `PRAGMA integrity_check`, SQLite version/compile options, and
+FTS5/partial-index availability. Implementation proceeds one roadmap phase at a time
+per `docs/ROADMAP.md` (P0-P16) - never skip ahead to a later phase's feature before
+the current phase is committed.
 
 `theme/tokens.ts` carries the full token set from ARCHITECTURE.md section 11
 (color, space, radius, elevation, font, motion, hitSlop), not P0's bootstrap subset.
@@ -43,6 +59,16 @@ Polish catalog later is a data-only addition (a new file under `i18n/catalogs/`)
 no call-site refactor - revisit the library question only if a second locale or
 plural rules beyond `one`/`other` are actually needed.
 
+`features/profile/repository/SqliteProfileRepository` reads and writes the
+`user_profile` table that already existed in `database/schema.sql` from P2 (no
+migration needed for P3). `ProfileService` writes the avatar file to disk before
+committing the DB row that references it, per ADR-0012's write-then-commit ordering
+(the same pattern that ADR-0012 defines for progress photos, applied here to
+avatars). `services/haptics/settings.ts` reads the `haptics.enabled` setting through
+an MMKV mirror for a synchronous read inside gesture/press handlers, per ADR-0008's
+mirroring pattern - SQLite stays authoritative and MMKV is re-synced from it on every
+boot.
+
 ## Product
 
 Offline-only React Native/Expo workout logging app. No backend, no accounts, no
@@ -58,7 +84,11 @@ before the next device run) + FlashList + Reanimated + Gesture Handler + Victory
 Native XL (wrapped in a
 `components/charts` adapter per ADR-0010) + React Native SVG + Expo Notifications +
 Expo Haptics + Expo FileSystem + NativeWind (`tailwind.config.js` imports
-`theme/tokens.ts`, never duplicates values).
+`theme/tokens.ts`, never duplicates values) + `@expo/vector-icons` (Ionicons - the
+app's only icon system, chosen in P3; every `ReactNode`-typed icon prop across
+`components/ui` should move to it rather than a second icon system coexisting) +
+`expo-image-picker` (avatar/photo selection) + React Hook Form's `@hookform/resolvers`
+(Zod schema resolvers for form validation).
 
 ## Architecture and layering (section 3.1)
 
@@ -181,14 +211,16 @@ BaseSqliteRepository` handles id generation, audit stamping, injected-`Clock`
   `repositories/mapping/` holds case-conversion and bool/JSON codecs.
   `repositories/query/` provides a parameterized `WhereClause`, a whitelisted
   `orderBy`, and clamped limit/offset.
-- `repositories/settings/SqliteSettingsRepository` covers all 14 v1 settings keys,
-  Zod-validated with default-fallback on a missing or corrupt stored value. It sits
+- `repositories/settings/SqliteSettingsRepository` covers all 15 v1 settings keys
+  (14 from P2 plus `haptics.enabled`, added in P3), Zod-validated with
+  default-fallback on a missing or corrupt stored value. It sits
   as a top-level sibling of `repositories/{base,mapping,query}` rather than under a
   feature - cross-cutting, and it doesn't fit the `ReadRepository`/`WriteRepository`
   shape - the same kind of deviation as the root `domain/` folder noted above.
 - `services/container.ts` (`AppContainer`/`createContainer`/`ContainerProvider`/
   `useContainer`) is the composition root. It's deliberately smaller than section
-  8.4's full shape - feature repositories (`exercises`, `plans`, `sessions`, etc.)
+  8.4's full shape - `profileRepository`/`profileService` are the first feature
+  repository pair to land (P3); the rest (`exercises`, `plans`, `sessions`, etc.)
   don't exist yet and land one at a time from P4 onward, each phase extending
   `AppContainer` rather than replacing it. `services/kv` is intentionally not a
   container member (ADR-0008: MMKV holds boot-critical flags read before the
@@ -227,8 +259,10 @@ omitted.
 - GitHub Actions (`.github/workflows/ci.yml`) runs `typecheck`, `lint`,
   `format:check`, `test:ci`, `expo-doctor`, and `audit:ci` (`npm audit
 --audit-level=high`) on every push/PR to `main`.
-- EAS project registered (`@konradxmalinowski/gymtracker`), `eas.json` has
-  `development`/`preview`/`production` build profiles.
+- EAS project registered (`@konradxmalinowski-2/gymtracker`, `app.config.ts`'s
+  `owner` and `extra.eas.projectId` - the owner moved off `konradxmalinowski` onto
+  a second account, projectId `9c25b5d1-7371-49ec-aaee-f6884a31e820`), `eas.json`
+  has `development`/`preview`/`production` build profiles.
 - Sentry (`@sentry/react-native`) config plugin is wired unconditionally in
   `app.config.ts`, but crash reporting defaults to **off** and no DSN is committed
   (read from `SENTRY_DSN`, unset in this repo and in CI). The user-facing toggle
@@ -249,12 +283,13 @@ omitted.
   `cloneElement`-based merge onto a single child, not the outer `View`). Do not ship
   drag-only reordering as the final state. Source: accessibility audit finding
   A11Y-005, `reports/accessibility-2026-08-05-p1.md`.
-- **No icon library chosen yet.** Every icon-accepting prop across `components/ui`
-  is typed `ReactNode`, with `Text`-glyph placeholders standing in (e.g. `Checkbox`'s
-  checkmark, `DraggableList`'s grip dots). The first feature phase that needs real
-  iconography must make this choice. `react-native-svg` is already a dependency, so
-  a hand-built SVG icon set or `@expo/vector-icons` are the live options - pick one
-  and use it everywhere, don't let two icon systems coexist.
+
+**Resolved**: the icon library gap tracked here through P0-P2 is closed as of P3 -
+`@expo/vector-icons` (Ionicons) is the app's icon system, first used in the
+`app/(tabs)/_layout.tsx` tab bar (see "Stack" above). `components/ui`'s existing
+`ReactNode`-typed icon props (e.g. `Checkbox`'s checkmark, `DraggableList`'s grip
+dots) still use `Text`-glyph placeholders and should move to Ionicons the next time
+each is touched, rather than in a dedicated sweep.
 
 ## Further reading
 

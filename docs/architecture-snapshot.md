@@ -1,13 +1,31 @@
 ---
-snapshot_commit: fbda52da0f4833b31c24ca76a5e6a83a088c0da6
-generated_from: docs/ARCHITECTURE.md, docs/ROADMAP.md, docs/adr/*, docs/PRODUCT-BRIEF.md
+snapshot_commit: 0025ae8945067270d51975a9333107ecf7c681a7
+generated_from: CLAUDE.md, docs/ARCHITECTURE.md, docs/ROADMAP.md, docs/adr/*, docs/PRODUCT-BRIEF.md
 ---
 
 # GymTracker - architecture snapshot
 
 Condensed synthesis for orchestration use. Full detail lives in docs/ARCHITECTURE.md
-(section numbers referenced below) - re-read the source section when a decision needs
-verification, this file is a pointer, not a replacement.
+(section numbers referenced below) and CLAUDE.md - re-read the source when a decision
+needs verification, this file is a pointer, not a replacement.
+
+Note on `snapshot_commit`: this points at the working-tree HEAD at the time this file
+was regenerated (the tip of `feat/p3-onboarding-profile-settings` before that branch's
+own doc changes were committed). Re-snapshot after the commit that includes this file
+lands, if the exact hash matters for a later diff.
+
+## Status
+
+P0 (project foundation), P1 (design system/UI primitives), P2 (persistence
+foundation), and P3 (onboarding, profile and core settings) are complete and
+committed or ready to commit. `onboarding` and `profile` are the first two features
+with real implementations; the other nine (`exercise-library`, `plans`,
+`workout-logging`, `rest-timer`, `records`, `statistics`, `body-metrics`, `calendar`,
+`data-transfer`) remain empty skeletons awaiting their phase. The app boots for real
+as of P3: `app/_layout.tsx` opens the database, runs migrations, builds the
+`AppContainer`, holds the splash screen until the profile query resolves, then gates
+to `/onboarding` or a 5-tab layout (Home, Plans, Exercises, Stats, Profile). Plans/
+Exercises/Stats render real "not built yet" empty states, not stubs.
 
 ## Product
 
@@ -19,18 +37,24 @@ Package manager: npm. GitHub: konradxmalinowski/gymtracker (public).
 ## Stack (fixed)
 
 Expo (current SDK) + TypeScript strict + Expo Router (typed routes) + Zustand +
-TanStack Query + Expo SQLite + React Hook Form + Zod + MMKV + FlashList + Reanimated +
-Gesture Handler + Victory Native XL (Skia-based, wrapped in components/charts adapter
-per ADR-0010) + React Native SVG + Expo Notifications + Expo Haptics + Expo FileSystem +
-NativeWind (tailwind.config.js imports theme/tokens.ts, never duplicates values).
+TanStack Query + Expo SQLite + React Hook Form (+ `@hookform/resolvers` for Zod
+schema resolvers) + Zod + MMKV + FlashList + Reanimated + Gesture Handler + Victory
+Native XL (Skia-based, wrapped in components/charts adapter per ADR-0010) + React
+Native SVG + `@expo/vector-icons` (Ionicons - the app's only icon system, chosen P3)
++ `expo-image-picker` (avatar/photo selection) + Expo Notifications + Expo Haptics +
+Expo FileSystem + NativeWind (tailwind.config.js imports theme/tokens.ts, never
+duplicates values).
 
 ## Architecture (section 3)
 
 Clean Architecture, feature-sliced. Layers, dependencies point inward only:
 Presentation -> Application -> Domain <- Infrastructure (Infrastructure implements
-ports the domain/feature declares). Enforced by ESLint `import/no-restricted-paths`,
-set up in P0. Cross-feature imports only through a feature's `index.ts` barrel -
-reaching into `features/x/internal` from `features/y` is a lint error.
+ports the domain/feature declares). Four rules mechanically enforced by ESLint
+(`eslint.config.js`), not just convention: domain purity (no React/RN/Expo imports in
+`domain/**`), the SQLite boundary (`expo-sqlite` only from `database/` or a feature's
+`repository/*.ts`), no direct repository access from presentation (go through a
+feature service via a hook), and cross-feature imports only through a feature's
+`index.ts` barrel. Import cycles are banned project-wide (`import/no-cycle`).
 
 CQRS-lite: statistics/history go through dedicated read-model repositories returning
 flat SQL-aggregated DTOs, never load-all-then-sum-in-JS. Aggregate boundary: a workout
@@ -39,18 +63,24 @@ future sync conflict unit).
 
 ## Folder structure (section 9)
 
-Top level: app/ (routing only, thin wrappers into features/*/screens), assets/
-(fonts, images, bundled exercise WebP images, exercises.catalog.json /
-exercises.pl.json / exercises.videos.json), components/ (cross-feature, zero domain
-knowledge - ui/, layout/, feedback/, charts/, gestures/), database/ (client.ts,
-DatabaseProvider.tsx, migrations/, schema.sql, seed/, sql/), features/ (one dir per
-feature: onboarding, profile, exercise-library, plans, workout-logging, rest-timer,
-records, statistics, body-metrics, calendar, data-transfer - each with
-components/hooks/screens/services/domain/repository/types/index.ts), hooks/,
-navigation/, repositories/ (shared infra: contracts/, base/, mapping/, query/),
-services/ (container.ts composition root, files/, notifications/, haptics/, kv/,
-clock/, id/, logging/), stores/ (Zustand, ephemeral UI state only), theme/, types/,
-utils/, __tests__/, .maestro/.
+Top level: `app/` (routing only, thin wrappers into `features/*/screens` - now
+includes `app/(tabs)/` for the 5-tab layout, `app/onboarding/`, and
+`app/profile/settings/`), `assets/` (fonts, images, bundled exercise WebP images,
+`exercises.catalog.json`/`exercises.pl.json`/`exercises.videos.json`), `components/`
+(cross-feature, zero domain knowledge - `ui/`, `layout/`, `feedback/`, `charts/`,
+`gestures/`), `database/` (`client.ts`, `DatabaseProvider.tsx`, `migrations/`,
+`schema.sql`, `seed/`, `sql/`), `domain/` (shared cross-feature value objects -
+`Weight.ts`, `Length.ts`, deviation from the original section 9 tree, not yet synced
+back into ARCHITECTURE.md), `features/` (one dir per feature: `onboarding`,
+`profile`, `exercise-library`, `plans`, `workout-logging`, `rest-timer`, `records`,
+`statistics`, `body-metrics`, `calendar`, `data-transfer` - each with
+components/hooks/screens/services/domain/repository/types/index.ts; `onboarding` and
+`profile` are populated as of P3, the rest are still empty), `hooks/`, `navigation/`
+(`routes.ts` - typed route helpers per section 10.2, added P3), `repositories/`
+(shared infra: `contracts/`, `base/`, `mapping/`, `query/`, plus the cross-cutting
+`settings/` sibling), `services/` (`container.ts` composition root, `files/`,
+`notifications/`, `haptics/`, `kv/`, `clock/`, `id/`, `logging/`), `stores/` (Zustand,
+ephemeral UI state only), `theme/`, `types/`, `utils/`, `__tests__/`, `.maestro/`.
 
 Two load-bearing rules: `app/` never contains screen bodies, only wrappers;
 `components/` may never import from `features/`.
@@ -65,18 +95,32 @@ models. data-transfer depends on everything and is built last.
 
 ## Data layer (sections 7-8)
 
-SQLite via Expo SQLite. UUIDv7 TEXT primary keys everywhere (sync-readiness, ADR
-tied to this). Timestamps: epoch ms UTC plus a separate `local_date` (YYYY-MM-DD)
-column on every entity the user perceives as "a day" (streaks, calendar) - without
-it, timezone travel breaks both. Weights always stored in kg, lengths in cm;
-unit conversion only in the presentation layer (domain/Weight.ts, domain/Length.ts -
-ESLint bans unit-conversion constants anywhere else). Exercise catalog data is
-separated from user data (`exercise` vs `exercise_user_data`) so a catalog update
-never destroys favorites/notes. WAL + `synchronous=FULL`. In-progress workout has no
-separate "draft" concept - it's a `workout_session` row with `status='in_progress'`,
-committed after every set; a partial unique index makes two simultaneous active
-sessions impossible at the DB level. Rest timer deadline is stored as an absolute
-timestamp in the DB, not a JS interval - survives process death/Doze.
+SQLite via Expo SQLite. UUIDv7 TEXT primary keys everywhere (sync-readiness).
+Timestamps: epoch ms UTC plus a separate `local_date` (YYYY-MM-DD) column on every
+entity the user perceives as "a day" (streaks, calendar) - without it, timezone
+travel breaks both. Weights always stored in kg, lengths in cm; unit conversion only
+in `domain/Weight.ts`/`domain/Length.ts` (full ADR-0009 conversion/rounding/display
+spec, fleshed out in P3 with `fast-check` round-trip property tests) - ESLint bans
+unit-conversion constants anywhere else. Exercise catalog data is separated from user
+data (`exercise` vs `exercise_user_data`) so a catalog update never destroys
+favorites/notes. WAL + `synchronous=FULL`. In-progress workout has no separate
+"draft" concept - it's a `workout_session` row with `status='in_progress'`, committed
+after every set; a partial unique index makes two simultaneous active sessions
+impossible at the DB level. Rest timer deadline is stored as an absolute timestamp in
+the DB, not a JS interval - survives process death/Doze.
+
+Settings: `app_setting` key/value table plus a `SETTINGS_SCHEMA` Zod registry
+(`repositories/settings/settingsSchema.ts`) covering all 15 v1 keys (14 shipped in
+P2, plus `haptics.enabled` added in P3 - a global haptics toggle mirrored into MMKV
+for synchronous reads inside gesture/press handlers, per ADR-0008's mirroring
+pattern; SQLite stays authoritative). `user_profile` (nickname, optional avatar,
+birth date, sex) shipped its table in P2 and got its first repository
+(`SqliteProfileRepository`) and service (`ProfileService`) in P3 - no migration
+needed, the table already existed. `ProfileService` writes an avatar file to disk
+before committing the DB row that references it, per ADR-0012's write-then-commit
+ordering (defined there for progress photos, reused here for avatars) - avoids a
+dangling-path bug from persisting an absolute picker URI across app container UUID
+changes.
 
 Set types: 6 values (Warm-up, Normal, Drop Set, Failure, Assisted, Partial) -
 **not** 7. Superset is modeled as a relation between exercises (`superset_group`),
@@ -84,17 +128,27 @@ not a set-type value (approved deviation from the original brief, ADR-0006). Dro
 sets chain via `parent_set_id`. A normative semantics table governs what counts
 toward volume/PR/set-count; a test keeps the SQL view and the TS calculator from
 drifting apart. Assisted sets are excluded from volume/PR calculation in v1
-(decision D-02) - deliberately not reordering body-measurements earlier to support
-weight-relative assisted-set math.
+(decision D-02).
 
-Repository tests run in Node against real `schema.sql` on better-sqlite3 (a
-`SqlExecutor` port), not mocks.
+Repository tests run in Node against real `schema.sql` via `NodeSqlExecutor`
+(`node:sqlite`, chosen over `better-sqlite3` to skip a native compile step - CI pins
+Node 24 for `node:sqlite` support), not mocks.
 
 Sync-readiness: only what pays for itself today (UUIDs for idempotent import,
 `updated_at` for merge, soft delete for undo, aggregate transactions, a `rebuild()`
 for derived data, an optional `tx` param on repository methods). No `change_log`
 table, no `findChangedSince()`, no dead scaffolding for a sync layer that doesn't
 exist yet (ADR-0004).
+
+## Composition root (services/container.ts)
+
+`AppContainer`/`createContainer`/`ContainerProvider`/`useContainer`. Deliberately
+smaller than ARCHITECTURE.md section 8.4's full shape - `profileRepository`/
+`profileService` are the first feature repository pair to land (P3); the rest
+(`exercises`, `plans`, `sessions`, etc.) land one at a time from P4 onward, each
+phase extending `AppContainer` rather than replacing it. `services/kv` is
+intentionally not a container member (ADR-0008: MMKV holds boot-critical flags read
+before the database opens).
 
 ## Resolved product/technical decisions (section 18, D-01..D-12)
 
@@ -111,47 +165,67 @@ All originally-open questions are closed and accepted:
 - D-03: superset rest timer starts only after the last exercise in the group.
 - D-04: estimated calories shown in workout summary, labeled as an estimate,
   default-off toggle.
-- D-05: Sentry crash reporting is opt-in, disabled by default, **and must be wired
-  in P0** (config plugin + default-off toggle), not deferred to the P16 store-
-  privacy-declarations phase - a native config change right before store submission
-  is the worst possible timing.
+- D-05: Sentry crash reporting is opt-in, disabled by default, and wired in P0
+  (config plugin + default-off toggle); the user-facing toggle and the only
+  `Sentry.init()` call site land in P15 (settings), not before - no error
+  boundaries or capture call sites until a feature exists to instrument.
 - D-06: progress photos excluded from JSON export (base64 photos risk OOM on
   weaker Android devices).
 - D-07: CSV import from Strong/Hevy deferred past v1.
 - Remaining D-08..D-12 are backlog-tier, non-blocking; see section 18 for detail
   if a later phase needs them.
 
+## Icon system (resolved P3)
+
+No icon library existed through P0-P2 (every icon prop in `components/ui` was typed
+`ReactNode` with `Text`-glyph placeholders). P3 resolved this: `@expo/vector-icons`
+(Ionicons) is the app's icon system, first used in the tab bar. Existing placeholder
+glyphs in `components/ui` migrate to Ionicons opportunistically, not in a dedicated
+sweep - don't let a second icon system start alongside it.
+
 ## Roadmap (docs/ROADMAP.md)
 
-17 phases (P0-P16), one Conventional Commit per phase, feature-by-feature -
-never move to the next phase until the current one is complete and committed.
-MVP line closes after P10: P0 project foundation, P1 design system/UI primitives,
-P2 exercise catalog build + bundling, P3 database schema + migrations, P4 exercise
-library feature, P5 onboarding, P6 workout plans, P7 workout logging (the core
-2-3-second-set screen), P8 rest timer, P9 workout summary + PRs, P10 home screen.
-P11-P16: statistics, calendar, body measurements, CSV/JSON export-import, settings,
-store submission prep (including the D-05 privacy declarations).
+17 phases (P0-P16), one Conventional Commit per phase, feature-by-feature - never
+move to the next phase until the current one is complete and committed. P0 project
+foundation, P1 design system/UI primitives, P2 persistence foundation, P3 onboarding/
+profile/core settings, P4 exercise library, P5 workout plans, P6 workout logging (the
+core 2-3-second-set screen), P7 rest timer, P8 progressive overload and personal
+records, P9 workout summary and history, P10 home screen, P11 statistics and charts,
+P12 calendar, P13 body measurements and progress photos, P14 data export/import, P15
+performance hardening and polish, P16 release engineering.
 
 Ordering is dependency-driven: exercise-library is a leaf and ships before plans/
 workout-logging can consume it; rest-timer and records exist before workout-logging
-because workout-logging is the hub that calls them.
+because workout-logging is the hub that calls them; onboarding/profile ship early
+(P3) because the root layout's boot gate (database open -> migrate -> profile check)
+has to exist before any other screen can safely render.
 
 ## CI/CD and tooling (section 15, P0 scope)
 
 ESLint flat config with the layering rules above, Prettier, Husky + lint-staged +
-commitlint (Conventional Commits enforced by hook), Jest + jest-expo + React Native
-Testing Library + fast-check, GitHub Actions running tsc --noEmit / eslint /
-prettier --check / jest / expo-doctor / npm audit --audit-level=high on every push
-and PR, EAS project with development/preview/production build profiles.
+commitlint (Conventional Commits enforced by hook - `commit-msg` runs commitlint,
+`pre-commit` runs lint-staged), Jest + jest-expo + React Native Testing Library +
+fast-check, GitHub Actions running `tsc --noEmit` / `eslint` / `prettier --check` /
+`jest --ci` / `expo-doctor` / `npm audit --audit-level=high` on every push and PR to
+`main`, EAS project with development/preview/production build profiles. Sentry
+(`@sentry/react-native`) config plugin wired unconditionally but crash reporting
+defaults off, no DSN committed (D-05, see above).
 
 ## Testing strategy (section 14)
 
 Domain layer: property-based tests (fast-check) for calculators (1RM, volume, PR
-detection) - these are the highest-value tests in the app. Repository layer:
-integration tests against real schema.sql via better-sqlite3, not mocks. Component
+detection) - the highest-value tests in the app; `domain/Weight.ts`/`domain/Length.ts`
+have real round-trip property tests as of P3. Repository layer: integration tests
+against real `schema.sql` via `NodeSqlExecutor` (`node:sqlite`), not mocks. Component
 layer: React Native Testing Library for interaction-critical components (set row,
 quick-adjust chips). E2E: Maestro flows for the golden path (start workout -> log a
-set -> finish).
+set -> finish). `__tests__/database/benchmarks.perf.test.ts` is a CI
+performance-regression suite (ADR-0014); two benchmarks stay `test.skip`'d with a
+comment naming their future phase (exercise search - P4, JSON export - P9 per the
+test file's own comment - note this P9 label predates and conflicts with this
+snapshot's P9 "workout summary and history" / P14 "data export and import" naming
+from `docs/ROADMAP.md`; flagged as unresolved drift, not fixed here), not silently
+omitted.
 
 ## What this snapshot deliberately omits
 
