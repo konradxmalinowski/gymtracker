@@ -9,9 +9,11 @@
  * exactly how Reanimated is meant to be used across component boundaries.
  */
 /* eslint-disable react-hooks/immutability */
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
+import { Children, cloneElement, Fragment, isValidElement, useEffect } from 'react';
 import { FlashList } from '@shopify/flash-list';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { View, type AccessibilityActionEvent } from 'react-native';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
@@ -19,9 +21,9 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { useEffect } from 'react';
 
 import { Text } from '@/components/ui/Text';
+import { haptics } from '@/services/haptics';
 import { t } from '@/i18n';
 import { hitSlop, motion } from '@/theme/tokens';
 
@@ -59,6 +61,16 @@ export interface DraggableListProps<T> {
  * inside `Gesture.Pan`'s worklet callbacks; the backing `data` array is
  * never touched during the gesture, so FlashList never re-renders mid-drag.
  * `onReorder` fires exactly once, via `runOnJS`, when the gesture ends.
+ *
+ * Every row also exposes a move-up/move-down accessibility action pair
+ * (`accessibilityActions`/`onAccessibilityAction`, the same mechanism
+ * `SwipeableRow` uses for its swipe actions - see that file's header for the
+ * full reasoning on why this can't be a gesture). This closes the tracked
+ * gap in CLAUDE.md's "Known gaps": this component was gesture-only with no
+ * non-gesture reorder alternative, and P5 (plans reordering days/exercises)
+ * is the phase that gap named as the one that must fix it before shipping.
+ * A screen-reader user reorders a row entirely through these two actions,
+ * never the pan gesture.
  */
 export function DraggableList<T>({
   data,
@@ -104,6 +116,7 @@ export function DraggableList<T>({
         <DraggableRow
           id={keyExtractor(item)}
           index={index}
+          itemCount={data.length}
           item={item}
           rowHeight={rowHeight}
           dragHandle={dragHandle}
@@ -121,6 +134,7 @@ export function DraggableList<T>({
 interface DraggableRowProps<T> {
   id: string;
   index: number;
+  itemCount: number;
   item: T;
   rowHeight: number;
   dragHandle: 'row' | 'handle';
@@ -131,9 +145,67 @@ interface DraggableRowProps<T> {
   renderItem: (item: T, index: number, dragHandle: ReactNode | undefined) => ReactNode;
 }
 
+interface MoveAccessibilityProps {
+  accessible?: boolean;
+  accessibilityActions?: readonly { name: string; label?: string }[];
+  onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
+}
+
+/**
+ * Merges the move-up/move-down accessibility actions onto a single child
+ * element rather than an outer `View` whenever possible - identical
+ * reasoning to `SwipeableRow.tsx`'s `attachAccessibilityActions`: a plain
+ * ancestor `View` marked `accessible` collapses the whole subtree into one
+ * opaque node, which silently breaks a `Pressable` descendant's own
+ * `onPress` for TalkBack users. Falls back to wrapping in an accessible
+ * `View` when `content` isn't a single attachable element (e.g. a
+ * `Fragment` with multiple children, as `dragHandle="handle"` mode's own
+ * `renderItem` composition can produce) - a `Fragment` renders no native
+ * view of its own, so cloning accessibility props onto one would be a
+ * no-op, not a real fallback.
+ */
+function attachMoveActions(
+  content: ReactNode,
+  actions: readonly { name: string; label: string }[],
+  onMoveAction: (event: AccessibilityActionEvent) => void,
+): ReactNode {
+  if (actions.length === 0) {
+    return content;
+  }
+
+  const canAttachToChild =
+    isValidElement(content) &&
+    Children.count(content) === 1 &&
+    (content as ReactElement).type !== Fragment;
+
+  if (canAttachToChild) {
+    const child = content as ReactElement<MoveAccessibilityProps>;
+    const childProps = child.props;
+    return cloneElement(child, {
+      accessible: childProps.accessible ?? true,
+      accessibilityActions: [...(childProps.accessibilityActions ?? []), ...actions],
+      onAccessibilityAction: (event: AccessibilityActionEvent) => {
+        const { actionName } = event.nativeEvent;
+        if (actionName === 'moveUp' || actionName === 'moveDown') {
+          onMoveAction(event);
+          return;
+        }
+        childProps.onAccessibilityAction?.(event);
+      },
+    } satisfies Partial<MoveAccessibilityProps>);
+  }
+
+  return (
+    <View accessible accessibilityActions={actions} onAccessibilityAction={onMoveAction}>
+      {content}
+    </View>
+  );
+}
+
 function DraggableRow<T>({
   id,
   index,
+  itemCount,
   item,
   rowHeight,
   dragHandle,
@@ -207,6 +279,24 @@ function DraggableRow<T>({
     shadowOpacity: activeId.value === id ? 0.3 : 0,
   }));
 
+  const moveActions = [
+    ...(index > 0 ? [{ name: 'moveUp', label: t('draggableList.moveUpAccessibilityLabel') }] : []),
+    ...(index < itemCount - 1
+      ? [{ name: 'moveDown', label: t('draggableList.moveDownAccessibilityLabel') }]
+      : []),
+  ];
+
+  function handleMoveAction(event: AccessibilityActionEvent) {
+    const { actionName } = event.nativeEvent;
+    if (actionName === 'moveUp' && index > 0) {
+      haptics.select();
+      onDragEnd(id, index, index - 1);
+    } else if (actionName === 'moveDown' && index < itemCount - 1) {
+      haptics.select();
+      onDragEnd(id, index, index + 1);
+    }
+  }
+
   const handle =
     dragHandle === 'handle' ? (
       // `pan.hitSlop(...)` mutates and returns the same gesture instance
@@ -225,6 +315,23 @@ function DraggableRow<T>({
           accessible
           accessibilityRole="adjustable"
           accessibilityLabel={t('draggableList.dragHandleAccessibilityLabel')}
+          // The move-up/move-down actions are attached directly to this
+          // handle node, NOT to the row as a whole, in "handle" mode - a
+          // deliberate structural choice found necessary by a follow-up
+          // accessibility review. The row's own content (`renderItem`'s
+          // return value) is a real component with its own interactive
+          // children (icon buttons, etc.); marking the *row* `accessible`
+          // here (the way "row" mode below does, where the whole row IS the
+          // one and only affordance) would collapse the handle - which
+          // renders inside that same row - into the row's single opaque
+          // accessibility node, making it unreachable as its own
+          // VoiceOver/TalkBack stop with its own "adjustable" role. Keeping
+          // the actions on this small, already-`accessible` handle node
+          // instead means the handle stays independently reachable, and the
+          // row's other interactive children are never wrapped in an
+          // `accessible` ancestor to begin with.
+          accessibilityActions={moveActions}
+          onAccessibilityAction={handleMoveAction}
           style={{
             width: HANDLE_SIZE,
             height: HANDLE_SIZE,
@@ -244,13 +351,21 @@ function DraggableRow<T>({
 
   const content = renderItem(item, index, handle);
 
+  // In "handle" mode the actions already live on `handle` above - `content`
+  // (the row) is left untouched, on purpose, so the row's own interactive
+  // children stay independently reachable. In "row" mode there is no
+  // separate handle at all - the whole row is the one target, so it's the
+  // row itself that needs the actions attached.
+  const accessibleContent =
+    dragHandle === 'handle' ? content : attachMoveActions(content, moveActions, handleMoveAction);
+
   if (dragHandle === 'row') {
     return (
       <GestureDetector gesture={pan}>
-        <Animated.View style={rowStyle}>{content}</Animated.View>
+        <Animated.View style={rowStyle}>{accessibleContent}</Animated.View>
       </GestureDetector>
     );
   }
 
-  return <Animated.View style={rowStyle}>{content}</Animated.View>;
+  return <Animated.View style={rowStyle}>{accessibleContent}</Animated.View>;
 }
