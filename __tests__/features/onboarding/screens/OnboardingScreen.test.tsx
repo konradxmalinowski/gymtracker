@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import type { ReactNode } from 'react';
+import { AccessibilityInfo } from 'react-native';
 
 import { createTestDatabase } from '@/database/node/createTestDatabase';
 import { OnboardingScreen } from '@/features/onboarding/screens/OnboardingScreen';
@@ -148,6 +149,35 @@ describe('OnboardingScreen', () => {
 
     expect(await findByText(/Photo library access was denied/i)).toBeTruthy();
     expect(ImagePicker.launchImageLibraryAsync).not.toHaveBeenCalled();
+
+    await fireEvent.changeText(getByTestId('onboarding-nickname-field'), 'Konrad');
+    await fireEvent.press(getByTestId('onboarding-continue-button'));
+
+    await waitFor(async () => {
+      const profile = await container.profileService.getProfile();
+      expect(profile?.nickname).toBe('Konrad');
+      expect(profile?.avatarFileName).toBeNull();
+    });
+  });
+
+  it('degrades gracefully when the picker rejects (e.g. a failed iOS crop) - onboarding stays completable without a photo', async () => {
+    (ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock).mockResolvedValue({
+      granted: true,
+    });
+    (ImagePicker.launchImageLibraryAsync as jest.Mock).mockRejectedValue(
+      new Error('Failed to crop image'),
+    );
+
+    const announceSpy = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+
+    const { container, getByTestId, findByText } = await renderOnboarding();
+
+    await fireEvent.press(getByTestId('onboarding-pick-avatar-button'));
+
+    expect(await findByText(/Couldn't process that photo/i)).toBeTruthy();
+    await waitFor(() => {
+      expect(announceSpy).toHaveBeenCalledWith("Couldn't process that photo. Try a different one.");
+    });
 
     await fireEvent.changeText(getByTestId('onboarding-nickname-field'), 'Konrad');
     await fireEvent.press(getByTestId('onboarding-continue-button'));

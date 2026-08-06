@@ -37,6 +37,7 @@ type OnboardingFormValues = z.infer<typeof onboardingSchema>;
 export function OnboardingScreen() {
   const [avatarUri, setAvatarUri] = useState<string | undefined>(undefined);
   const [avatarPermissionDenied, setAvatarPermissionDenied] = useState(false);
+  const [avatarPickFailed, setAvatarPickFailed] = useState(false);
   const completeOnboarding = useCompleteOnboarding();
 
   const {
@@ -60,6 +61,12 @@ export function OnboardingScreen() {
   }, [avatarPermissionDenied]);
 
   useEffect(() => {
+    if (avatarPickFailed) {
+      AccessibilityInfo.announceForAccessibility(t('onboarding.avatarPickFailedMessage'));
+    }
+  }, [avatarPickFailed]);
+
+  useEffect(() => {
     if (completeOnboarding.isError) {
       AccessibilityInfo.announceForAccessibility(t('onboarding.genericErrorMessage'));
     }
@@ -67,24 +74,32 @@ export function OnboardingScreen() {
 
   const handlePickAvatar = useCallback(async () => {
     setAvatarPermissionDenied(false);
+    setAvatarPickFailed(false);
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       setAvatarPermissionDenied(true);
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
 
-    if (!result.canceled) {
-      const asset = result.assets[0];
-      if (asset) {
-        setAvatarUri(asset.uri);
+      if (!result.canceled) {
+        const asset = result.assets[0];
+        if (asset) {
+          setAvatarUri(asset.uri);
+        }
       }
+    } catch {
+      // e.g. a failed iOS crop now rejects instead of resolving with the
+      // uncropped original (expo-image-picker 57.0.8+). An avatar is
+      // optional, so onboarding stays completable without one.
+      setAvatarPickFailed(true);
     }
   }, []);
 
@@ -142,6 +157,17 @@ export function OnboardingScreen() {
                 accessibilityRole="alert"
               >
                 {t('onboarding.avatarPermissionDeniedMessage')}
+              </Text>
+            ) : null}
+            {avatarPickFailed ? (
+              <Text
+                variant="caption"
+                color="secondary"
+                align="center"
+                accessibilityLiveRegion="polite"
+                accessibilityRole="alert"
+              >
+                {t('onboarding.avatarPickFailedMessage')}
               </Text>
             ) : null}
           </Column>
