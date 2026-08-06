@@ -47,7 +47,13 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" options={{ title: t('tabs.home') }} />
       <Tabs.Screen name="plans/index" options={{ title: t('tabs.plans') }} />
-      <Tabs.Screen name="exercises/index" options={{ title: t('tabs.exercises') }} />
+      {/* Points at the folder, not "exercises/index" - `app/(tabs)/exercises/`
+          has its own `_layout.tsx` (a nested Stack: list -> detail ->
+          create/edit). Registering the leaf file directly here would bypass
+          that nested Stack entirely, breaking `router.push()` to any sibling
+          route within the tab. See `app/(tabs)/exercises/_layout.tsx`'s file
+          header for the full reasoning. */}
+      <Tabs.Screen name="exercises" options={{ title: t('tabs.exercises') }} />
       <Tabs.Screen name="stats/index" options={{ title: t('tabs.stats') }} />
       <Tabs.Screen name="profile/index" options={{ title: t('tabs.profile') }} />
     </Tabs>
