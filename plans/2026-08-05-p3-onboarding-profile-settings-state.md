@@ -86,8 +86,13 @@ died silently overnight, likely killed by the session boundary, never registered
 canceled once the deferral instruction arrived. No further build attempts until P10.
 
 Step 7 status for this phase: DEFERRED to the batched P10 pass, not completed, not
-waived. All other gates done. Step 11 (commit) complete - 5 commits, all clean. Ready
-for Step 12 (push + PR) pending explicit user approval.
+waived. All other gates done. Step 11 (commit) complete - 6 commits, all clean (5
+feature/docs commits plus one small bookkeeping commit for this state file). Step 12
+complete: user approved, branch pushed, PR opened at
+https://github.com/konradxmalinowski/gymtracker/pull/4. Task's live-tracking job is
+done - per this workflow's own convention, no further updates to this file after PR
+open. Next real action on this phase is the batched post-P10 on-device verification
+pass, tracked separately when P10 is reached, not in this file.
 
 docs/ROADMAP.md updated (user explicitly asked for this rather than leaving it
 informal): both the "phase is done when" bullet (point 4, "How this roadmap works")
