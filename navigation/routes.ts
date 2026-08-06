@@ -31,4 +31,17 @@ export const routes = {
     units: (): Href => '/profile/settings/units',
     about: (): Href => '/profile/settings/about',
   },
+
+  /**
+   * P4: the exercise library's own stack, nested under the Exercises tab
+   * (`app/(tabs)/exercises/_layout.tsx`). `library` is a plain alias of
+   * `tabs.exercises` for call sites that read more naturally grouped with
+   * its own siblings (e.g. "navigate back to the library after a delete").
+   */
+  exercises: {
+    library: (): Href => '/exercises',
+    detail: (id: string): Href => ({ pathname: '/exercises/[id]', params: { id } }),
+    create: (): Href => '/exercises/create',
+    edit: (id: string): Href => ({ pathname: '/exercises/edit/[id]', params: { id } }),
+  },
 } as const;

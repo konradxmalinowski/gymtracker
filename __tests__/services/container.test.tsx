@@ -1,6 +1,7 @@
 import { renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { createTestDatabase } from '@/database/node/createTestDatabase';
+import { seedLookupTables } from '@/database/seed/lookupSeeder';
 import {
   ContainerProvider,
   createContainer,
@@ -23,6 +24,8 @@ describe('createContainer', () => {
     expect(container.settings).toBeDefined();
     expect(container.profileRepository).toBeDefined();
     expect(container.profileService).toBeDefined();
+    expect(container.exerciseRepository).toBeDefined();
+    expect(container.exerciseService).toBeDefined();
 
     expect(typeof container.clock.now()).toBe('number');
     expect(typeof container.idGenerator.generate()).toBe('string');
@@ -36,6 +39,24 @@ describe('createContainer', () => {
 
     const viaRepository = await container.profileRepository.get();
     expect(viaRepository?.nickname).toBe('Konrad');
+  });
+
+  it('exerciseService is wired to exerciseRepository - a custom exercise created through the service is visible through the repository directly', async () => {
+    const db = createTestDatabase();
+    // `equipment`/`muscle` are lookup tables with FK-referenced slugs (ARCHITECTURE.md
+    // section 7.4) - seeding them first mirrors `SqliteExerciseRepository.test.ts`'s
+    // own `setup()` helper, not something `createTestDatabase()` does by itself.
+    await seedLookupTables(db);
+    const container = createContainer(db);
+
+    const created = await container.exerciseService.createCustom({
+      nameEn: 'Cable Crossover',
+      equipmentSlug: 'cable',
+      muscles: [{ slug: 'chest', role: 'primary' }],
+    });
+
+    const viaRepository = await container.exerciseRepository.findById(created.id);
+    expect(viaRepository?.nameEn).toBe('Cable Crossover');
   });
 
   it('lets a caller override any dependency (test containers use this for a frozen Clock and deterministic ids)', async () => {

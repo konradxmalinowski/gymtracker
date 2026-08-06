@@ -7,26 +7,61 @@ reference, not a replacement. Section numbers below refer to `docs/ARCHITECTURE.
 ## Status
 
 P0 (project foundation), P1 (design system and UI primitives), P2 (persistence
-foundation), and P3 (onboarding, profile and core settings) are complete. The
-`onboarding` and `profile` features now have real implementations (screens, hooks,
-services, repository); the remaining nine features (`exercise-library`, `plans`,
-`workout-logging`, `rest-timer`, `records`, `statistics`, `body-metrics`, `calendar`,
-`data-transfer`) are still empty skeleton directories (components/hooks/screens/
-services/domain/repository/types/index.ts subfolders, no implementation) awaiting
-their own phase.
+foundation), P3 (onboarding, profile and core settings), and P4 (exercise library)
+are complete. The `onboarding`, `profile`, and `exercise-library` features now have
+real implementations (screens, hooks, services, repository); the remaining eight
+features (`plans`, `workout-logging`, `rest-timer`, `records`, `statistics`,
+`body-metrics`, `calendar`, `data-transfer`) are still empty skeleton directories
+(components/hooks/screens/services/domain/repository/types/index.ts subfolders, no
+implementation) awaiting their own phase.
 
 The app now boots for real: `app/_layout.tsx` opens the database, runs migrations,
-builds the `AppContainer`, holds the splash screen until the profile query resolves,
-then gates to `/onboarding` (no profile yet) or the tab bar. `app/index.tsx` no
-longer exists - the Home screen moved to `app/(tabs)/index.tsx` under a 5-tab layout
-(`app/(tabs)/_layout.tsx`: Home, Plans, Exercises, Stats, Profile) using
-`@expo/vector-icons` (Ionicons; see "Known gaps" history below - this resolved the
-prior no-icon-library gap). The Plans, Exercises, and Stats tabs render a genuine
-"not built yet" empty state (their features land in P4/P5/P11), not a stub. Onboarding
-(`app/onboarding/index.tsx` + `features/onboarding/*`) collects a required nickname
-and an optional avatar via `expo-image-picker`, is skippable, and handles permission
-denial gracefully. All navigation goes through the typed helpers in
+seeds the exercise catalog (`database/seed/runSeed()`, idempotent - a P2 gap fixed in
+P4, see below), builds the `AppContainer`, holds the splash screen until the profile
+query resolves, then gates to `/onboarding` (no profile yet) or the tab bar.
+`app/index.tsx` no longer exists - the Home screen moved to `app/(tabs)/index.tsx`
+under a 5-tab layout (`app/(tabs)/_layout.tsx`: Home, Plans, Exercises, Stats,
+Profile) using `@expo/vector-icons` (Ionicons; see "Known gaps" history below - this
+resolved the prior no-icon-library gap). The Plans and Stats tabs still render a
+genuine "not built yet" empty state (their features land in P5/P11), not a stub.
+Onboarding (`app/onboarding/index.tsx` + `features/onboarding/*`) collects a required
+nickname and an optional avatar via `expo-image-picker`, is skippable, and handles
+permission denial gracefully. All navigation goes through the typed helpers in
 `navigation/routes.ts` (ARCHITECTURE.md section 10.2) rather than raw string paths.
+
+The Exercises tab (`app/(tabs)/exercises/`) is a real nested Stack navigator (list ->
+detail -> create/edit) as of P4 - `app/(tabs)/_layout.tsx`'s tab registration changed
+from `name="exercises/index"` to `name="exercises"` to route through
+`app/(tabs)/exercises/_layout.tsx` rather than bypassing it. The library screen
+(`ExerciseLibraryScreen`) offers instant FTS5 search that is diacritic-folded (e.g.
+"lezac" matches "leżąc"), a multi-select filter sheet (muscle, equipment, body part,
+level, gym/home context, favorites - OR within a category, AND across categories),
+favorites-first ordering, and FlashList-backed results (FlashList's first real usage
+
+- it was declared in the stack from P0 but unused until now). The detail screen
+  (`ExerciseDetailScreen`) shows an image gallery, instructions, muscle/equipment tags,
+  Polish name rendering via `formatExerciseName()` (FR-04), a videos section (currently
+  empty - the catalog has 0% video coverage), a personal note, a per-exercise rest
+  override, and three performance sections that are genuinely empty (not stubs) pending
+  P8. Favorite toggle fires haptics; custom exercise create/edit uses React Hook Form +
+  Zod with primary/secondary muscle selection; delete is guarded by
+  `listReferencingPlans`, which names the blocking plan rather than failing silently.
+
+Two pre-existing P2 gaps were fixed as part of P4, not as unrelated drive-by changes:
+catalog seeding (`database/seed/runSeed()`, built in P2 but never wired up) now runs
+on every boot right after migrations and before `createContainer()`; and
+`database/seed/loadCatalogAsset.ts` now correctly maps the on-disk catalog's
+`primaryMuscles`/`secondaryMuscles: string[]` fields into `catalogSeeder.ts`'s
+expected `muscles: {slug, role}[]` shape - previously nothing bridged this and every
+catalog exercise silently seeded with zero muscles.
+
+P4 verification: typecheck, lint, and the full Jest suite (473 tests) are clean;
+`npx expo export --platform ios` bundles the whole app successfully, used as a
+build-verification proxy in the absence of a simulator/emulator in the implementing
+session (flagged, not silently skipped); a routine security review
+(`reports/security-2026-08-06-p4.md`) found zero issues; an accessibility pass
+(screen-reader announcements, image gallery labels, chip group semantics) fixed a few
+real gaps and confirmed the rest already correct.
 
 A dev-only `/dev/db-health` route (`app/dev/db-health.tsx`, same `__DEV__`-guarded
 `Redirect` pattern as `/dev/gallery`) shows schema version, last migration, per-table
@@ -69,6 +104,22 @@ an MMKV mirror for a synchronous read inside gesture/press handlers, per ADR-000
 mirroring pattern - SQLite stays authoritative and MMKV is re-synced from it on every
 boot.
 
+`features/exercise-library/repository/SqliteExerciseRepository` is the first feature
+repository built after P3's `ProfileRepository` and the first real consumer of
+`BaseSqliteRepository` beyond it. It maintains the `exercise_fts` FTS5 index
+incrementally on every single-row write, using the contentless table's `'delete'`
+special command plus a fresh insert rather than a plain `DELETE FROM exercise_fts
+WHERE rowid = ?` - the latter throws on a contentless table, so this isn't a style
+choice, it's a SQLite constraint. `catalogSeeder.seedCatalog()` still does a wholesale
+FTS rebuild for bulk reseeds; only the single-row path goes through the incremental
+maintenance. `ExerciseService` is Zod-validated and is the only door into the
+repository from presentation, per the "no direct repository access" rule.
+`assets/exercises/imageMap.ts` (1721 entries, generated by
+`scripts/build-exercise-image-map.ts`) resolves a catalog filename to a static Metro
+`require()` - the standard React Native pattern for a large set of runtime-keyed
+bundled assets Metro can't resolve dynamically; `assets/exercises/index.ts` exports
+the consumer-facing `getExerciseImageSource()`.
+
 ## Product
 
 Offline-only React Native/Expo workout logging app. No backend, no accounts, no
@@ -80,7 +131,8 @@ cloud sync. Dark mode only. Bundle id `com.konradmalinowski.gymtracker`. Min OS:
 Expo + TypeScript (strict) + Expo Router (typed routes) + Zustand (ephemeral UI
 state only) + TanStack Query + Expo SQLite + React Hook Form + Zod + MMKV (requires
 `react-native-nitro-modules` as its native peer - a pod install/prebuild step
-before the next device run) + FlashList + Reanimated + Gesture Handler + Victory
+before the next device run) + FlashList (declared since P0, first actually used in
+P4's exercise library results list) + Reanimated + Gesture Handler + Victory
 Native XL (wrapped in a
 `components/charts` adapter per ADR-0010) + React Native SVG + Expo Notifications +
 Expo Haptics + Expo FileSystem + NativeWind (`tailwind.config.js` imports
@@ -219,12 +271,12 @@ BaseSqliteRepository` handles id generation, audit stamping, injected-`Clock`
   shape - the same kind of deviation as the root `domain/` folder noted above.
 - `services/container.ts` (`AppContainer`/`createContainer`/`ContainerProvider`/
   `useContainer`) is the composition root. It's deliberately smaller than section
-  8.4's full shape - `profileRepository`/`profileService` are the first feature
-  repository pair to land (P3); the rest (`exercises`, `plans`, `sessions`, etc.)
-  don't exist yet and land one at a time from P4 onward, each phase extending
-  `AppContainer` rather than replacing it. `services/kv` is intentionally not a
-  container member (ADR-0008: MMKV holds boot-critical flags read before the
-  database opens).
+  8.4's full shape - `profileRepository`/`profileService` (P3) and
+  `exerciseRepository`/`exerciseService` (P4) are the first two feature repository
+  pairs to land; the rest (`plans`, `sessions`, etc.) don't exist yet and land one at
+  a time from P5 onward, each phase extending `AppContainer` rather than replacing
+  it. `services/kv` is intentionally not a container member (ADR-0008: MMKV holds
+  boot-critical flags read before the database opens).
 - Exercise catalog: `scripts/build-catalog.ts` fetches from `yuhonas/free-exercise-db`,
   downscales imagery to 512px WebP via `sharp`, content-hash-dedupes, and emits
   `assets/data/exercises.catalog.json` (deterministic, Zod-validated) plus empty
@@ -243,9 +295,11 @@ native compile step. Component layer: React Native Testing Library. E2E: Maestro
 real fast-check property tests, not filler. `__tests__/database/benchmarks.perf.test.ts`
 is a CI performance-regression suite (ADR-0014) with real assertions for what P2
 ships (previous-performance lookup, session detail load, one-year volume
-aggregation); two benchmarks are `test.skip`'d with a comment naming the future
-phase that implements them (exercise search - P4, JSON export - P9), not silently
-omitted.
+aggregation) plus, as of P4, the exercise-search benchmark (~900-row fixture,
+sub-50ms, NFR-03) - previously `test.skip`'d, now implemented and passing. One
+benchmark remains `test.skip`'d with a comment naming its future phase (JSON export
+
+- P9), not silently omitted.
 
 ## Tooling and CI (section 15, built in P0)
 
@@ -283,6 +337,17 @@ omitted.
   `cloneElement`-based merge onto a single child, not the outer `View`). Do not ship
   drag-only reordering as the final state. Source: accessibility audit finding
   A11Y-005, `reports/accessibility-2026-08-05-p1.md`.
+
+- **`expo-asset` is not hoisted, which breaks Jest module resolution for
+  `@expo/vector-icons` inside a rendered RNTL test.** It's present in
+  `package-lock.json`/`node_modules` but nested under
+  `node_modules/expo/node_modules/expo-asset` rather than hoisted to the top level.
+  This is a pre-existing latent gap - nothing before P4 ever rendered a
+  `@expo/vector-icons` component inside a Jest test - not something P4 introduced.
+  Confirmed Jest-resolver-only via a successful `npx expo export --platform ios`
+  bundle: production/runtime is unaffected. Worked around in P4's own new tests with
+  a manual mock module, `__tests__/__mocks__/vectorIconsMock.tsx`; not fixed at the
+  dependency level.
 
 **Resolved**: the icon library gap tracked here through P0-P2 is closed as of P3 -
 `@expo/vector-icons` (Ionicons) is the app's icon system, first used in the

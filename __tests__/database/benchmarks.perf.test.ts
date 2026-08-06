@@ -1,6 +1,15 @@
 import { generatePerfFixture } from '../../scripts/generate-perf-fixture';
 import { createTestDatabase } from '@/database/node/createTestDatabase';
 import type { NodeSqlExecutor } from '@/database/node/NodeSqlExecutor';
+import {
+  seedCatalog,
+  type CatalogExerciseEntry,
+  type CatalogFile,
+} from '@/database/seed/catalogSeeder';
+import { seedLookupTables } from '@/database/seed/lookupSeeder';
+import { SqliteExerciseRepository } from '@/features/exercise-library/repository/SqliteExerciseRepository';
+import { FixedClock } from '@/services/clock';
+import { Uuid7IdGenerator } from '@/services/id';
 
 /**
  * CI performance regression guard - ADR-0014's "Performance regression guard"
@@ -124,12 +133,53 @@ describe('CI performance regression guard (ADR-0014)', () => {
   });
 
   describe('exercise search', () => {
-    // No ExerciseRepository / FTS5 query method exists yet - lands in P4
-    // (exercise-library feature). exercise_fts (schema.sql 7.4) exists today, but
-    // the search ranking/filter logic that would make this a meaningful benchmark
-    // is feature code, not schema, so it is not faked here.
-    test.skip('exercise search stays under budget - lands in P4 (exercise-library FTS search)', () => {
-      // Intentionally empty - see comment above.
+    /** ~900 rows, matching NFR-03's stated budget scope - via `seedCatalog()` (the real seeder path), not hand-rolled raw SQL. */
+    function buildSyntheticCatalog(count: number): CatalogFile {
+      const equipmentSlugs = ['barbell', 'dumbbell', 'machine', 'cable', 'body only'];
+      const muscleSlugs = [
+        'chest',
+        'shoulders',
+        'triceps',
+        'biceps',
+        'quadriceps',
+        'hamstrings',
+        'lats',
+      ];
+      const exercises: CatalogExerciseEntry[] = [];
+      for (let i = 0; i < count; i += 1) {
+        const nameEn = i === 0 ? 'Bench Press' : `Fixture Exercise ${i}`;
+        exercises.push({
+          catalogSlug: `fixture-exercise-${i}`,
+          nameEn,
+          nameSearch: nameEn.toLowerCase(),
+          equipmentSlug: equipmentSlugs[i % equipmentSlugs.length]!,
+          bodyPart: 'upper',
+          trackingType: 'weight_reps',
+          muscles: [{ slug: muscleSlugs[i % muscleSlugs.length]!, role: 'primary' }],
+        });
+      }
+      return { catalogVersion: '1', exercises };
+    }
+
+    it('finds matches via FTS5 text search under budget for ~900 exercises (NFR-03, ADR-0003)', async () => {
+      const exerciseDb = createTestDatabase();
+      await seedLookupTables(exerciseDb);
+      await seedCatalog(exerciseDb, buildSyntheticCatalog(900));
+
+      const repo = new SqliteExerciseRepository({
+        db: exerciseDb,
+        clock: new FixedClock(Date.now()),
+        idGenerator: new Uuid7IdGenerator(),
+      });
+
+      const startedAt = Date.now();
+      const results = await repo.search({ text: 'bench' });
+      const elapsedMs = Date.now() - startedAt;
+
+      console.log(`Exercise search: ${elapsedMs}ms (${results.length} results)`);
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]!.nameEn).toBe('Bench Press');
+      expect(elapsedMs).toBeLessThan(50);
     });
   });
 
