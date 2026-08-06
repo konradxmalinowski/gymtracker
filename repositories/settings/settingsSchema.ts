@@ -28,6 +28,11 @@ const settingsSchemaDefinition = {
   'progression.lowerIncrementKg': { schema: z.number().positive(), default: 1.25 },
   'catalog.version': { schema: z.string().min(1), default: '0' },
   'diagnostics.crashReporting': { schema: z.boolean(), default: false },
+  // P3 addition (docs/ROADMAP.md): global haptics toggle read by
+  // services/haptics's semantic wrapper, which no-ops every call when this is
+  // off. Additive-only, per this file's own header comment - app_setting is
+  // schema-less key/value specifically so a new setting never needs a migration.
+  'haptics.enabled': { schema: z.boolean(), default: true },
 } as const;
 
 export const SETTINGS_SCHEMA: {

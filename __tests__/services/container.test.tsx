@@ -21,9 +21,21 @@ describe('createContainer', () => {
     expect(container.files).toBeDefined();
     expect(container.logging).toBeDefined();
     expect(container.settings).toBeDefined();
+    expect(container.profileRepository).toBeDefined();
+    expect(container.profileService).toBeDefined();
 
     expect(typeof container.clock.now()).toBe('number');
     expect(typeof container.idGenerator.generate()).toBe('string');
+  });
+
+  it('profileService is wired to profileRepository - a profile created through the service is visible through the repository directly', async () => {
+    const db = createTestDatabase();
+    const container = createContainer(db);
+
+    await container.profileService.completeOnboarding({ nickname: 'Konrad' });
+
+    const viaRepository = await container.profileRepository.get();
+    expect(viaRepository?.nickname).toBe('Konrad');
   });
 
   it('lets a caller override any dependency (test containers use this for a frozen Clock and deterministic ids)', async () => {

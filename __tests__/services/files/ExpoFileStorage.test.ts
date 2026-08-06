@@ -97,6 +97,66 @@ describe('ExpoFileStorage', () => {
     expect(await storage.readText(path)).toBe('ok');
   });
 
+  it('copyFrom() copies an arbitrary source URI into this root, creating intermediate directories', async () => {
+    const source = new ExpoFileStorage('cache');
+    const sourcePath = `${uniqueDir()}/picked-image.jpg`;
+    const bytes = new Uint8Array([9, 8, 7, 6]);
+    await source.writeBytes(sourcePath, bytes);
+    const sourceUri = source.getUri(sourcePath);
+
+    const destination = new ExpoFileStorage('document');
+    const destinationPath = `${uniqueDir()}/avatars/avatar-copied.jpg`;
+
+    await destination.copyFrom(sourceUri, destinationPath);
+
+    expect(await destination.exists(destinationPath)).toBe(true);
+    expect(await destination.readBytes(destinationPath)).toEqual(bytes);
+    expect(await destination.size(destinationPath)).toBe(bytes.length);
+  });
+
+  it('copyFrom() overwrites an existing file at the destination', async () => {
+    const storage = new ExpoFileStorage('document');
+    const sourcePath = `${uniqueDir()}/source.jpg`;
+    const destinationPath = `${uniqueDir()}/dest.jpg`;
+
+    await storage.writeBytes(sourcePath, new Uint8Array([1, 1, 1]));
+    await storage.writeBytes(destinationPath, new Uint8Array([9, 9, 9, 9, 9]));
+
+    await storage.copyFrom(storage.getUri(sourcePath), destinationPath);
+
+    expect(await storage.readBytes(destinationPath)).toEqual(new Uint8Array([1, 1, 1]));
+  });
+
+  it('rejects a relativePath containing ".." traversal segments (SEC-001)', async () => {
+    const storage = new ExpoFileStorage('document');
+
+    expect(() => storage.getUri('../../../Library/secret.txt')).toThrow(
+      /traversal segments are not allowed/,
+    );
+    await expect(storage.writeText('avatars/../../secret.txt', 'x')).rejects.toThrow(
+      /traversal segments are not allowed/,
+    );
+  });
+
+  it('rejects a relativePath containing a "." segment', async () => {
+    const storage = new ExpoFileStorage('document');
+
+    expect(() => storage.getUri('./secret.txt')).toThrow(/traversal segments are not allowed/);
+  });
+
+  it('copyFrom() rejects a traversal destination relativePath without touching the source file (SEC-001)', async () => {
+    const storage = new ExpoFileStorage('document');
+    const sourcePath = `${uniqueDir()}/picked.jpg`;
+    await storage.writeBytes(sourcePath, new Uint8Array([1, 2, 3]));
+
+    await expect(
+      storage.copyFrom(storage.getUri(sourcePath), 'avatars/../../escaped.jpg'),
+    ).rejects.toThrow(/traversal segments are not allowed/);
+
+    expect(await storage.exists(sourcePath)).toBe(true);
+    expect(await storage.exists('escaped.jpg')).toBe(false);
+  });
+
   it('document and cache roots are independent', async () => {
     const documentStorage = new ExpoFileStorage('document');
     const cacheStorage = new ExpoFileStorage('cache');
