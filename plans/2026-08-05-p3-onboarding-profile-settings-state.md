@@ -62,7 +62,7 @@ require the device; will circle back to Step 7 before Step 11 commit / Step 12 P
 | 5 | general-purpose (accessibility) | done, fixes applied and verified | accessibility-agent is not in this environment's available agent roster - substituted general-purpose with a detailed accessibility-review brief covering the same Step 9e checklist. Deviation noted per workflow flexibility rules. Found: (HIGH) OnboardingScreen's avatar-permission-denied and generic submit-error messages use bare accessibilityLiveRegion with no AccessibilityInfo.announceForAccessibility() call or accessibilityRole="alert", inconsistent with the established TextField.tsx/ErrorState.tsx pattern (A11Y-002) - VoiceOver users get no announcement on either error path; (MEDIUM) UnitsSettingsScreen's loading skeleton has no screen-level announce-on-loading effect, unlike ProfileScreen's identical isPending pattern; (LOW, informational only, no fix needed) ListRow+Switch trailing-control label collision flagged for future rows, not a current bug. Everything else checked out: tab bar labels, touch targets, nickname field validation, boot-failure screen, no color-alone signaling. Routed the two real findings back to frontend-agent. |
 | 6 | devsecops-agent | skipped | No build/pipeline/signing config actually changed this phase (eas.json untouched, no new profile). The only infra-adjacent item - a new native module needing a dev-client rebuild - is an operational action already being handled directly by the orchestrator via eas CLI + adb (Step 7), not a config change requiring devsecops-agent's expertise. Skipping the dispatch rather than forcing process for its own sake. |
 | 7 | docs-agent | done | CLAUDE.md status+known-gaps+data-layer updates, CHANGELOG.md P3 entry (+ Security subsection), docs/architecture-snapshot.md fully regenerated (also fixed pre-existing stale phase-number errors from before P3), ARCHITECTURE.md 7.3 known-keys list (+haptics.enabled) all done. Correctly flagged app.config.ts's EAS owner change as needing human confirmation rather than guessing - gave it the missing context (confirmed intentional in Step 0) and asked it to update CLAUDE.md's stale "@konradxmalinowski/gymtracker" reference to "@konradxmalinowski-2/gymtracker" to match. Also flagged (informational, not fixed, pre-existing, out of this dispatch's scope): __tests__/database/benchmarks.perf.test.ts's skip comments label the future JSON-export benchmark "P9," conflicting with ROADMAP.md's real P9="Workout summary and history" / P14="Data export and import" - predates P3, noted in the regenerated snapshot, not blocking. |
-| 8 | git-commit-agent | not started | last |
+| 8 | git-commit-agent | done | 5 thematic commits, all pre-commit hooks clean: e735e80 (chore: EAS owner + P3 deps), 1df78fd (feat: Weight/Length conversion), cac5cda (feat: profile repository+service layer), aba284c (feat: onboarding+profile+settings screens+nav shell), 0a3405b (docs). Working tree clean after final commit. Orchestrator independently re-verified post-commit on HEAD: tsc clean, eslint clean, jest --ci 49/49 suites, 373 passed/2 skipped. Nothing pushed - awaiting explicit user approval (Step 12).
 
 ## Phase status
 
@@ -86,9 +86,8 @@ died silently overnight, likely killed by the session boundary, never registered
 canceled once the deferral instruction arrived. No further build attempts until P10.
 
 Step 7 status for this phase: DEFERRED to the batched P10 pass, not completed, not
-waived. All other gates (review, tests, security, accessibility, docs) are done - see
-below. Proceeding to close out the remaining gap-fill test review, then Step 11 commit,
-without Step 7 blocking it per the new directive.
+waived. All other gates done. Step 11 (commit) complete - 5 commits, all clean. Ready
+for Step 12 (push + PR) pending explicit user approval.
 
 docs/ROADMAP.md updated (user explicitly asked for this rather than leaving it
 informal): both the "phase is done when" bullet (point 4, "How this roadmap works")
