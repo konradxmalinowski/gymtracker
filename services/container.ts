@@ -20,6 +20,9 @@ import { createElement, createContext, useContext, type ReactNode } from 'react'
 import { ProfileService } from '@/features/profile';
 import { SqliteProfileRepository } from '@/features/profile/repository/SqliteProfileRepository';
 import type { ProfileRepository } from '@/features/profile/repository/ProfileRepository';
+import { ExerciseService } from '@/features/exercise-library';
+import { SqliteExerciseRepository } from '@/features/exercise-library/repository/SqliteExerciseRepository';
+import type { ExerciseRepository } from '@/features/exercise-library/repository/ExerciseRepository';
 import type { DatabaseContext } from '@/repositories/contracts/database';
 import { SqliteSettingsRepository, type SettingsRepository } from '@/repositories/settings';
 import { SystemClock, type Clock } from '@/services/clock';
@@ -38,6 +41,10 @@ export interface AppContainer {
   profileRepository: ProfileRepository;
   /** ARCHITECTURE.md section 3.1 rule 3: the only door into `profileRepository` for hooks/screens. */
   profileService: ProfileService;
+  /** Feature repository, P4 (exercise-library). Not re-exported for presentation use - go through `exerciseService`. */
+  exerciseRepository: ExerciseRepository;
+  /** ARCHITECTURE.md section 3.1 rule 3: the only door into `exerciseRepository` for hooks/screens. */
+  exerciseService: ExerciseService;
 }
 
 export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer>): AppContainer {
@@ -50,6 +57,10 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
   const profileService =
     deps?.profileService ??
     new ProfileService({ repository: profileRepository, files, idGenerator, logging });
+  const exerciseRepository =
+    deps?.exerciseRepository ?? new SqliteExerciseRepository({ db, clock, idGenerator });
+  const exerciseService =
+    deps?.exerciseService ?? new ExerciseService({ repository: exerciseRepository, logging });
 
   return {
     db,
@@ -60,6 +71,8 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
     settings,
     profileRepository,
     profileService,
+    exerciseRepository,
+    exerciseService,
   };
 }
 

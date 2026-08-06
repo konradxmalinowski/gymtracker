@@ -14,6 +14,7 @@ import { ErrorState, SheetHost, ToastHost } from '@/components/feedback';
 import { Text } from '@/components/ui';
 import { ExpoSqlExecutor, openDatabase } from '@/database/client';
 import { runMigrations } from '@/database/migrations';
+import { loadCatalogAsset, runSeed } from '@/database/seed';
 import { routes } from '@/navigation/routes';
 import {
   ContainerProvider,
@@ -79,6 +80,16 @@ export default function RootLayout() {
           }
           return;
         }
+
+        // Runs on every boot, not just first launch - `runSeed()` is idempotent
+        // (a true no-op once the bundled catalog version has already been seeded).
+        // Placed before `createContainer()` so `container.exerciseService` never
+        // observes an empty catalog on a fresh install; held under the same
+        // splash-screen gate as migrations (see the comment above
+        // `preventAutoHideAsync()`), via the same try/catch as the rest of
+        // `bootstrap()` so a seed failure surfaces as boot `{status: 'error'}`
+        // rather than an unhandled rejection.
+        await runSeed(executor, loadCatalogAsset());
 
         const container = createContainer(executor);
 
