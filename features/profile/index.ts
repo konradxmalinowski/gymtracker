@@ -6,8 +6,20 @@
  * eslint.config.js). Reaching into "features/profile/<subfolder>/..." from any
  * other feature is a lint error; import from "@/features/profile" instead.
  *
- * Nothing is exported yet - this feature's screens/services/domain land in a
- * later roadmap phase. Re-export the feature's public API here as it is built.
+ * Only `ProfileService` (and the types it speaks) is exported - never
+ * `ProfileRepository`/`SqliteProfileRepository`. Presentation (hooks, screens
+ * in the next phase) must go through the service, per ARCHITECTURE.md section
+ * 3.1 rule 3; re-exporting the repository here would make that mistake one
+ * import away.
  */
 
-export {};
+export {
+  ProfileService,
+  NICKNAME_MAX_LENGTH,
+  AVATAR_DIRECTORY,
+  type CompleteOnboardingInput,
+  type ProfileServiceDependencies,
+} from './services/ProfileService';
+export { InvalidNicknameError } from './services/errors';
+export type { Profile, ProfileSex } from './repository/ProfileRepository';
+export { ProfileAlreadyExistsError, ProfileNotFoundError } from './repository/errors';

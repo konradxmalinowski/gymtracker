@@ -17,6 +17,9 @@
  * directly wherever it's needed rather than injected through here.
  */
 import { createElement, createContext, useContext, type ReactNode } from 'react';
+import { ProfileService } from '@/features/profile';
+import { SqliteProfileRepository } from '@/features/profile/repository/SqliteProfileRepository';
+import type { ProfileRepository } from '@/features/profile/repository/ProfileRepository';
 import type { DatabaseContext } from '@/repositories/contracts/database';
 import { SqliteSettingsRepository, type SettingsRepository } from '@/repositories/settings';
 import { SystemClock, type Clock } from '@/services/clock';
@@ -31,6 +34,10 @@ export interface AppContainer {
   logging: Logger;
   clock: Clock;
   idGenerator: IdGenerator;
+  /** Feature repository, P3 (onboarding/profile/settings). Not re-exported for presentation use - go through `profileService`. */
+  profileRepository: ProfileRepository;
+  /** ARCHITECTURE.md section 3.1 rule 3: the only door into `profileRepository` for hooks/screens. */
+  profileService: ProfileService;
 }
 
 export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer>): AppContainer {
@@ -39,8 +46,21 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
   const files = deps?.files ?? createFileStorage('document');
   const logging = deps?.logging ?? createLogger({ fileStorage: createFileStorage('cache') });
   const settings = deps?.settings ?? new SqliteSettingsRepository(db, clock);
+  const profileRepository = deps?.profileRepository ?? new SqliteProfileRepository(db, clock);
+  const profileService =
+    deps?.profileService ??
+    new ProfileService({ repository: profileRepository, files, idGenerator, logging });
 
-  return { db, clock, idGenerator, files, logging, settings };
+  return {
+    db,
+    clock,
+    idGenerator,
+    files,
+    logging,
+    settings,
+    profileRepository,
+    profileService,
+  };
 }
 
 const ContainerContext = createContext<AppContainer | null>(null);

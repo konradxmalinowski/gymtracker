@@ -6,7 +6,11 @@ function resolveRootDirectory(root: FileStorageRoot): Directory {
 }
 
 function pathSegments(relativePath: string): string[] {
-  return relativePath.split('/').filter((segment) => segment.length > 0);
+  const segments = relativePath.split('/').filter((segment) => segment.length > 0);
+  if (segments.some((segment) => segment === '.' || segment === '..')) {
+    throw new Error(`Invalid relativePath "${relativePath}": traversal segments are not allowed.`);
+  }
+  return segments;
 }
 
 /**
@@ -96,6 +100,13 @@ export class ExpoFileStorage implements FileStorage {
       file.create({ intermediates: true });
     }
     file.write(bytes);
+  }
+
+  async copyFrom(sourceUri: string, relativePath: string): Promise<void> {
+    this.ensureParentDirectory(relativePath);
+    const source = new File(sourceUri);
+    const destination = this.file(relativePath);
+    await source.copy(destination, { overwrite: true });
   }
 
   async delete(relativePath: string): Promise<void> {

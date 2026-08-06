@@ -34,11 +34,23 @@ Consequences that shape the ordering below:
    system after four features means retrofitting four features.
 4. **A phase is done when**: its screens work, its repository tests pass, its domain
    tests pass, `tsc --noEmit` and `eslint` are clean, and its acceptance criteria below
-   are demonstrably met on a device.
+   are met - for P3 through P10, on-device confirmation of those criteria is deferred
+   and happens later in the batched P10 pass (see Definition of Done below), not
+   before each individual phase's commit.
 
 ### Definition of Done (applies to every phase)
 
-- All acceptance criteria for the phase pass on a physical device.
+- Automated gates - typecheck, lint, repository/domain tests, code review, and
+  security/accessibility review and docs - still close out the phase, and the phase
+  still commits normally, one commit per phase, exactly as before.
+- On-device confirmation of the phase's acceptance criteria is deferred and batched
+  for phases P3 through P10: rather than confirming on a physical device after each
+  individual phase, that confirmation happens once, after P10, covering every phase
+  from P3 through P10 in a single pass.
+- For phases P3 through P10, "committed" means the automated gates above passed - it
+  does NOT mean "confirmed working on a physical device." On-device verification for
+  those phases is not waived, only deferred in timing: it is not considered done
+  until the batched post-P10 pass actually confirms it.
 - Repository methods introduced in the phase have integration tests, including their
   constraint violations and rollback paths.
 - Domain calculators introduced in the phase have table-driven unit tests.

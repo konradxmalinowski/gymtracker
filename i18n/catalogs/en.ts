@@ -61,6 +61,78 @@ export const en = {
     stateLoading: 'Loading',
     stateError: 'Error',
   },
+  boot: {
+    unsupportedVersionMessage:
+      'This app cannot open your data (database v{{databaseVersion}}, this build only supports up to v{{highestKnownVersion}}). Please update the app.',
+    genericErrorMessage: 'GymTracker could not start: {{detail}}',
+  },
+  tabs: {
+    home: 'Home',
+    plans: 'Plans',
+    exercises: 'Exercises',
+    stats: 'Stats',
+    profile: 'Profile',
+  },
+  comingSoon: {
+    plansTitle: 'Plans are coming soon',
+    plansMessage:
+      'Build reusable workout plans and start a session straight from one. Not built yet - it lands in a later phase.',
+    exercisesTitle: 'The exercise library is coming soon',
+    exercisesMessage:
+      'Browse and search the full exercise catalog with videos and history. Not built yet - it lands in a later phase.',
+    statsTitle: 'Stats are coming soon',
+    statsMessage:
+      'Track volume, personal records, and progress over time. Not built yet - it lands in a later phase.',
+  },
+  onboarding: {
+    title: 'Welcome to GymTracker',
+    subtitle: 'Set a nickname to get started. Everything stays on this device.',
+    nicknameLabel: 'Nickname',
+    nicknamePlaceholder: 'What should we call you?',
+    nicknameRequiredError: 'Enter a nickname to continue.',
+    nicknameTooLongError: 'Nickname must be {{max}} characters or fewer.',
+    avatarSectionTitle: 'Profile photo (optional)',
+    choosePhotoLabel: 'Choose a photo',
+    changePhotoLabel: 'Change photo',
+    skipAvatarLabel: 'Skip for now',
+    avatarPermissionDeniedMessage:
+      'Photo library access was denied. You can still continue without a photo - add one later from Profile.',
+    continueLabel: 'Continue',
+    genericErrorMessage: 'Something went wrong setting up your profile. Please try again.',
+  },
+  profile: {
+    editAvatarAccessibilityLabel: 'Change profile photo',
+    settingsRowTitle: 'Settings',
+    settingsRowSubtitle: 'Units, haptics, and about',
+    loadErrorMessage: 'Could not load your profile.',
+  },
+  profileSettings: {
+    title: 'Settings',
+    unitsRowTitle: 'Units',
+    unitsRowSubtitleTemplate: '{{weight}} / {{length}}',
+    hapticsRowTitle: 'Haptics',
+    hapticsRowSubtitle: 'Vibration feedback for taps and completions',
+    aboutRowTitle: 'About',
+  },
+  unitsSettings: {
+    title: 'Units',
+    weightSectionTitle: 'Weight',
+    lengthSectionTitle: 'Length',
+    weightKg: 'kg',
+    weightLb: 'lb',
+    lengthCm: 'cm',
+    lengthIn: 'in',
+    previewLabel: 'Example',
+    previewWeightSample: 'Bench press: {{value}}',
+    previewLengthSample: 'Height: {{value}}',
+  },
+  about: {
+    title: 'About',
+    versionLabel: 'Version',
+    licenseSectionTitle: 'License and data',
+    licenseMessage:
+      'GymTracker is offline-only: your data never leaves this device and there is no account or cloud sync.',
+  },
   dbHealth: {
     title: 'Database health',
     subtitle:

@@ -9,6 +9,7 @@ export interface TextFieldProps {
   label?: string | undefined;
   value: string;
   onChangeText: (value: string) => void;
+  onBlur?: (() => void) | undefined;
   error?: string | undefined;
   helper?: string | undefined;
   leading?: ReactNode | undefined;
@@ -36,6 +37,7 @@ export function TextField({
   label,
   value,
   onChangeText,
+  onBlur,
   error,
   helper,
   leading,
@@ -85,7 +87,10 @@ export function TextField({
           value={value}
           onChangeText={onChangeText}
           onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onBlur={() => {
+            setFocused(false);
+            onBlur?.();
+          }}
           editable={!disabled}
           placeholder={placeholder}
           placeholderTextColor={color.textTertiary}

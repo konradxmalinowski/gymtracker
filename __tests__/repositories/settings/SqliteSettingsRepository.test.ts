@@ -27,6 +27,7 @@ describe('SETTINGS_SCHEMA', () => {
         'progression.lowerIncrementKg',
         'catalog.version',
         'diagnostics.crashReporting',
+        'haptics.enabled',
       ]),
     );
   });
@@ -90,6 +91,7 @@ function sampleFor(key: SettingsKey): unknown {
     case 'timer.autoStart':
     case 'workout.confirmDiscard':
     case 'diagnostics.crashReporting':
+    case 'haptics.enabled':
       return false;
     case 'workout.staleAfterHours':
       return 12;

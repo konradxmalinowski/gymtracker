@@ -75,3 +75,33 @@ stops being a scaffold placeholder.
   integrity check, and SQLite build info, reusing existing P1 primitives (P2)
 - New dependencies: `react-native-nitro-modules` (MMKV's native peer) and `sharp`
   (build-time-only, exercise catalog image processing) (P2)
+- 5-tab navigation shell (`app/(tabs)/_layout.tsx`: Home, Plans, Exercises, Stats,
+  Profile) using `@expo/vector-icons` (Ionicons) - resolves the P0-P2 "no icon
+  library chosen yet" gap. Plans, Exercises, and Stats render a genuine "not built
+  yet" empty state pending their own phase (P3)
+- Root boot sequence (`app/_layout.tsx`): opens the database, runs migrations,
+  builds the `AppContainer`, holds the splash screen until the profile query
+  resolves, then gates to onboarding or the tab bar (P3)
+- Onboarding flow (`app/onboarding/index.tsx`, `features/onboarding/*`): required
+  nickname, optional avatar via `expo-image-picker`, skippable, graceful
+  permission-denial handling (P3)
+- `features/profile/*`: `ProfileRepository`/`SqliteProfileRepository` over the
+  existing `user_profile` table, `ProfileService` (avatar write-then-commit
+  ordering per ADR-0012), profile screen, and settings screens (units kg/lb and
+  cm/in, haptics toggle, about) (P3)
+- `domain/Weight.ts` and `domain/Length.ts` fleshed out from P1-era stubs to the
+  full ADR-0009 conversion/rounding/display-formatting spec, with `fast-check`
+  round-trip property tests (P3)
+- New `haptics.enabled` settings key (15th v1 key), mirrored into MMKV for
+  synchronous reads in gesture/press handlers per ADR-0008, SQLite remaining
+  authoritative (P3)
+- `navigation/routes.ts`, typed route helpers per `docs/ARCHITECTURE.md` section
+  10.2 (P3)
+- New dependencies: `expo-image-picker`, `@expo/vector-icons`,
+  `@hookform/resolvers`, `expo-dev-client` (P3)
+
+### Security
+
+- Path traversal hardening in `services/files/ExpoFileStorage.ts`, the sole low
+  finding from the P3 security review (`reports/security-2026-08-05-p3.md`, 0
+  critical/high/medium) (P3)

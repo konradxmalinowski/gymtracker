@@ -468,7 +468,9 @@ Known keys at v1: `units.weight` (`kg|lb`), `units.length` (`cm|in`),
 `timer.defaultRestSeconds`, `timer.sound`, `timer.vibration`, `timer.notification`,
 `timer.autoStart`, `workout.staleAfterHours`, `workout.confirmDiscard`,
 `oneRm.formula` (`epley|brzycki`), `progression.upperIncrementKg`,
-`progression.lowerIncrementKg`, `catalog.version`, `diagnostics.crashReporting`.
+`progression.lowerIncrementKg`, `catalog.version`, `diagnostics.crashReporting`,
+`haptics.enabled` (global haptics toggle, added P3; read by `services/haptics`
+through an MMKV mirror for synchronous access in gesture/press handlers).
 
 ### 7.4 Exercise catalog
 

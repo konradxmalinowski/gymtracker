@@ -35,6 +35,18 @@ export interface FileStorage {
   /** Creates the file (and any missing intermediate directories) if needed, then overwrites its content. */
   writeBytes(relativePath: string, bytes: Uint8Array): Promise<void>;
 
+  /**
+   * Copies an arbitrary source URI - e.g. an image-picker or camera result,
+   * which lives outside this storage's own root and is not itself something
+   * `readBytes`/`writeBytes` can address - into `relativePath` under this
+   * root, creating any missing intermediate directories and overwriting an
+   * existing file at the destination. This is the primitive ADR-0012's
+   * write-then-commit ordering is built on: the caller awaits this, then
+   * verifies `exists()`/`size()`, and only then persists the relative name to
+   * a database row.
+   */
+  copyFrom(sourceUri: string, relativePath: string): Promise<void>;
+
   /** No-op when the file does not exist. */
   delete(relativePath: string): Promise<void>;
 
