@@ -978,6 +978,7 @@ setNote(id, note): Promise<void>
 setDefaultRest(id, seconds | null): Promise<void>
 listReferencingPlans(id): Promise<PlanReference[]>          // powers "cannot delete, used in..."
 replaceCatalog(entries, catalogVersion): Promise<void>      // seeder path; rewrites catalog rows + FTS only
+deleteCustom(id): Promise<void>                             // P4 addition beyond the original 10-method list; soft delete
 ```
 `ExerciseQuery` = `{ text?, muscleSlugs?, equipmentSlugs?, bodyParts?, level?, favoritesOnly?, context?: 'gym' | 'home', source?, limit, offset }`.
 
@@ -993,6 +994,11 @@ reorderPlans(orderedIds): Promise<void>
 addDay / renameDay / duplicateDay / deleteDay / reorderDays
 addExerciseToDay / updateDayExercise / removeExerciseFromDay / reorderDayExercises
 setSupersetGroup(dayExerciseIds, group | null): Promise<void>
+deletePlan(id): Promise<void>                               // P5 addition beyond the original 17-method list; soft delete, the normal user-facing path
+restorePlan(id): Promise<void>                              // undoes deletePlan
+purgePlan(id): Promise<void>                                // hard delete; fires workout_session's ON DELETE SET NULL/CASCADE
+restoreDay(dayId): Promise<void>                            // undoes deleteDay
+restoreDayExercise(id): Promise<void>                       // undoes removeExerciseFromDay
 ```
 
 **`WorkoutSessionRepository`** (feature: `workout-logging`) - aggregate root, the

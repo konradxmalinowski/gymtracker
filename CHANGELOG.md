@@ -117,6 +117,23 @@ stops being a scaffold placeholder.
 - Exercise-search performance benchmark implemented in
   `__tests__/database/benchmarks.perf.test.ts`, previously `test.skip`'d pending this
   phase (P4)
+- `features/plans/*`: plan list, detail, and day-editor screens
+  (`PlanListScreen`/`PlanDetailScreen`/`PlanDayEditorScreen`), backed by
+  `PlanRepository`/`SqlitePlanRepository` (the app's first aggregate-root feature
+  repository) and a Zod-validated `PlanService`; plan-level delete is a hard
+  `purgePlan` behind a confirm dialog (no undo), day/day-exercise delete is
+  soft-delete-plus-undo-toast; `duplicatePlan`/`duplicateDay` disambiguate name
+  collisions ("(copy)", "(copy 2)", ...); `setSupersetGroup` requires >=2 exercise
+  ids to form or update a group (P5)
+- Nested Stack navigator for the Plans tab (`app/(tabs)/plans/`: list -> detail ->
+  day editor), replacing the "not built yet" placeholder tab (P5)
+- `app/(modals)/`, the app's first modal route group, holding the new
+  `ExercisePickerScreen` (multi-select sibling of the P4 library screen); its
+  selection returns via a new `stores/exercisePickerStore.ts` Zustand store rather
+  than route params, since the result is an unbounded exercise-id list (P5)
+- `planRepository`/`planService` added to `AppContainer`, alongside P3's
+  `profileRepository`/`profileService` and P4's `exerciseRepository`/
+  `exerciseService` pairs (P5)
 
 ### Fixed
 
@@ -126,6 +143,11 @@ stops being a scaffold placeholder.
 - `database/seed/loadCatalogAsset.ts` now maps the catalog's
   `primaryMuscles`/`secondaryMuscles` fields into `catalogSeeder.ts`'s expected
   shape - previously every catalog exercise seeded with zero muscles (P4)
+- `components/gestures/DraggableList.tsx` had no non-gesture reorder alternative
+  (tracked "Known gaps" item since P1); closed in P5 with move-up/move-down
+  `accessibilityActions`, across two rounds after a follow-up review found the
+  first pass's fix didn't reach a native accessibility node through the real row
+  components - see `CLAUDE.md`'s "Known gaps" for the full detail (P5)
 
 ### Security
 
@@ -134,3 +156,6 @@ stops being a scaffold placeholder.
   critical/high/medium) (P3)
 - Routine security review found zero issues (`reports/security-2026-08-06-p4.md`)
   (P4)
+- Routine security review found zero critical/high/medium issues, one
+  low/informational note on a non-atomic multi-exercise-add batch
+  (`reports/security-2026-08-06-p5.md`) (P5)
