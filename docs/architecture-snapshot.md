@@ -1,5 +1,5 @@
 ---
-snapshot_commit: 0025ae8945067270d51975a9333107ecf7c681a7
+snapshot_commit: 8c68ae585e637951693e7323b6d02a95dcd70d21
 generated_from: CLAUDE.md, docs/ARCHITECTURE.md, docs/ROADMAP.md, docs/adr/*, docs/PRODUCT-BRIEF.md
 ---
 
@@ -10,22 +10,45 @@ Condensed synthesis for orchestration use. Full detail lives in docs/ARCHITECTUR
 needs verification, this file is a pointer, not a replacement.
 
 Note on `snapshot_commit`: this points at the working-tree HEAD at the time this file
-was regenerated (the tip of `feat/p3-onboarding-profile-settings` before that branch's
-own doc changes were committed). Re-snapshot after the commit that includes this file
-lands, if the exact hash matters for a later diff.
+was regenerated (the tip of `feat/p4-exercise-library` before that branch's own doc
+changes were committed). Re-snapshot after the commit that includes this file lands,
+if the exact hash matters for a later diff.
 
 ## Status
 
 P0 (project foundation), P1 (design system/UI primitives), P2 (persistence
-foundation), and P3 (onboarding, profile and core settings) are complete and
-committed or ready to commit. `onboarding` and `profile` are the first two features
-with real implementations; the other nine (`exercise-library`, `plans`,
-`workout-logging`, `rest-timer`, `records`, `statistics`, `body-metrics`, `calendar`,
-`data-transfer`) remain empty skeletons awaiting their phase. The app boots for real
-as of P3: `app/_layout.tsx` opens the database, runs migrations, builds the
-`AppContainer`, holds the splash screen until the profile query resolves, then gates
-to `/onboarding` or a 5-tab layout (Home, Plans, Exercises, Stats, Profile). Plans/
-Exercises/Stats render real "not built yet" empty states, not stubs.
+foundation), P3 (onboarding, profile and core settings), and P4 (exercise library)
+are complete and committed or ready to commit. `onboarding`, `profile`, and
+`exercise-library` are the first three features with real implementations; the other
+eight (`plans`, `workout-logging`, `rest-timer`, `records`, `statistics`,
+`body-metrics`, `calendar`, `data-transfer`) remain empty skeletons awaiting their
+phase. The app boots for real as of P3, and as of P4 also seeds the exercise catalog
+on every boot: `app/_layout.tsx` opens the database, runs migrations, runs
+`database/seed/runSeed()` (idempotent), builds the `AppContainer`, holds the splash
+screen until the profile query resolves, then gates to `/onboarding` or a 5-tab
+layout (Home, Plans, Exercises, Stats, Profile). Plans/Stats still render real "not
+built yet" empty states; Exercises is now a real nested Stack navigator (list ->
+detail -> create/edit).
+
+Exercise library (P4): instant, diacritic-folded FTS5 search ("lezac" matches
+"leżąc"), a multi-select filter sheet (muscle/equipment/body part/level/gym-home
+context/favorites, OR within a category, AND across categories), favorites-first
+ordering, FlashList results (its first real usage - declared since P0, unused until
+now); detail screen with image gallery, instructions, tags, `formatExerciseName()`
+Polish rendering (FR-04), an empty videos section (0% catalog video coverage), a
+personal note, a per-exercise rest override, and three performance sections that are
+genuinely empty pending P8, not stubs; favorite toggle with haptics; custom
+exercise create/edit (React Hook Form + Zod); delete guarded by
+`listReferencingPlans`. Two P2 gaps were fixed as part of this phase: catalog seeding
+was built but never wired up until now, and `loadCatalogAsset.ts` now correctly maps
+the catalog's `primaryMuscles`/`secondaryMuscles` fields into `catalogSeeder.ts`'s
+expected shape (previously every seeded exercise had zero muscles). Verification:
+typecheck/lint/Jest (473 tests) clean, `npx expo export --platform ios` used as a
+build-verification proxy (no simulator/emulator available), security review clean
+(`reports/security-2026-08-06-p4.md`), accessibility pass completed. Known follow-up:
+`expo-asset` is un-hoisted, breaking Jest resolution for `@expo/vector-icons` inside
+RNTL-rendered tests (worked around with a manual mock; confirmed production/runtime
+is unaffected via the `expo export` bundle) - pre-existing gap, not a P4 regression.
 
 ## Product
 
@@ -38,7 +61,8 @@ Package manager: npm. GitHub: konradxmalinowski/gymtracker (public).
 
 Expo (current SDK) + TypeScript strict + Expo Router (typed routes) + Zustand +
 TanStack Query + Expo SQLite + React Hook Form (+ `@hookform/resolvers` for Zod
-schema resolvers) + Zod + MMKV + FlashList + Reanimated + Gesture Handler + Victory
+schema resolvers) + Zod + MMKV + FlashList (declared since P0, first real usage in
+P4's exercise library results list) + Reanimated + Gesture Handler + Victory
 Native XL (Skia-based, wrapped in components/charts adapter per ADR-0010) + React
 Native SVG + `@expo/vector-icons` (Ionicons - the app's only icon system, chosen P3)
 + `expo-image-picker` (avatar/photo selection) + Expo Notifications + Expo Haptics +
@@ -64,21 +88,25 @@ future sync conflict unit).
 ## Folder structure (section 9)
 
 Top level: `app/` (routing only, thin wrappers into `features/*/screens` - now
-includes `app/(tabs)/` for the 5-tab layout, `app/onboarding/`, and
+includes `app/(tabs)/` for the 5-tab layout (`app/(tabs)/exercises/` is a nested
+Stack as of P4: list -> detail -> create/edit), `app/onboarding/`, and
 `app/profile/settings/`), `assets/` (fonts, images, bundled exercise WebP images,
-`exercises.catalog.json`/`exercises.pl.json`/`exercises.videos.json`), `components/`
-(cross-feature, zero domain knowledge - `ui/`, `layout/`, `feedback/`, `charts/`,
-`gestures/`), `database/` (`client.ts`, `DatabaseProvider.tsx`, `migrations/`,
-`schema.sql`, `seed/`, `sql/`), `domain/` (shared cross-feature value objects -
-`Weight.ts`, `Length.ts`, deviation from the original section 9 tree, not yet synced
-back into ARCHITECTURE.md), `features/` (one dir per feature: `onboarding`,
-`profile`, `exercise-library`, `plans`, `workout-logging`, `rest-timer`, `records`,
-`statistics`, `body-metrics`, `calendar`, `data-transfer` - each with
-components/hooks/screens/services/domain/repository/types/index.ts; `onboarding` and
-`profile` are populated as of P3, the rest are still empty), `hooks/`, `navigation/`
-(`routes.ts` - typed route helpers per section 10.2, added P3), `repositories/`
-(shared infra: `contracts/`, `base/`, `mapping/`, `query/`, plus the cross-cutting
-`settings/` sibling), `services/` (`container.ts` composition root, `files/`,
+`exercises.catalog.json`/`exercises.pl.json`/`exercises.videos.json`, plus
+`exercises/imageMap.ts` and `exercises/index.ts` added in P4 for filename ->
+`require()` resolution), `components/` (cross-feature, zero domain knowledge -
+`ui/`, `layout/`, `feedback/`, `charts/`, `gestures/`), `database/` (`client.ts`,
+`DatabaseProvider.tsx`, `migrations/`, `schema.sql`, `seed/` - `runSeed()` now called
+from `app/_layout.tsx`'s boot sequence as of P4, `sql/`), `domain/` (shared
+cross-feature value objects - `Weight.ts`, `Length.ts`, deviation from the original
+section 9 tree, not yet synced back into ARCHITECTURE.md), `features/` (one dir per
+feature: `onboarding`, `profile`, `exercise-library`, `plans`, `workout-logging`,
+`rest-timer`, `records`, `statistics`, `body-metrics`, `calendar`, `data-transfer` -
+each with components/hooks/screens/services/domain/repository/types/index.ts;
+`onboarding` and `profile` are populated as of P3, `exercise-library` as of P4, the
+rest are still empty), `hooks/`, `navigation/` (`routes.ts` - typed route helpers per
+section 10.2, added P3), `repositories/` (shared infra: `contracts/`, `base/`,
+`mapping/`, `query/`, plus the cross-cutting `settings/` sibling), `services/`
+(`container.ts` composition root, `files/`,
 `notifications/`, `haptics/`, `kv/`, `clock/`, `id/`, `logging/`), `stores/` (Zustand,
 ephemeral UI state only), `theme/`, `types/`, `utils/`, `__tests__/`, `.maestro/`.
 
@@ -144,11 +172,15 @@ exist yet (ADR-0004).
 
 `AppContainer`/`createContainer`/`ContainerProvider`/`useContainer`. Deliberately
 smaller than ARCHITECTURE.md section 8.4's full shape - `profileRepository`/
-`profileService` are the first feature repository pair to land (P3); the rest
-(`exercises`, `plans`, `sessions`, etc.) land one at a time from P4 onward, each
-phase extending `AppContainer` rather than replacing it. `services/kv` is
-intentionally not a container member (ADR-0008: MMKV holds boot-critical flags read
-before the database opens).
+`profileService` (P3) and `exerciseRepository`/`exerciseService` (P4) are the first
+two feature repository pairs to land; the rest (`plans`, `sessions`, etc.) land one
+at a time from P5 onward, each phase extending `AppContainer` rather than replacing
+it. `SqliteExerciseRepository` is the first real consumer of `BaseSqliteRepository`
+beyond `SqliteProfileRepository`, and maintains the `exercise_fts` FTS5 index
+incrementally per single-row write (contentless-table `'delete'` special command
+plus a fresh insert - `DELETE FROM ... WHERE rowid = ?` throws on a contentless
+table). `services/kv` is intentionally not a container member (ADR-0008: MMKV holds
+boot-critical flags read before the database opens).
 
 ## Resolved product/technical decisions (section 18, D-01..D-12)
 
@@ -220,12 +252,17 @@ against real `schema.sql` via `NodeSqlExecutor` (`node:sqlite`), not mocks. Comp
 layer: React Native Testing Library for interaction-critical components (set row,
 quick-adjust chips). E2E: Maestro flows for the golden path (start workout -> log a
 set -> finish). `__tests__/database/benchmarks.perf.test.ts` is a CI
-performance-regression suite (ADR-0014); two benchmarks stay `test.skip`'d with a
-comment naming their future phase (exercise search - P4, JSON export - P9 per the
-test file's own comment - note this P9 label predates and conflicts with this
-snapshot's P9 "workout summary and history" / P14 "data export and import" naming
-from `docs/ROADMAP.md`; flagged as unresolved drift, not fixed here), not silently
-omitted.
+performance-regression suite (ADR-0014); the exercise-search benchmark
+(~900-row fixture, sub-50ms, NFR-03), previously `test.skip`'d, is implemented and
+passing as of P4. One benchmark still stays `test.skip`'d with a comment naming its
+future phase (JSON export - P9 per the test file's own comment - note this P9 label
+predates and conflicts with this snapshot's P9 "workout summary and history" / P14
+"data export and import" naming from `docs/ROADMAP.md`; flagged as unresolved drift,
+not fixed here), not silently omitted. Testing this phase also surfaced a Jest-only
+gap: `@expo/vector-icons` fails to resolve inside RNTL-rendered tests because
+`expo-asset` isn't hoisted (worked around with a manual mock,
+`__tests__/__mocks__/vectorIconsMock.tsx`; confirmed production-unaffected via
+`expo export`).
 
 ## What this snapshot deliberately omits
 

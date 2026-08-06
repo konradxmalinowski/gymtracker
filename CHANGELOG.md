@@ -99,9 +99,38 @@ stops being a scaffold placeholder.
   10.2 (P3)
 - New dependencies: `expo-image-picker`, `@expo/vector-icons`,
   `@hookform/resolvers`, `expo-dev-client` (P3)
+- `features/exercise-library/*`: library screen with instant, diacritic-folded FTS5
+  search, a multi-select filter sheet (muscle, equipment, body part, level, gym/home
+  context, favorites), favorites-first ordering, and FlashList results; exercise
+  detail screen with an image gallery, instructions, muscle/equipment tags, Polish
+  name rendering (`formatExerciseName()`), a videos section, a personal note, and a
+  per-exercise rest override; favorite toggle with haptics; custom exercise
+  create/edit (React Hook Form + Zod); delete guarded by `listReferencingPlans` (P4)
+- `ExerciseRepository`/`SqliteExerciseRepository`, maintaining the `exercise_fts`
+  FTS5 index incrementally on every single-row write, and `ExerciseService`, added to
+  `AppContainer` alongside P3's `profileRepository`/`profileService` pair (P4)
+- Nested Stack navigator for the Exercises tab (`app/(tabs)/exercises/`: list ->
+  detail -> create/edit), replacing the P3 placeholder tab (P4)
+- `assets/exercises/imageMap.ts` and `assets/exercises/index.ts`
+  (`getExerciseImageSource()`), a generated static lookup resolving catalog filenames
+  to bundled images (P4)
+- Exercise-search performance benchmark implemented in
+  `__tests__/database/benchmarks.perf.test.ts`, previously `test.skip`'d pending this
+  phase (P4)
+
+### Fixed
+
+- Exercise catalog seeding wired into the boot sequence (`app/_layout.tsx` now calls
+  `database/seed/runSeed()` after migrations, before `createContainer()`) - the
+  seeder existed since P2 but was never called until P4 (P4)
+- `database/seed/loadCatalogAsset.ts` now maps the catalog's
+  `primaryMuscles`/`secondaryMuscles` fields into `catalogSeeder.ts`'s expected
+  shape - previously every catalog exercise seeded with zero muscles (P4)
 
 ### Security
 
 - Path traversal hardening in `services/files/ExpoFileStorage.ts`, the sole low
   finding from the P3 security review (`reports/security-2026-08-05-p3.md`, 0
   critical/high/medium) (P3)
+- Routine security review found zero issues (`reports/security-2026-08-06-p4.md`)
+  (P4)
