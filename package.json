@@ -17,6 +17,7 @@
     "test:ci": "jest --ci --coverage",
     "audit:ci": "npm audit --audit-level=high",
     "build:catalog": "node scripts/build-catalog.ts",
+    "build:exercise-images": "node scripts/build-exercise-image-map.ts",
     "prepare": "husky"
   },
   "dependencies": {

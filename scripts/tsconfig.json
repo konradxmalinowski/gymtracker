@@ -12,6 +12,6 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["build-catalog.ts", "catalogSchema.ts"],
+  "include": ["build-catalog.ts", "catalogSchema.ts", "build-exercise-image-map.ts"],
   "exclude": ["node_modules"]
 }

@@ -22,5 +22,10 @@
     }
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts", "nativewind-env.d.ts"],
-  "exclude": ["node_modules", "scripts/build-catalog.ts", "scripts/catalogSchema.ts"]
+  "exclude": [
+    "node_modules",
+    "scripts/build-catalog.ts",
+    "scripts/catalogSchema.ts",
+    "scripts/build-exercise-image-map.ts"
+  ]
 }
