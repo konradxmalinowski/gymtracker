@@ -44,4 +44,31 @@ export const routes = {
     create: (): Href => '/exercises/create',
     edit: (id: string): Href => ({ pathname: '/exercises/edit/[id]', params: { id } }),
   },
+
+  /**
+   * P5: the plans feature's own stack, nested under the Plans tab
+   * (`app/(tabs)/plans/_layout.tsx`) - same restructure `exercises` above
+   * went through in P4. `library` mirrors `exercises.library`'s alias
+   * naming for the tab-root route.
+   */
+  plans: {
+    library: (): Href => '/plans',
+    detail: (planId: string): Href => ({ pathname: '/plans/[planId]', params: { planId } }),
+    day: (planId: string, dayId: string): Href => ({
+      pathname: '/plans/[planId]/day/[dayId]',
+      params: { planId, dayId },
+    }),
+  },
+
+  /**
+   * P5: the first `(modals)` route group in the app (ARCHITECTURE.md
+   * section 9's folder tree, section 10.1's route graph) - a plain `Stack`
+   * with `presentation: 'modal'`. `exercisePicker` is used today by the
+   * plan-day editor's "Add exercise" action and, per the route graph, is
+   * meant to be reused later by the active-workout screen's own
+   * "Add exercise" action (P6) - nothing about this route is plans-specific.
+   */
+  modals: {
+    exercisePicker: (): Href => '/(modals)/exercise-picker',
+  },
 } as const;
