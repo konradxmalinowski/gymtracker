@@ -93,6 +93,7 @@ export const en = {
     skipAvatarLabel: 'Skip for now',
     avatarPermissionDeniedMessage:
       'Photo library access was denied. You can still continue without a photo - add one later from Profile.',
+    avatarPickFailedMessage: "Couldn't process that photo. Try a different one.",
     continueLabel: 'Continue',
     genericErrorMessage: 'Something went wrong setting up your profile. Please try again.',
   },
