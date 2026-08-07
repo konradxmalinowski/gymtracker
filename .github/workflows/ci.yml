@@ -78,6 +78,13 @@ jobs:
       # in this project are transitive Expo tooling dependencies with no fix
       # short of downgrading the SDK, so gating on them would mean a permanently
       # red pipeline that everyone learns to ignore.
+      #
+      # Runs through `audit-ci` rather than `npm audit --audit-level=high`
+      # directly: the threshold is identical, but `audit-ci.jsonc` can allowlist
+      # named advisories that have no upstream fix yet, which bare `npm audit`
+      # cannot. The allowlist is per-advisory-ID, so a new High in any other
+      # package still fails this step. Each exception carries its justification
+      # and revisit condition in `audit-ci.jsonc`.
       - name: Dependency audit
         if: ${{ !cancelled() }}
         run: npm run audit:ci
