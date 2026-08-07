@@ -28,6 +28,8 @@ describe('createContainer', () => {
     expect(container.exerciseService).toBeDefined();
     expect(container.planRepository).toBeDefined();
     expect(container.planService).toBeDefined();
+    expect(container.sessionRepository).toBeDefined();
+    expect(container.sessionService).toBeDefined();
 
     expect(typeof container.clock.now()).toBe('number');
     expect(typeof container.idGenerator.generate()).toBe('string');
@@ -69,6 +71,29 @@ describe('createContainer', () => {
 
     const viaRepository = await container.planRepository.getPlan(created.id);
     expect(viaRepository?.name).toBe('Push Day');
+  });
+
+  it('sessionService is wired to sessionRepository - a workout started through the service is visible through the repository directly', async () => {
+    const db = createTestDatabase();
+    const container = createContainer(db);
+
+    const result = await container.sessionService.startEmpty(Date.UTC(2026, 7, 6, 18));
+
+    expect(result.outcome).toBe('started');
+    const viaRepository = await container.sessionRepository.findInProgress();
+    expect(viaRepository?.id).toBe(result.outcome === 'started' ? result.session.id : undefined);
+    expect(viaRepository?.status).toBe('in_progress');
+  });
+
+  it('sessionService reads workout.staleAfterHours through the container settings repository', async () => {
+    const db = createTestDatabase();
+    const container = createContainer(db);
+    await container.settings.set('workout.staleAfterHours', 3);
+    await container.sessionService.startEmpty(Date.UTC(2026, 7, 6, 18));
+
+    const snapshot = await container.sessionService.findInProgress();
+
+    expect(snapshot?.staleAfterHours).toBe(3);
   });
 
   it('lets a caller override any dependency (test containers use this for a frozen Clock and deterministic ids)', async () => {
