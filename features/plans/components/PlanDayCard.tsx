@@ -19,6 +19,8 @@ export interface PlanDayCardProps {
   onRename: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  /** P6: starts a workout from this day (`startFromPlanDay`) - optional so every other `PlanDayCard` consumer (there is only this one screen today) doesn't need updating in lockstep. */
+  onStart?: (() => void) | undefined;
   dragHandle?: ReactNode | undefined;
   /** Forwarded to the root `PressScale` - see `PlanCard.tsx`'s identical props for why this can't be a closed prop interface with no pass-through. */
   accessible?: boolean | undefined;
@@ -34,6 +36,7 @@ export function PlanDayCard({
   onRename,
   onDuplicate,
   onDelete,
+  onStart,
   dragHandle,
   accessible,
   accessibilityActions,
@@ -64,6 +67,18 @@ export function PlanDayCard({
         </Column>
 
         <Row gap={1} align="center">
+          {onStart ? (
+            <IconButton
+              icon={<Ionicons name="play-circle-outline" size={20} color={color.accent} />}
+              variant="ghost"
+              size="sm"
+              accessibilityLabel={t('plans.detail.startWorkoutAccessibilityLabelTemplate', {
+                name: day.name,
+              })}
+              onPress={onStart}
+              testID={testID ? `${testID}-start` : undefined}
+            />
+          ) : null}
           <IconButton
             icon={<Ionicons name="create-outline" size={18} color={color.textTertiary} />}
             variant="ghost"

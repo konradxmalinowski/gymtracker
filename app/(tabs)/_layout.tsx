@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import { View } from 'react-native';
 import { Tabs } from 'expo-router';
 
+import { ActiveWorkoutBanner } from '@/features/workout-logging/components/ActiveWorkoutBanner';
 import { t } from '@/i18n';
 import { color } from '@/theme/tokens';
 
@@ -24,46 +26,59 @@ const TAB_ICONS: Record<string, { active: IoniconName; inactive: IoniconName }> 
 
 export default function TabsLayout() {
   return (
-    <Tabs
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: color.accent,
-        tabBarInactiveTintColor: color.textTertiary,
-        tabBarStyle: {
-          backgroundColor: color.backgroundElevated,
-          borderTopColor: color.border,
-        },
-        tabBarIcon: ({ focused, color: tintColor, size }) => {
-          const icons = TAB_ICONS[route.name] ?? TAB_ICONS['index'];
-          return (
-            <Ionicons
-              name={focused ? icons!.active : icons!.inactive}
-              size={size}
-              color={tintColor}
-            />
-          );
-        },
-      })}
-    >
-      <Tabs.Screen name="index" options={{ title: t('tabs.home') }} />
-      {/* Points at the folder, not "plans/index" - `app/(tabs)/plans/` has its
-          own `_layout.tsx` (a nested Stack: list -> detail -> day) as of P5,
-          the exact same restructure `exercises` went through in P4.
-          Registering the leaf file directly here would bypass that nested
-          Stack entirely, breaking `router.push()` to any sibling route
-          within the tab. See `app/(tabs)/plans/_layout.tsx`'s file header,
-          and `app/(tabs)/exercises/_layout.tsx`'s original for the full
-          reasoning. */}
-      <Tabs.Screen name="plans" options={{ title: t('tabs.plans') }} />
-      {/* Points at the folder, not "exercises/index" - `app/(tabs)/exercises/`
-          has its own `_layout.tsx` (a nested Stack: list -> detail ->
-          create/edit). Registering the leaf file directly here would bypass
-          that nested Stack entirely, breaking `router.push()` to any sibling
-          route within the tab. See `app/(tabs)/exercises/_layout.tsx`'s file
-          header for the full reasoning. */}
-      <Tabs.Screen name="exercises" options={{ title: t('tabs.exercises') }} />
-      <Tabs.Screen name="stats/index" options={{ title: t('tabs.stats') }} />
-      <Tabs.Screen name="profile/index" options={{ title: t('tabs.profile') }} />
-    </Tabs>
+    // `flex: 1` wrapper is the one structural addition this mount point
+    // needs: `ActiveWorkoutBanner` positions itself absolutely (see its own
+    // file header for why - no `useBottomTabBarHeight()` available without a
+    // new dependency), and an absolutely positioned child anchors to its
+    // nearest parent regardless of that parent's own `position` value in
+    // RN's layout model, so this wrapper needs nothing beyond `flex: 1`.
+    <View style={{ flex: 1 }}>
+      <Tabs
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          tabBarActiveTintColor: color.accent,
+          tabBarInactiveTintColor: color.textTertiary,
+          tabBarStyle: {
+            backgroundColor: color.backgroundElevated,
+            borderTopColor: color.border,
+          },
+          tabBarIcon: ({ focused, color: tintColor, size }) => {
+            const icons = TAB_ICONS[route.name] ?? TAB_ICONS['index'];
+            return (
+              <Ionicons
+                name={focused ? icons!.active : icons!.inactive}
+                size={size}
+                color={tintColor}
+              />
+            );
+          },
+        })}
+      >
+        <Tabs.Screen name="index" options={{ title: t('tabs.home') }} />
+        {/* Points at the folder, not "plans/index" - `app/(tabs)/plans/` has its
+            own `_layout.tsx` (a nested Stack: list -> detail -> day) as of P5,
+            the exact same restructure `exercises` went through in P4.
+            Registering the leaf file directly here would bypass that nested
+            Stack entirely, breaking `router.push()` to any sibling route
+            within the tab. See `app/(tabs)/plans/_layout.tsx`'s file header,
+            and `app/(tabs)/exercises/_layout.tsx`'s original for the full
+            reasoning. */}
+        <Tabs.Screen name="plans" options={{ title: t('tabs.plans') }} />
+        {/* Points at the folder, not "exercises/index" - `app/(tabs)/exercises/`
+            has its own `_layout.tsx` (a nested Stack: list -> detail ->
+            create/edit). Registering the leaf file directly here would bypass
+            that nested Stack entirely, breaking `router.push()` to any sibling
+            route within the tab. See `app/(tabs)/exercises/_layout.tsx`'s file
+            header for the full reasoning. */}
+        <Tabs.Screen name="exercises" options={{ title: t('tabs.exercises') }} />
+        <Tabs.Screen name="stats/index" options={{ title: t('tabs.stats') }} />
+        <Tabs.Screen name="profile/index" options={{ title: t('tabs.profile') }} />
+      </Tabs>
+      {/* P6: mounted above the tab bar (ADR-0007), visible whenever a
+          workout is minimized. See `ActiveWorkoutBanner.tsx`'s own header
+          for why its positioning is absolute rather than a `tabBar`-prop
+          wrap around the real tab bar. */}
+      <ActiveWorkoutBanner />
+    </View>
   );
 }
