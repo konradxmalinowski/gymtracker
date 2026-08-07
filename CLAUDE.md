@@ -7,13 +7,13 @@ reference, not a replacement. Section numbers below refer to `docs/ARCHITECTURE.
 ## Status
 
 P0 (project foundation), P1 (design system and UI primitives), P2 (persistence
-foundation), P3 (onboarding, profile and core settings), P4 (exercise library), and
-P5 (workout plans) are complete. The `onboarding`, `profile`, `exercise-library`, and
-`plans` features now have real implementations (screens, hooks, services,
-repository); the remaining seven features (`workout-logging`, `rest-timer`,
-`records`, `statistics`, `body-metrics`, `calendar`, `data-transfer`) are still empty
-skeleton directories (components/hooks/screens/services/domain/repository/types/
-index.ts subfolders, no implementation) awaiting their own phase.
+foundation), P3 (onboarding, profile and core settings), P4 (exercise library), P5
+(workout plans), and P6 (workout logging) are complete. The `onboarding`, `profile`,
+`exercise-library`, `plans`, and `workout-logging` features now have real
+implementations (screens, hooks, services, repository); the remaining six features
+(`rest-timer`, `records`, `statistics`, `body-metrics`, `calendar`, `data-transfer`)
+are still empty skeleton directories (components/hooks/screens/services/domain/
+repository/types/index.ts subfolders, no implementation) awaiting their own phase.
 
 The app now boots for real: `app/_layout.tsx` opens the database, runs migrations,
 seeds the exercise catalog (`database/seed/runSeed()`, idempotent - a P2 gap fixed in
@@ -188,6 +188,108 @@ multi-exercise-add batch); an accessibility review
 (`reports/accessibility-2026-08-06-p5.md`) caught the `DraggableList` fix's
 first-pass gap described above and blocked on it - zero blocking findings remain
 after the second-pass fix. No new npm dependency was added this phase.
+
+The active workout screen (`features/workout-logging/screens/ActiveWorkoutScreen.tsx`)
+lives at `app/workout/active.tsx`, a root-level route outside `(tabs)` per ADR-0007:
+"the workout is a mode the user entered, not a page they browsed to." Its own
+`app/workout/_layout.tsx` presents it as `fullScreenModal` with `gestureEnabled: false`
+and a slide-from-bottom animation, so neither platform's standard back gesture can
+dismiss it by accident; the Android hardware back button is intercepted inside
+`ActiveWorkoutScreen` itself (`BackHandler`, not the layout file, since the exit choice
+it triggers needs `sessionService`/the store) and opens `WorkoutExitActionSheet`
+(minimize/finish/discard) instead of popping the route. Minimizing (`router.back()`)
+returns to the tab bar and leaves `ActiveWorkoutBanner` docked above it - a small,
+persistent elapsed-time banner (no rest countdown; that half is P7) mounted once at
+`app/(tabs)/_layout.tsx`, reading `activeWorkoutStore` through a selector, that
+re-opens `workout/active` on tap. `routes.workout.active()` is the one new
+`navigation/routes.ts` entry; `workout/summary/[sessionId]` stays absent, deliberately,
+as P9 scope.
+
+`features/workout-logging/repository/{WorkoutSessionRepository.ts,
+SqliteWorkoutSessionRepository.ts}` is the app's second aggregate-root feature
+repository, following the same pattern `PlanRepository` established in P5: a session
+plus its `session_exercise` rows, its `workout_set` rows and its `active_session_state`
+row is one repository, and (per ADR-0005) every mutating method is its own committed
+transaction rather than a batched save - `finish()` is an `UPDATE`, not a migration
+between a draft and a real storage form. Each method takes an optional trailing `tx` so
+a caller composing a larger transaction can join it, same composition style as
+`PlanRepository`. Section 8.3 lists three further methods (`listHistory`, `getSession`,
+`updateHistoricalSession`) that are P9's scope and are deliberately absent rather than
+stubbed; `restoreExercise`/`restoreSet` are present beyond the literal list, the same
+kind of undo-toast-counterpart addition P5's `PlanRepository` made with
+`restoreDay`/`restoreDayExercise`. `setExerciseNote`/`setSessionNotes` (FR-16) were not
+part of the repository's first draft - a review pass surfaced that exercise/workout
+notes had no write path at all, and both methods (plus `WorkoutSessionService`'s
+Zod-validated wrappers and their own test coverage) were added before this phase's
+commit, not after it, the same "caught and closed within the phase" pattern P4's
+write-up used for its two P2 gaps. `services/container.ts` gained
+`sessionRepository`/`sessionService`, the fourth feature repository pair after P3's
+profile, P4's exercise-library and P5's plans ones.
+
+FR-19's crash recovery is a boot-gate extension to `app/_layout.tsx`, built this phase
+as the mechanism only - the Home dashboard's polished "Resume" banner card remains P10
+scope (`docs/ROADMAP.md`'s P10 entry), not built here. Once the profile gate resolves,
+`useSessionResumeGate` reads the synchronous MMKV `session.active` flag (written by
+`useStartWorkout`/`useFinishDiscardWorkout` at the point a start/finish/discard
+mutation actually commits, per ADR-0008's "kv writes happen at UI-adjacent call sites,
+not inside services" rule) and, if set, calls `sessionService.findInProgress()`: a
+fresh session redirects straight into `workout/active` via `<Redirect>`; a stale one
+(`isStale`, past `workout.staleAfterHours`) shows a finish-or-discard `ConfirmDialog`
+instead of silently resuming a workout the user may have forgotten overnight. If the
+flag and the database disagree, the database wins (ADR-0005 mechanism 6) and the flag
+is corrected in place rather than trusted again next boot. This check does not hold the
+splash screen the way the profile query does - only the synchronous flag read has to
+happen before the splash lifts, not the subsequent async lookup.
+
+Set types are the 6-value enum from ADR-0006 (`warmup`, `normal`, `drop`, `failure`,
+`assisted`, `partial` - `superset` is deliberately not one of them), with a single
+normative semantics table (`features/workout-logging/domain/setSemantics.ts`) that
+`SetVolume`/`SessionTotals` both read and a generated-matrix test keeps in sync with
+the parallel `v_working_set` SQL view, per ADR-0006's "not optional" instruction.
+Supersets are the relation `plans` already established (`superset_group` on
+`session_exercise`, carried over verbatim from the plan day at `startFromPlanDay`
+time) - the repository and `WorkoutSessionService.setSupersetGroup` (>=2 ids to
+form/update a group, same minimum `PlanService` enforces) fully support editing it,
+but no in-workout UI calls that hook this phase (`SupersetBracket` renders the
+grouping read-only); a full multi-select regroup flow was scoped out, mirroring how P6
+scoped exercise reordering to move-up/move-down rather than a drag gesture. Drop sets
+chain via `parent_set_id` on `workout_set`, sharing the parent's `setIndex` rather than
+incrementing it - one working set with drops is one set, not several.
+
+`stores/activeWorkoutStore.ts` is the one Zustand store ADR-0008 names as a deliberate
+exception to "Zustand is ephemeral UI state only": it mirrors the persisted
+`ActiveSessionAggregate`, governed by five rules enforced by how this file and
+`features/workout-logging/hooks/*` are written (not by the type system): hydrate from
+SQLite on mount and only on mount; every edit updates the store synchronously and
+dispatches a repository write, paired in the mutation hooks; a failed write reconciles
+the store from the database, never the reverse; clear on finish/discard (and
+defensively on a disruptive unmount, though the routine minimize flow deliberately
+does not clear it, since `ActiveWorkoutBanner` needs it still populated); and consume
+only through selectors, never the whole store with no selector.
+
+Deliberately deferred, and why: the rest timer (P7) - `RestTimerBar`'s slot is omitted
+from `ActiveWorkoutScreen` entirely rather than a structurally-present-but-inert
+placeholder, since nothing in P6 ever populates a timer deadline for it to react to.
+Progression suggestions and PR evaluation (P8) - `CompletedSetResult.newPRs` is typed
+`readonly never[]` and always `[]`; `PersonalRecordRepository` has a table and an index
+from P2 but no implementation yet. The workout summary screen (P9) - `finish()`
+navigates to `routes.tabs.home()` via `router.replace` instead, matching how
+`discard()` already exits. Home also gained a minimal "Quick Start" button
+(`useStartWorkout().startEmpty()`, with a blocked-session `ConfirmDialog` offering
+Resume when one is already in progress) and `PlanDetailScreen`/`PlanDayCard` gained a
+per-day "Start workout" action (`startFromPlanDay`, same blocked-session dialog) - both
+minimal, additive entry points into the new screen, not the fuller P10 dashboard.
+
+P6 verification: typecheck, lint, and the full Jest suite (86 suites, 782 tests
+passing, 1 pre-existing skip) are clean; `npx expo export --platform ios` was used
+again as the build-verification proxy (no simulator/emulator available in this
+environment, same constraint as P4/P5); a security review
+(`reports/security-2026-08-07-p6.md`) found zero critical/high/medium findings and two
+low-severity, non-blocking notes (a `setSupersetGroup` update missing a
+`deleted_at IS NULL` filter, mirroring an already-accepted P5 finding on
+`PlanRepository`'s equivalent method; and `saveActiveState` lacking a Zod schema at the
+service layer, not exploitable since every field it writes is either an id or a bound
+numeric column with no free text). No new npm dependency was added this phase.
 
 ## Product
 

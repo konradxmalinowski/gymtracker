@@ -26,6 +26,9 @@ import type { ExerciseRepository } from '@/features/exercise-library/repository/
 import { PlanService } from '@/features/plans';
 import { SqlitePlanRepository } from '@/features/plans/repository/SqlitePlanRepository';
 import type { PlanRepository } from '@/features/plans/repository/PlanRepository';
+import { WorkoutSessionService } from '@/features/workout-logging';
+import { SqliteWorkoutSessionRepository } from '@/features/workout-logging/repository/SqliteWorkoutSessionRepository';
+import type { WorkoutSessionRepository } from '@/features/workout-logging/repository/WorkoutSessionRepository';
 import type { DatabaseContext } from '@/repositories/contracts/database';
 import { SqliteSettingsRepository, type SettingsRepository } from '@/repositories/settings';
 import { SystemClock, type Clock } from '@/services/clock';
@@ -52,6 +55,10 @@ export interface AppContainer {
   planRepository: PlanRepository;
   /** ARCHITECTURE.md section 3.1 rule 3: the only door into `planRepository` for hooks/screens. */
   planService: PlanService;
+  /** Feature repository, P6 (workout-logging) - the crash-safe active-workout write path (ADR-0005). Not re-exported for presentation use - go through `sessionService`. */
+  sessionRepository: WorkoutSessionRepository;
+  /** ARCHITECTURE.md section 3.1 rule 3: the only door into `sessionRepository` for hooks/screens. */
+  sessionService: WorkoutSessionService;
 }
 
 export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer>): AppContainer {
@@ -71,6 +78,11 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
   const planRepository =
     deps?.planRepository ?? new SqlitePlanRepository({ db, clock, idGenerator });
   const planService = deps?.planService ?? new PlanService({ repository: planRepository });
+  const sessionRepository =
+    deps?.sessionRepository ?? new SqliteWorkoutSessionRepository({ db, clock, idGenerator });
+  const sessionService =
+    deps?.sessionService ??
+    new WorkoutSessionService({ repository: sessionRepository, settings, clock });
 
   return {
     db,
@@ -85,6 +97,8 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
     exerciseService,
     planRepository,
     planService,
+    sessionRepository,
+    sessionService,
   };
 }
 

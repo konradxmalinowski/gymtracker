@@ -71,4 +71,14 @@ export const routes = {
   modals: {
     exercisePicker: (): Href => '/(modals)/exercise-picker',
   },
+
+  /**
+   * P6: the active-workout route, a root-level `Stack` outside `(tabs)`
+   * (ADR-0007) - `fullScreenModal`, gestures disabled, Android back
+   * intercepted. A single entry, matching the route graph's `workout/active`
+   * node; `workout/summary/[sessionId]` is P9 and deliberately absent.
+   */
+  workout: {
+    active: (): Href => '/workout/active',
+  },
 } as const;
