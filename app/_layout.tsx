@@ -10,11 +10,12 @@ import { Redirect, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 
 import { Screen } from '@/components/layout';
-import { ErrorState, SheetHost, ToastHost } from '@/components/feedback';
+import { ConfirmDialog, ErrorState, SheetHost, ToastHost } from '@/components/feedback';
 import { Text } from '@/components/ui';
 import { ExpoSqlExecutor, openDatabase } from '@/database/client';
 import { runMigrations } from '@/database/migrations';
 import { loadCatalogAsset, runSeed } from '@/database/seed';
+import type { ActiveSessionSnapshot } from '@/features/workout-logging';
 import { routes } from '@/navigation/routes';
 import {
   ContainerProvider,
@@ -25,6 +26,7 @@ import {
 import { kv } from '@/services/kv';
 import { createLogger } from '@/services/logging';
 import { t } from '@/i18n';
+import { useToastStore } from '@/stores/toastStore';
 import { color, space } from '@/theme/tokens';
 
 // Keep the native splash screen mounted until the root gate below decides
@@ -148,19 +150,95 @@ export default function RootLayout() {
 }
 
 /**
+ * P6 / ADR-0005 mechanism 6-7: after the profile gate resolves, checks the
+ * `session.active` MMKV flag and reads `sessionService.findInProgress()` -
+ * a fresh in-progress session redirects straight into `workout/active`, a
+ * stale one (`isStale`, ADR-0005 mechanism 7) shows a finish-or-discard
+ * prompt rather than silently resuming, and a flag that turns out to be
+ * stale itself (`findInProgress()` returns `null` despite the flag being
+ * true) is corrected in place - "the database wins" per the ADR, not the
+ * cached flag.
+ *
+ * This check does not hold the splash screen the way the profile query does
+ * (`useEffect` below still hides it once `isLoading` clears): the MMKV flag
+ * read itself is synchronous (ADR-0007 rule 8 only requires the *flag* be
+ * read before the splash lifts, not the subsequent async
+ * `findInProgress()` resolution), and blocking cold start on a second SQLite
+ * round trip risks NFR-02's budget for a case that is, by definition, not
+ * the common path. The brief `<Redirect>` conditionally rendered alongside
+ * `<Stack>` mirrors the same pattern this file already uses for the
+ * onboarding gate below it.
+ */
+type SessionGateState =
+  | { status: 'checking' }
+  | { status: 'none' }
+  | { status: 'resume' }
+  | { status: 'stale'; snapshot: ActiveSessionSnapshot };
+
+function useSessionResumeGate(ready: boolean): SessionGateState {
+  const container = useContainer();
+  const [state, setState] = useState<SessionGateState>({ status: 'checking' });
+
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+    let cancelled = false;
+
+    void (async () => {
+      if (!kv.get('session.active')) {
+        if (!cancelled) {
+          setState({ status: 'none' });
+        }
+        return;
+      }
+
+      const snapshot = await container.sessionService.findInProgress();
+      if (cancelled) {
+        return;
+      }
+
+      if (!snapshot) {
+        // The flag disagreed with the database - the database wins
+        // (ADR-0005 mechanism 6), so the flag is corrected here rather than
+        // trusted on the next boot too.
+        kv.set('session.active', false);
+        kv.delete('session.activeId');
+        setState({ status: 'none' });
+        return;
+      }
+
+      setState(snapshot.isStale ? { status: 'stale', snapshot } : { status: 'resume' });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, container]);
+
+  return state;
+}
+
+/**
  * Holds the native splash screen for the last two gate conditions (profile
  * query resolved), then routes to onboarding or the tab bar - the "no
  * profile -> onboarding, profile exists -> tabs" branch of ARCHITECTURE.md
  * section 10.1's route graph. Mirrors `app/dev/db-health.tsx` /
  * `app/dev/gallery.tsx`'s existing "early-return `<Redirect>`" pattern
- * rather than introducing a new gating mechanism.
+ * rather than introducing a new gating mechanism. Extended in P6 with the
+ * crash-recovery session gate above - only checked once a profile exists,
+ * since a fresh install with no profile always goes to onboarding first
+ * regardless of any leftover session state.
  */
-function RootNavigationGate() {
+export function RootNavigationGate() {
   const container = useContainer();
   const { data: profile, isLoading } = useQuery({
     queryKey: ['profile'],
     queryFn: () => container.profileService.getProfile(),
   });
+
+  const sessionGate = useSessionResumeGate(!isLoading && profile !== null && profile !== undefined);
+  const [staleGateResolved, setStaleGateResolved] = useState(false);
 
   useEffect(() => {
     if (!isLoading) {
@@ -172,9 +250,52 @@ function RootNavigationGate() {
     return null;
   }
 
+  async function resolveStale(action: 'finish' | 'discard', sessionId: string) {
+    // Resolved immediately so the dialog dismisses on tap rather than
+    // waiting on the write - this is a boot-time prompt, not the hot
+    // set-completion path, but the same "the UI doesn't wait on the
+    // database" principle still applies to not leaving a dialog open. A
+    // fresh cold boot re-evaluates the whole gate from scratch regardless of
+    // this component's local state, so dismissing early here is safe even
+    // though the write below might still fail.
+    setStaleGateResolved(true);
+    try {
+      if (action === 'finish') {
+        await container.sessionService.finish(sessionId);
+      } else {
+        await container.sessionService.discard(sessionId);
+      }
+      // Only clear the flags once the write has actually committed -
+      // matching `useFinishDiscardWorkout.clearAndExit()`'s pattern
+      // (clear-on-success only, never in a `finally`). ADR-0005 mechanism 6:
+      // "when the flag and the database disagree, the database wins, and
+      // the flag is corrected" - clearing unconditionally on a failed write
+      // would do the opposite, silently orphaning an `in_progress` row that
+      // no later boot would ever check for again.
+      kv.set('session.active', false);
+      kv.delete('session.activeId');
+    } catch {
+      // Boot-time best-effort: a failure here must not trap the user behind
+      // a dialog they cannot get past, so the dialog still dismisses (see
+      // `setStaleGateResolved` above). The MMKV flags are deliberately left
+      // untouched so the next cold boot re-triggers this same stale-session
+      // gate instead of silently losing track of the row.
+      useToastStore.getState().show({
+        message: t(
+          action === 'finish'
+            ? 'workoutLogging.active.finishErrorMessage'
+            : 'workoutLogging.active.discardErrorMessage',
+        ),
+      });
+    }
+  }
+
+  const showStaleDialog = sessionGate.status === 'stale' && !staleGateResolved;
+
   return (
     <>
       {profile === null ? <Redirect href={routes.onboarding()} /> : null}
+      {sessionGate.status === 'resume' ? <Redirect href={routes.workout.active()} /> : null}
       <Stack
         screenOptions={{
           headerShown: false,
@@ -186,6 +307,20 @@ function RootNavigationGate() {
           stores/sheetStore.ts rather than mounting its own. */}
       <ToastHost />
       <SheetHost />
+      {sessionGate.status === 'stale' ? (
+        <ConfirmDialog
+          visible={showStaleDialog}
+          title={t('workoutLogging.stale.title')}
+          message={t('workoutLogging.stale.messageTemplate', {
+            hours: sessionGate.snapshot.staleAfterHours,
+          })}
+          confirmLabel={t('workoutLogging.stale.finishButtonLabel')}
+          cancelLabel={t('workoutLogging.stale.discardButtonLabel')}
+          onConfirm={() => void resolveStale('finish', sessionGate.snapshot.session.id)}
+          onCancel={() => void resolveStale('discard', sessionGate.snapshot.session.id)}
+          testID="stale-session-dialog"
+        />
+      ) : null}
     </>
   );
 }
