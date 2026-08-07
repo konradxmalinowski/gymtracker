@@ -1,5 +1,5 @@
 ---
-snapshot_commit: f62404cfda4a230e833b54f0b82e4c0fcdb2c213
+snapshot_commit: 141d884cfe557e750fb03ee2e1f0448722ff521b
 generated_from: CLAUDE.md, docs/ARCHITECTURE.md, docs/ROADMAP.md, docs/adr/*, docs/PRODUCT-BRIEF.md
 ---
 
@@ -10,26 +10,34 @@ Condensed synthesis for orchestration use. Full detail lives in docs/ARCHITECTUR
 needs verification, this file is a pointer, not a replacement.
 
 Note on `snapshot_commit`: this points at the working-tree HEAD at the time this file
-was regenerated (the tip of `feat/p5-workout-plans` before that branch's own doc
-changes were committed). Re-snapshot after the commit that includes this file lands,
-if the exact hash matters for a later diff.
+was regenerated (the tip of `feat/p6-workout-logging` before that branch's own P6
+commits, including this file's own update, land). It is therefore identical to the
+commit `main` was already at before P6 started - re-snapshot after the commit(s) that
+include this file's P6 update actually land, if the exact hash matters for a later
+diff. Same caveat this file already carried for `feat/p5-workout-plans` before its
+commit landed.
 
 ## Status
 
 P0 (project foundation), P1 (design system/UI primitives), P2 (persistence
-foundation), P3 (onboarding, profile and core settings), P4 (exercise library), and
-P5 (workout plans) are complete and committed or ready to commit. `onboarding`,
-`profile`, `exercise-library`, and `plans` are the first four features with real
-implementations; the other seven (`workout-logging`, `rest-timer`, `records`,
-`statistics`, `body-metrics`, `calendar`, `data-transfer`) remain empty skeletons
-awaiting their phase. The app boots for real as of P3, and as of P4 also seeds the
-exercise catalog on every boot: `app/_layout.tsx` opens the database, runs
+foundation), P3 (onboarding, profile and core settings), P4 (exercise library), P5
+(workout plans), and P6 (workout logging) are complete and committed or ready to
+commit. `onboarding`, `profile`, `exercise-library`, `plans`, and `workout-logging`
+are the first five features with real implementations; the other six (`rest-timer`,
+`records`, `statistics`, `body-metrics`, `calendar`, `data-transfer`) remain empty
+skeletons awaiting their phase. The app boots for real as of P3, and as of P4 also
+seeds the exercise catalog on every boot: `app/_layout.tsx` opens the database, runs
 migrations, runs `database/seed/runSeed()` (idempotent), builds the `AppContainer`,
 holds the splash screen until the profile query resolves, then gates to
-`/onboarding` or a 5-tab layout (Home, Plans, Exercises, Stats, Profile). Stats is
-the only tab still rendering a real "not built yet" empty state; Exercises (P4) and
-Plans (P5) are both real nested Stack navigators (list -> detail -> create/edit, and
-list -> detail -> day editor, respectively).
+`/onboarding` or a 5-tab layout (Home, Plans, Exercises, Stats, Profile) - and, as of
+P6, also checks the MMKV `session.active` flag once a profile exists, redirecting
+straight into `workout/active` for a fresh in-progress session or showing a
+finish-or-discard dialog for a stale one (ADR-0005). Stats is the only tab still
+rendering a real "not built yet" empty state; Exercises (P4) and Plans (P5) are both
+real nested Stack navigators (list -> detail -> create/edit, and list -> detail ->
+day editor, respectively); `workout-logging` (P6) is not a tab at all but a
+root-level `fullScreenModal` route (`app/workout/active.tsx`) outside `(tabs)`, per
+ADR-0007.
 
 Exercise library (P4): instant, diacritic-folded FTS5 search ("lezac" matches
 "leżąc"), a multi-select filter sheet (muscle/equipment/body part/level/gym-home
@@ -78,6 +86,32 @@ typecheck/lint/Jest (70 suites, 616 tests, 1 pre-existing skip) clean, `expo exp
 bar one low/informational note (`reports/security-2026-08-06-p5.md`), accessibility
 review (`reports/accessibility-2026-08-06-p5.md`) blocked on the DraggableList
 first-pass gap and cleared after the second-pass fix. No new npm dependency.
+
+Workout logging (P6): `WorkoutSessionRepository`/`SqliteWorkoutSessionRepository` is
+the app's second aggregate-root repository (session + exercises + sets + active
+state, one committed transaction per mutation, ADR-0005), following the pattern P5's
+`PlanRepository` established; `setExerciseNote`/`setSessionNotes` (FR-16) were added
+during a review pass, before commit, after the first draft shipped with no write path
+for either note. `ActiveWorkoutScreen` (`app/workout/active.tsx`) is a root-level
+`fullScreenModal` outside `(tabs)` (ADR-0007) with gestures disabled and Android back
+intercepted into a minimize/finish/discard sheet; minimizing docks a persistent
+`ActiveWorkoutBanner` above the tab bar. Crash recovery (FR-19) is a boot-gate
+extension in `app/_layout.tsx`: an MMKV `session.active` flag checked once a profile
+exists, redirecting into a fresh in-progress session or prompting finish-or-discard on
+a stale one - the mechanism only, not the polished Home "Resume" card, which stays P10
+scope. Set types are ADR-0006's 6-value enum; supersets carry over from the plan day
+as a read-only relation this phase (the repository/service fully support editing one,
+but no in-workout UI calls it); drop sets chain via `parent_set_id`. Deferred:
+rest timer (P7, `RestTimerBar` omitted, not stubbed), PR evaluation (P8,
+`CompletedSetResult.newPRs` always `[]`), and the summary screen (P9 - `finish()`
+navigates to Home instead). `stores/activeWorkoutStore.ts` is ADR-0008's one named
+exception to "Zustand is ephemeral only," mirroring the persisted session under five
+governing rules (hydrate on mount only, pair every edit with a dispatched write,
+reconcile from the database on failure, clear on finish/discard, consume only via
+selectors). Verification: typecheck/lint/Jest (86 suites, 782 tests, 1 pre-existing
+skip) clean, `expo export --platform ios` used again as the build-verification proxy,
+security review clean bar two low, non-blocking notes
+(`reports/security-2026-08-07-p6.md`). No new npm dependency.
 
 ## Product
 
@@ -132,8 +166,9 @@ feature: `onboarding`, `profile`, `exercise-library`, `plans`, `workout-logging`
 `rest-timer`, `records`, `statistics`, `body-metrics`, `calendar`, `data-transfer` -
 each with components/hooks/screens/services/domain/repository/types/index.ts;
 `onboarding` and `profile` are populated as of P3, `exercise-library` as of P4,
-`plans` as of P5 (also the app's first aggregate-root feature repository - see
-below), the rest are still empty), `hooks/`, `navigation/` (`routes.ts` - typed route helpers per
+`plans` as of P5 (the app's first aggregate-root feature repository - see below),
+`workout-logging` as of P6 (its second, see below), the rest are still empty),
+`hooks/`, `navigation/` (`routes.ts` - typed route helpers per
 section 10.2, added P3), `repositories/` (shared infra: `contracts/`, `base/`,
 `mapping/`, `query/`, plus the cross-cutting `settings/` sibling), `services/`
 (`container.ts` composition root, `files/`,
@@ -202,18 +237,20 @@ exist yet (ADR-0004).
 
 `AppContainer`/`createContainer`/`ContainerProvider`/`useContainer`. Deliberately
 smaller than ARCHITECTURE.md section 8.4's full shape - `profileRepository`/
-`profileService` (P3), `exerciseRepository`/`exerciseService` (P4), and
-`planRepository`/`planService` (P5) are the first three feature repository pairs to
-land; the rest (`sessions`, etc.) land one at a time from P6 onward, each phase
-extending `AppContainer` rather than replacing it. `SqliteExerciseRepository` is the
-first real consumer of `BaseSqliteRepository` beyond `SqliteProfileRepository`, and
-maintains the `exercise_fts` FTS5 index incrementally per single-row write
-(contentless-table `'delete'` special command plus a fresh insert -
-`DELETE FROM ... WHERE rowid = ?` throws on a contentless table).
-`SqlitePlanRepository` (P5) is the first aggregate-root repository - a plan plus its
-days plus its day-exercises commits as one transaction, joining a caller-supplied
-`tx` when given. `services/kv` is intentionally not a container member (ADR-0008: MMKV holds
-boot-critical flags read before the database opens).
+`profileService` (P3), `exerciseRepository`/`exerciseService` (P4),
+`planRepository`/`planService` (P5), and `sessionRepository`/`sessionService` (P6)
+are the first four feature repository pairs to land; the rest land one at a time
+from P7 onward, each phase extending `AppContainer` rather than replacing it.
+`SqliteExerciseRepository` is the first real consumer of `BaseSqliteRepository`
+beyond `SqliteProfileRepository`, and maintains the `exercise_fts` FTS5 index
+incrementally per single-row write (contentless-table `'delete'` special command
+plus a fresh insert - `DELETE FROM ... WHERE rowid = ?` throws on a contentless
+table). `SqlitePlanRepository` (P5) is the first aggregate-root repository - a plan
+plus its days plus its day-exercises commits as one transaction, joining a
+caller-supplied `tx` when given; `SqliteWorkoutSessionRepository` (P6) is the
+second, same pattern, one session plus its exercises, sets and active-session-state
+row per transaction. `services/kv` is intentionally not a container member
+(ADR-0008: MMKV holds boot-critical flags read before the database opens).
 
 ## Resolved product/technical decisions (section 18, D-01..D-12)
 

@@ -134,6 +134,35 @@ stops being a scaffold placeholder.
 - `planRepository`/`planService` added to `AppContainer`, alongside P3's
   `profileRepository`/`profileService` and P4's `exerciseRepository`/
   `exerciseService` pairs (P5)
+- `features/workout-logging/*`: the active workout screen
+  (`ActiveWorkoutScreen`, `app/workout/active.tsx`), a root-level
+  `fullScreenModal` route outside `(tabs)` per ADR-0007, with gestures
+  disabled and Android hardware back intercepted into a minimize/finish/
+  discard action sheet; a persistent `ActiveWorkoutBanner` docked above the
+  tab bar while minimized (`app/(tabs)/_layout.tsx`) (P6)
+- `WorkoutSessionRepository`/`SqliteWorkoutSessionRepository`, the app's
+  second aggregate-root feature repository (session + exercises + sets +
+  active state, one committed transaction per mutation, ADR-0005), following
+  `PlanRepository`'s established pattern, and a Zod-validated
+  `WorkoutSessionService`; `sessionRepository`/`sessionService` added to
+  `AppContainer` (P6)
+- Crash recovery (FR-19): a boot-gate extension in `app/_layout.tsx` reading
+  the MMKV `session.active` flag once a profile exists, redirecting straight
+  into `workout/active` for a fresh in-progress session or showing a
+  finish-or-discard dialog for a stale one (ADR-0005); the polished Home
+  "Resume" banner card remains P10 scope (P6)
+- Set-type semantics (6 values per ADR-0006), superset grouping carried over
+  read-only from the plan day, and drop sets chained via `parent_set_id` (P6)
+- Minimal workout entry points ahead of the P10 home dashboard: a "Quick
+  Start" button on Home (`useStartWorkout().startEmpty()`) and a per-day
+  "Start workout" action on `PlanDetailScreen`/`PlanDayCard`
+  (`startFromPlanDay`), both with a blocked-session dialog offering Resume
+  when a workout is already in progress (P6)
+- `stores/activeWorkoutStore.ts`, ADR-0008's one named exception to
+  "Zustand is ephemeral UI state only" - mirrors the persisted active
+  session under five governing rules (mount-only hydration, paired
+  synchronous update plus dispatched write, database-wins reconciliation on
+  write failure, clear on finish/discard, selector-only consumption) (P6)
 
 ### Fixed
 
@@ -148,6 +177,10 @@ stops being a scaffold placeholder.
   `accessibilityActions`, across two rounds after a follow-up review found the
   first pass's fix didn't reach a native accessibility node through the real row
   components - see `CLAUDE.md`'s "Known gaps" for the full detail (P5)
+- `WorkoutSessionRepository`'s first draft shipped with no write path for
+  exercise or workout notes (FR-16); surfaced during review and closed
+  before commit with `setExerciseNote`/`setSessionNotes` plus their
+  `WorkoutSessionService` validation and test coverage (P6)
 
 ### Security
 
@@ -159,3 +192,9 @@ stops being a scaffold placeholder.
 - Routine security review found zero critical/high/medium issues, one
   low/informational note on a non-atomic multi-exercise-add batch
   (`reports/security-2026-08-06-p5.md`) (P5)
+- Routine security review found zero critical/high/medium issues, two low
+  notes (a `setSupersetGroup` update missing a `deleted_at IS NULL` filter,
+  mirroring an already-accepted P5 finding; `saveActiveState` lacking a Zod
+  schema at the service layer, not exploitable since every field it writes
+  is an id or a bound numeric column) (`reports/security-2026-08-07-p6.md`)
+  (P6)
