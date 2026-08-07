@@ -1,0 +1,40 @@
+{
+  "$schema": "https://github.com/IBM/audit-ci/raw/main/docs/schema.json",
+
+  // Replaces the bare `npm audit --audit-level=high` that `audit:ci` used to run.
+  // Same effective gate - fail on High and Critical, ignore Low and Moderate -
+  // but with the ability to allowlist individual advisories that have no upstream
+  // fix, instead of the all-or-nothing choice between a permanently red pipeline
+  // and lowering the threshold for everything.
+  "high": true,
+
+  // The default ("important") dumps the entire npm audit JSON on every run,
+  // including the allowlisted findings - ~200 lines of noise on a green build.
+  // "summary" still prints the failing advisory IDs, their full dependency
+  // paths, and their advisory URLs when the gate actually trips, which is all
+  // that is needed to act on a failure.
+  "report-type": "summary",
+
+  // Each entry suppresses exactly one GitHub advisory ID. It is not a severity
+  // waiver: any *other* High or Critical advisory, in any package, still fails
+  // the build. Entries here are expected to be temporary - see the revisit note
+  // on each one.
+  "allowlist": [
+    // image-size: ICNS parser infinite-loop DoS (CWE-835, CVSS 7.5).
+    // Build-tooling only - image-size reaches us solely through Metro (metro ->
+    // metro-config / metro-transform-worker -> @expo/metro -> expo, and
+    // metro -> @react-native/community-cli-plugin -> react-native), which runs
+    // on the build machine and is never part of the shipped bundle. No patched
+    // version exists as of 2026-08-07: the advisory lists "Patched versions:
+    // None" and affects <=2.0.2, which is also the latest published release.
+    // Revisit when image-size ships a fix; audit-ci prints a "not found" notice
+    // for a stale entry, which is the signal to delete this line.
+    "GHSA-w3rx-r6r6-pgpr",
+
+    // image-size: JXL and HEIF parser infinite-loop DoS (CWE-835, CVSS 7.5).
+    // Same package, same dependency path, same reachability argument and same
+    // "Patched versions: None" status as GHSA-w3rx-r6r6-pgpr above. Both clear
+    // together when image-size publishes a patched release.
+    "GHSA-5p2g-fcmc-qvqq",
+  ],
+}
