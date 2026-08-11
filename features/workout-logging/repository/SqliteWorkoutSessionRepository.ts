@@ -12,6 +12,7 @@ import {
   type ExerciseListItem,
   type ExerciseTrackingType,
 } from '@/features/exercise-library';
+import { resolveRestSeconds } from '@/features/rest-timer';
 import { computeSessionTotals } from '../domain/SessionTotals';
 import type { SetType } from '../domain/setSemantics';
 import {
@@ -286,6 +287,7 @@ export class SqliteWorkoutSessionRepository
   async startFromPlanDay(
     planDayId: EntityId,
     startedAt: number,
+    globalDefaultRestSeconds: number,
     tx?: SqlExecutor,
   ): Promise<ActiveSessionAggregate> {
     const runner = async (t: SqlExecutor): Promise<ActiveSessionAggregate> => {
@@ -328,9 +330,10 @@ export class SqliteWorkoutSessionRepository
         name_en: string;
         name_pl: string | null;
         display_name_override: string | null;
+        default_rest_seconds: number | null;
       }>(
         `SELECT pde.exercise_id, pde.sort_order, pde.superset_group, pde.rest_seconds, pde.note,
-                e.name_en, e.name_pl, ud.display_name_override
+                e.name_en, e.name_pl, ud.display_name_override, ud.default_rest_seconds
          FROM plan_day_exercise pde
          JOIN exercise e ON e.id = pde.exercise_id
          LEFT JOIN exercise_user_data ud ON ud.exercise_id = e.id
@@ -353,7 +356,11 @@ export class SqliteWorkoutSessionRepository
             }),
             sort_order: index,
             superset_group: dayExercise.superset_group,
-            rest_seconds_override: dayExercise.rest_seconds,
+            rest_seconds_override: resolveRestSeconds({
+              exerciseDefaultSeconds: dayExercise.default_rest_seconds,
+              planDaySeconds: dayExercise.rest_seconds,
+              globalDefaultSeconds: globalDefaultRestSeconds,
+            }),
             note: dayExercise.note,
           },
           t,
@@ -496,6 +503,7 @@ export class SqliteWorkoutSessionRepository
   async addExercise(
     sessionId: EntityId,
     exerciseId: EntityId,
+    globalDefaultRestSeconds: number,
     atIndex?: number,
     tx?: SqlExecutor,
   ): Promise<SessionExercise> {
@@ -506,8 +514,9 @@ export class SqliteWorkoutSessionRepository
         name_en: string;
         name_pl: string | null;
         display_name_override: string | null;
+        default_rest_seconds: number | null;
       }>(
-        `SELECT e.name_en, e.name_pl, ud.display_name_override
+        `SELECT e.name_en, e.name_pl, ud.display_name_override, ud.default_rest_seconds
          FROM exercise e
          LEFT JOIN exercise_user_data ud ON ud.exercise_id = e.id
          WHERE e.id = ?`,
@@ -545,7 +554,11 @@ export class SqliteWorkoutSessionRepository
           }),
           sort_order: targetIndex,
           superset_group: null,
-          rest_seconds_override: null,
+          rest_seconds_override: resolveRestSeconds({
+            exerciseDefaultSeconds: nameRow.default_rest_seconds,
+            planDaySeconds: null,
+            globalDefaultSeconds: globalDefaultRestSeconds,
+          }),
           note: null,
         },
         t,
@@ -698,6 +711,31 @@ export class SqliteWorkoutSessionRepository
         throw new RepositoryNotFoundError('session_exercise', sessionExerciseId);
       }
       await this.updateRowIn('session_exercise', sessionExerciseId, { note }, t);
+      await this.touchActiveState(row.session_id, t);
+    };
+    return tx ? runner(tx) : this.deps.db.transaction(runner);
+  }
+
+  /** P7 tap-to-adjust write path - mirrors {@link setExerciseNote} exactly. */
+  async setExerciseRestOverride(
+    sessionExerciseId: EntityId,
+    restSeconds: number,
+    tx?: SqlExecutor,
+  ): Promise<void> {
+    const runner = async (t: SqlExecutor): Promise<void> => {
+      const row = await t.selectOne<{ session_id: string }>(
+        'SELECT session_id FROM session_exercise WHERE id = ? AND deleted_at IS NULL',
+        [sessionExerciseId],
+      );
+      if (!row) {
+        throw new RepositoryNotFoundError('session_exercise', sessionExerciseId);
+      }
+      await this.updateRowIn(
+        'session_exercise',
+        sessionExerciseId,
+        { rest_seconds_override: restSeconds },
+        t,
+      );
       await this.touchActiveState(row.session_id, t);
     };
     return tx ? runner(tx) : this.deps.db.transaction(runner);
@@ -970,6 +1008,15 @@ export class SqliteWorkoutSessionRepository
       }
       if (patch.scrollOffset !== undefined) {
         columns.scroll_offset = patch.scrollOffset;
+      }
+      if (patch.timerDeadlineAt !== undefined) {
+        columns.timer_deadline_at = patch.timerDeadlineAt;
+      }
+      if (patch.timerTotalSeconds !== undefined) {
+        columns.timer_total_seconds = patch.timerTotalSeconds;
+      }
+      if (patch.timerNotificationId !== undefined) {
+        columns.timer_notification_id = patch.timerNotificationId;
       }
 
       const now = this.now();

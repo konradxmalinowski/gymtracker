@@ -1,8 +1,11 @@
 # GymTracker - System Architecture
 
 Status: accepted
-Version: 1.1
-Date: 2026-08-04 (accepted 2026-08-04 - all open questions resolved, see section 18)
+Version: 1.2
+Date: 2026-08-04 (accepted 2026-08-04 - all open questions resolved, see section 18;
+P17 - Daily goals and reminders appended 2026-08-11 as documentation/architecture
+planning only, see sections 2.1, 7.12, 9, 9.1, 10, ADR-0016, ADR-0017 - no code exists
+for it yet)
 Source of truth for product scope: `docs/PRODUCT-BRIEF.md`
 Decision records: `docs/adr/`
 Build sequence: `docs/ROADMAP.md`
@@ -70,6 +73,11 @@ and the data model.
 | FR-24 | Progress photos stored on-device with history. | Phase 2 |
 | FR-25 | JSON export and import (lossless backup/restore) and CSV export and import (lossy interchange). | Phase 2 |
 | FR-26 | Settings: nickname, avatar, units (kg/lb, cm/in), timer defaults, export, import. | MVP (partial) / Phase 2 (data) |
+| FR-27 | User-defined daily goals (boolean, counter, numeric) with independent per-goal weekday scheduling, not tied to workout or plan days. | P17 |
+| FR-28 | Daily view shows only today's active goals with quick complete/increment/decrement/add-progress actions requiring no navigation into configuration. | P17 |
+| FR-29 | Daily goal progress is persisted per calendar day, separately from goal configuration, so history is never overwritten - modeled to support future streaks, completion-rate and weekly/monthly statistics. | P17 |
+| FR-30 | Optional reminders, per-goal or standalone, as scheduled (time-of-day) or interval notifications, respecting their own weekday configuration. | P17 |
+| FR-31 | Interactive Done/Not done actions on every reminder notification, answerable without opening the app; a goal-linked reminder's "Done" action writes the same `daily_goal_entry` the in-app Daily View would; a per-reminder response-statistics view shows done/not-done/ignored counts. | P17 |
 
 ### 2.2 Non-functional requirements
 
@@ -843,6 +851,11 @@ CREATE INDEX ix_pr_exercise           ON personal_record (exercise_id, record_ty
 CREATE INDEX ix_pr_recent             ON personal_record (achieved_at DESC) WHERE is_current = 1;
 CREATE INDEX ix_body_metric           ON body_metric_entry (metric, measured_at DESC) WHERE deleted_at IS NULL;
 CREATE INDEX ix_photo_taken           ON progress_photo (taken_at DESC) WHERE deleted_at IS NULL;
+
+-- Daily goals and reminders (P17; tables defined in section 7.12).
+CREATE INDEX ix_daily_goal_sort       ON daily_goal (sort_order) WHERE deleted_at IS NULL;
+CREATE INDEX ix_daily_goal_entry_date ON daily_goal_entry (local_date);
+CREATE INDEX ix_daily_reminder_goal   ON daily_reminder (goal_id) WHERE deleted_at IS NULL;
 ```
 
 Partial indexes (`WHERE deleted_at IS NULL`) keep the index free of tombstones and are
@@ -899,6 +912,162 @@ that is under 40 MB of SQLite. Nothing about this schema requires partitioning,
 archival or pagination-by-necessity - but history lists are still paginated by
 `FlashList` windowing and `LIMIT/OFFSET` because rendering 2,600 rows is a UI problem
 even when the query is fast.
+
+### 7.12 Daily goals and reminders
+
+Added for P17 (`docs/ROADMAP.md`). This is a genuinely new set of tables, not present
+in P2's original `001_initial.ts` - unlike every other post-MVP feature in this
+document, whose tables were already created upfront and only needed a repository
+built on top of them, P17 is the one phase that ships its own real migration
+(`002_daily_goals.ts`) when it is implemented. That migration is deliberately not
+written yet; this section documents the schema it will contain.
+
+*Numbering note*: this subsection is placed after 7.11 rather than immediately after
+7.9 Indexes (its most natural conceptual position) so that the existing 7.10 (Views)
+and 7.11 (Storage volume estimate) keep their numbers - `docs/adr/0002`, `0009`,
+`0013` and `0015` all cross-reference "section 7.10" or "section 7.11" by number, and
+renumbering them to make room here would have silently broken four accepted ADRs for
+a cosmetic ordering preference.
+
+```sql
+CREATE TABLE daily_goal (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    icon            TEXT,                      -- Ionicons name; curated picker list, deferred to P17 Step 0
+    goal_type       TEXT NOT NULL CHECK (goal_type IN ('boolean','counter','numeric')),
+    target_value    REAL CHECK (target_value IS NULL OR target_value > 0),
+    unit            TEXT,                       -- free-text label ('kroki','ml','min'); NOT the kg/cm
+                                                  -- canonical-unit rule (ADR-0009) - that rule scopes
+                                                  -- physical body/plate measurements only, this is an
+                                                  -- arbitrary user-defined countable
+    active_weekdays INTEGER NOT NULL CHECK (active_weekdays BETWEEN 1 AND 127),  -- bitmask, bit0=Monday..bit6=Sunday
+    is_enabled      INTEGER NOT NULL DEFAULT 1 CHECK (is_enabled IN (0,1)),
+    sort_order      INTEGER NOT NULL DEFAULT 0,
+    created_at      INTEGER NOT NULL,
+    updated_at      INTEGER NOT NULL,
+    deleted_at      INTEGER,
+    CHECK (goal_type = 'boolean' OR target_value IS NOT NULL)
+);
+
+CREATE TABLE daily_goal_entry (
+    id             TEXT PRIMARY KEY,
+    goal_id        TEXT NOT NULL REFERENCES daily_goal(id) ON DELETE CASCADE,
+    local_date     TEXT NOT NULL,
+    progress_value REAL NOT NULL DEFAULT 0,
+    created_at     INTEGER NOT NULL,
+    updated_at     INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX ux_daily_goal_entry_goal_date ON daily_goal_entry (goal_id, local_date);
+
+CREATE TABLE daily_reminder (
+    id               TEXT PRIMARY KEY,
+    goal_id          TEXT REFERENCES daily_goal(id) ON DELETE SET NULL,   -- NULL = standalone, not tied to any goal
+    name             TEXT NOT NULL,
+    icon             TEXT,
+    is_enabled       INTEGER NOT NULL DEFAULT 1 CHECK (is_enabled IN (0,1)),
+    reminder_type    TEXT NOT NULL CHECK (reminder_type IN ('scheduled','interval')),
+    time_of_day      TEXT CHECK (time_of_day IS NULL OR time_of_day GLOB '[0-2][0-9]:[0-5][0-9]'),
+    interval_minutes INTEGER CHECK (interval_minutes IS NULL OR interval_minutes >= 15),
+    active_weekdays  INTEGER NOT NULL CHECK (active_weekdays BETWEEN 1 AND 127),
+    created_at       INTEGER NOT NULL,
+    updated_at       INTEGER NOT NULL,
+    deleted_at       INTEGER,
+    CHECK ((reminder_type = 'scheduled' AND time_of_day IS NOT NULL AND interval_minutes IS NULL)
+        OR (reminder_type = 'interval' AND interval_minutes IS NOT NULL AND time_of_day IS NULL))
+);
+
+CREATE TABLE daily_reminder_response (
+    id           TEXT PRIMARY KEY,
+    reminder_id  TEXT NOT NULL REFERENCES daily_reminder(id) ON DELETE CASCADE,
+    local_date   TEXT NOT NULL,
+    response     TEXT NOT NULL CHECK (response IN ('done','not_done')),
+    responded_at INTEGER NOT NULL,
+    created_at   INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX ux_daily_reminder_response_reminder_date ON daily_reminder_response (reminder_id, local_date);
+```
+
+`daily_goal` is the recurring configuration/template row (one per user-defined goal,
+survives across days); `daily_goal_entry` is the per-calendar-day progress instance,
+one row per `(goal_id, local_date)`, created lazily the first time that goal is
+interacted with on a given day. This is the same template-vs-instance split the
+schema already uses elsewhere (`plan`/`plan_day` vs. `workout_session`, sections 7.5
+and 7.6), so a new day never overwrites history and every date is queryable from day
+one without a later migration - directly supporting the requirement that the model not
+block later streaks, completion-rate, or weekly/monthly statistics. The entry table's
+shape (one row per goal per day, a raw `progress_value`) is already sufficient for a
+future `DailyGoalStreakCalculator`-style pure domain function to read from, the same
+architectural pattern `StreakCalculator` (section 6.2) already established for
+workouts.
+
+Completion state (`is_completed`) is deliberately **not** a stored column - it is
+always derived from `goal_type` + `target_value` + `progress_value` by a pure domain
+function, the same "pure calculator over persisted values" pattern this schema already
+relies on (`SetVolume`, `Estimated1RM`, section 6.2) rather than a denormalized flag
+that could drift out of sync.
+
+`active_weekdays` as a bitmask integer (1-127, bit0=Monday) is a new convention this
+schema has not needed before - no existing table encodes "which weekdays" (`plan_day`
+is day-index based, not weekday based). It is flagged here as a new pattern being
+introduced, not a reuse of something existing; see ADR-0017.
+
+`daily_reminder.goal_id` is nullable with `ON DELETE SET NULL` specifically so
+deleting a goal degrades its reminder to standalone rather than destroying it,
+mirroring `workout_session.plan_id`/`plan_day_id`'s `ON DELETE SET NULL` (section
+7.6) - "history/config survives parent deletion."
+
+No `notification_id`/scheduled-instance column is needed on `daily_reminder`, unlike
+`active_session_state.timer_notification_id` (section 7.6), because the
+re-arm-on-foreground scheduling strategy (ADR-0017) means the OS-scheduled instance is
+always ephemeral and re-derivable from the reminder's own config plus "today," never a
+piece of state that has to survive independently.
+
+Every reminder notification carries two OS-level action buttons - "Zrealizowane" (Done)
+and "Nie" (Not done) - answerable without opening the app, uniformly across both
+`reminder_type` values and regardless of whether the reminder is goal-linked or
+standalone. `daily_reminder_response` is what backs them: a response **log**, one row
+per `(reminder_id, local_date)` - a third instance of the same template-vs-instance
+split `plan`/`plan_day` vs. `workout_session` and `daily_goal` vs. `daily_goal_entry`
+already use in this schema, this time for "did the user respond to today's reminder."
+The unique index means only the latest tap per reminder per day is kept - if the user
+taps "Nie" then changes their mind and taps the notification's "Zrealizowane" action
+again before it's dismissed (both actions likely stay visible on the same notification
+until it's cleared), the response record reflects whichever was last, not a history of
+flip-flops - that granularity is not a goal here.
+
+"Never responded" (the notification was swiped away, ignored, or simply never seen
+because the app happened to be opened and the goal completed through the normal Daily
+View instead) is deliberately **not** a stored state - it's the absence of a
+`daily_reminder_response` row for that `(reminder_id, local_date)`, the same
+"absence means not-yet-interacted-with" convention `daily_goal_entry` already uses. A
+stats view computes "ignored" as `(active days in range) - (rows present in range)`,
+not from a stored third enum value.
+
+`ON DELETE CASCADE` on `reminder_id` (not `SET NULL`) is deliberate and different from
+`daily_reminder.goal_id`'s own `SET NULL` above - a reminder's response history has no
+meaning independent of the reminder that generated it (unlike a goal surviving its
+reminder's deletion), so deleting a reminder should take its response log with it, not
+orphan it.
+
+For a goal-linked reminder (`daily_reminder.goal_id` is not null), tapping
+"Zrealizowane" writes the same `daily_goal_entry` row the in-app Daily View would write
+for that goal/date - one source of truth, not a separate parallel completion state. For
+a `boolean` goal this means `progress_value = 1`. For `counter`/`numeric` goals, since a
+notification action button has no way to specify a partial amount, tapping
+"Zrealizowane" sets `progress_value = daily_goal.target_value` (marks it fully complete
+in one tap) rather than incrementing by some assumed step - this is the chosen
+behavior, not an ambiguity, since a notification button genuinely cannot collect a
+numeric quantity from the user. Tapping "Nie" does **not** write anything to
+`daily_goal_entry` (leaving it at its default "not yet interacted with" state, same as
+if the user never opened the app that day) - it only records the reminder response
+itself. For a standalone reminder (`goal_id IS NULL`), there is no goal to write
+progress to either way - "Zrealizowane"/"Nie" only ever affect the reminder's own
+response log.
+
+This table is also what backs the per-reminder statistics view - a screen showing
+counts/rates of done vs. not-done vs. ignored over a date range, the same kind of read
+`daily_goal_entry` already enables for goal-level history, just scoped to reminder
+engagement instead of goal progress.
 
 ---
 
@@ -1152,13 +1321,22 @@ GymTracker/
 │   │   └── summary/[sessionId].tsx
 │   ├── history/
 │   │   └── [sessionId].tsx
+│   ├── goals/                            root-level, non-tab route (P17) - same pattern as
+│   │   │                                 history/ and workout/, reached from a Home card
+│   │   ├── index.tsx                     daily view - today's active goals, quick actions
+│   │   └── manage/
+│   │       ├── index.tsx                 goal list: create/edit/delete/reorder/enable
+│   │       ├── create.tsx
+│   │       ├── edit/[goalId].tsx
+│   │       └── reminders.tsx             reminder config, per-goal or standalone
 │   └── (modals)/
 │       ├── _layout.tsx                   presentation: 'modal'
 │       ├── exercise-picker.tsx
 │       ├── plan-day-picker.tsx
 │       ├── set-type-picker.tsx
 │       ├── rest-timer-settings.tsx
-│       └── body-metric-entry.tsx
+│       ├── body-metric-entry.tsx
+│       └── goal-progress-entry.tsx       quick numeric/counter progress entry (P17)
 │
 ├── assets/
 │   ├── fonts/
@@ -1200,15 +1378,16 @@ GymTracker/
 │   ├── statistics/
 │   ├── body-metrics/
 │   ├── calendar/
-│   └── data-transfer/
-│       ├── components/
-│       ├── hooks/
-│       ├── screens/                      screen bodies; app/ files are 5-line wrappers
-│       ├── services/                     application layer, orchestration, transactions
-│       ├── domain/                       entities, calculators, invariants (pure)
-│       ├── repository/                   port interface + SQLite implementation
-│       ├── types/                        DTOs, query types, Zod schemas
-│       └── index.ts                      the ONLY cross-feature import surface
+│   ├── data-transfer/
+│   │   ├── components/
+│   │   ├── hooks/
+│   │   ├── screens/                      screen bodies; app/ files are 5-line wrappers
+│   │   ├── services/                     application layer, orchestration, transactions
+│   │   ├── domain/                       entities, calculators, invariants (pure)
+│   │   ├── repository/                   port interface + SQLite implementation
+│   │   ├── types/                        DTOs, query types, Zod schemas
+│   │   └── index.ts                      the ONLY cross-feature import surface
+│   └── daily-goals/                      same subfolder shape as every feature above (P17)
 │
 ├── hooks/                                cross-feature: useAppState, useDebounce, useKeyboard,
 │                                         useHaptics, useInterval, useSafeAreaPadding
@@ -1222,7 +1401,8 @@ GymTracker/
 ├── services/                             cross-cutting infrastructure services
 │   ├── container.ts                      composition root
 │   ├── files/                            FileStorage over Expo FileSystem
-│   ├── notifications/                    NotificationScheduler over Expo Notifications
+│   ├── notifications/                    NotificationScheduler over Expo Notifications -
+│   │                                     reserved since P0, implemented at P17
 │   ├── haptics/                          semantic haptics wrapper (section 11.6)
 │   ├── kv/                               MMKV wrapper with typed keys
 │   ├── clock/                            Clock port
@@ -1266,6 +1446,7 @@ graph BT
     BM[body-metrics]
     CAL[calendar]
     DT[data-transfer]
+    DG[daily-goals]
     HOME[home]
 
     ONB --> PROF
@@ -1282,6 +1463,7 @@ graph BT
     HOME --> PLAN
     HOME --> REC
     HOME --> STAT
+    HOME --> DG
     BM --> PROF
     DT --> WL
     DT --> PLAN
@@ -1304,6 +1486,12 @@ Allowed dependency directions, stated explicitly:
 - `statistics` depends only on read models, never on write services.
 - `data-transfer` depends on everything by nature; it is the only feature allowed to,
   and it is deliberately built last.
+- `daily-goals` is also a leaf, and a deliberately isolated one: it depends on nothing
+  else in the graph, not even `exercise-library`, because goals are user-defined and
+  explicitly must not be tied to training days or workout state (a design constraint
+  from the P17 brief, not an oversight - a future phase could add an optional link,
+  but v1 does not). `home` is its only dependent, rendering a summary card (section
+  10).
 
 Cycles are prevented mechanically by `eslint-plugin-import`'s `no-cycle` rule set to
 error, plus the barrel-only rule from section 3.1.
@@ -1348,11 +1536,18 @@ graph TD
     HOME --> HIST["history/[sessionId]"]
     CAL --> HIST
 
+    HOME -->|Goals card| GOALS["goals/index<br/>Daily view"]
+    GOALS --> GMAN["goals/manage/index"]
+    GMAN --> GCR["goals/manage/create"]
+    GMAN --> GED["goals/manage/edit/[goalId]"]
+    GMAN --> GREM["goals/manage/reminders"]
+
     ACT -.modal.-> MP1["(modals)/exercise-picker"]
     PLDD -.modal.-> MP1
     ACT -.modal.-> MP3["(modals)/rest-timer-settings"]
     HOME -.modal.-> MP2["(modals)/plan-day-picker"]
     MEAS -.modal.-> MP4["(modals)/body-metric-entry"]
+    GOALS -.modal.-> MP5["(modals)/goal-progress-entry"]
 ```
 
 ### 10.2 Navigation rules
@@ -1366,6 +1561,7 @@ graph TD
 | Deep links: `gymtracker://workout/active` (from the rest-timer notification), `gymtracker://exercise/:id`, `gymtracker://plan/:id` | The rest-timer notification must reopen straight into the workout, not into Home. |
 | Typed routes are on (`experiments.typedRoutes`), and every navigation goes through `navigation/routes.ts` helpers rather than raw string paths | Renaming a route becomes a compile error instead of a runtime dead link. |
 | The splash screen is held until: fonts loaded, migrations applied, profile query resolved, MMKV active-session flag read | Prevents a visible flash of Home before an onboarding redirect. |
+| Daily Goals gets no sixth tab. It is reached from a `TodaysGoalsCard` on Home (same pattern as the last-workout summary card, section 10.3/P10) into the root-level `goals/index` route | Consistent with the existing "nested feature, not a tab" precedent - Calendar and Measurements are reached from Profile rather than being top-level tabs; a sixth tab would crowd the tab bar for a feature whose daily-glance need is already well served by a Home card. |
 
 ### 10.3 The active workout screen composition
 
@@ -1945,5 +2141,7 @@ exactly the refactor this decision is designed to avoid. The Definition of Done 
 | `docs/adr/0013-export-import-formats.md` | JSON backup vs CSV interchange |
 | `docs/adr/0014-testing-and-observability.md` | Test seams and crash reporting stance |
 | `docs/adr/0015-progressive-overload-algorithm.md` | e1RM formula and progression rules |
+| `docs/adr/0016-shared-notification-scheduler.md` | Why P17 finally implements `services/notifications/NotificationScheduler`, and why rest-timer's own P7 wrapper is left as-is |
+| `docs/adr/0017-daily-goal-reminder-scheduling.md` | Weekday bitmask, derived completion state, today-only interval reminder re-arming |
 | `docs/ROADMAP.md` | MVP scope, phased build order, backlog |
 

@@ -6,7 +6,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import Constants from 'expo-constants';
-import { Redirect, Stack } from 'expo-router';
+import * as Notifications from 'expo-notifications';
+import { Redirect, router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 
 import { Screen } from '@/components/layout';
@@ -15,6 +16,7 @@ import { Text } from '@/components/ui';
 import { ExpoSqlExecutor, openDatabase } from '@/database/client';
 import { runMigrations } from '@/database/migrations';
 import { loadCatalogAsset, runSeed } from '@/database/seed';
+import { REST_TIMER_DEEP_LINK } from '@/features/rest-timer';
 import type { ActiveSessionSnapshot } from '@/features/workout-logging';
 import { routes } from '@/navigation/routes';
 import {
@@ -95,19 +97,24 @@ export default function RootLayout() {
 
         const container = createContainer(executor);
 
-        // ADR-0008 MMKV key inventory: units.*/haptics.enabled are mirrored
-        // into MMKV so presentation code can read them synchronously; SQLite
-        // stays authoritative and the mirror is re-synced from it on every
-        // boot (this is that re-sync - the mutation-time write happens in
-        // features/profile's settings hooks).
-        const [weightUnit, lengthUnit, hapticsEnabled] = await Promise.all([
+        // ADR-0008 MMKV key inventory: units.*/haptics.enabled/timer.vibration
+        // are mirrored into MMKV so presentation code (and, for
+        // timer.vibration, a store subscription callback outside any
+        // component render) can read them synchronously; SQLite stays
+        // authoritative and the mirror is re-synced from it on every boot
+        // (this is that re-sync - the mutation-time write happens in
+        // features/profile's settings hooks for the first two,
+        // features/rest-timer's useTimerSettings for the third).
+        const [weightUnit, lengthUnit, hapticsEnabled, timerVibration] = await Promise.all([
           container.settings.get('units.weight'),
           container.settings.get('units.length'),
           container.settings.get('haptics.enabled'),
+          container.settings.get('timer.vibration'),
         ]);
         kv.set('units.weight', weightUnit);
         kv.set('units.length', lengthUnit);
         kv.set('haptics.enabled', hapticsEnabled);
+        kv.set('timer.vibration', timerVibration);
 
         if (!cancelled) {
           setBoot({ status: 'ready', container });
@@ -245,6 +252,45 @@ export function RootNavigationGate() {
       void SplashScreen.hideAsync().catch(() => {});
     }
   }, [isLoading]);
+
+  // P7: the rest-timer notification's tap target
+  // (`RestTimerNotificationService.REST_TIMER_DEEP_LINK`) - wired here since
+  // this is the one place already responsible for root-level navigation
+  // decisions (the redirects below). Handles both the warm-app case (the
+  // listener) and the cold-start case (the app was launched by tapping the
+  // notification, so the response that triggered launch is only available
+  // via `getLastNotificationResponseAsync`, not the listener, which only
+  // fires for responses received *while this listener is already attached*).
+  //
+  // Both calls are wrapped defensively, the same posture
+  // `RestTimerNotificationService` takes with every `expo-notifications`
+  // call: no native binding under test (or a genuinely malformed stored
+  // response on a real device) must not crash the boot gate this effect
+  // lives in.
+  useEffect(() => {
+    function handleResponse(response: Notifications.NotificationResponse) {
+      if (response.notification.request.content.data?.url === REST_TIMER_DEEP_LINK) {
+        router.push(routes.workout.active());
+      }
+    }
+
+    let subscription: { remove: () => void } | undefined;
+    try {
+      subscription = Notifications.addNotificationResponseReceivedListener(handleResponse);
+    } catch {
+      // No-op - see comment above.
+    }
+
+    void Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (response) {
+          handleResponse(response);
+        }
+      })
+      .catch(() => {});
+
+    return () => subscription?.remove();
+  }, []);
 
   if (isLoading) {
     return null;

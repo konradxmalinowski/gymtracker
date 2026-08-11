@@ -9,7 +9,10 @@ logging a set should take 2-3 seconds. Bundle identifier:
 The project has completed P0 (project foundation) and P1 (design system and UI
 primitives) of its roadmap: the scaffold, tooling, CI, design tokens, and UI
 component library are in place, but no feature screens exist yet. See
-[docs/ROADMAP.md](docs/ROADMAP.md) for what's next.
+[docs/ROADMAP.md](docs/ROADMAP.md) for what's next - including P17's daily goals and
+reminders, whose reminder notifications are planned with tap-without-opening-the-app
+"Zrealizowane"/"Nie" action buttons and a per-reminder response-statistics view (see
+`docs/ARCHITECTURE.md` section 7.12).
 
 ## Prerequisites
 

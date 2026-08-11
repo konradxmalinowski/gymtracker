@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import type {
   ActiveSessionAggregate,
+  ActiveSessionState,
   SessionExercise,
   WorkoutSet,
 } from '@/features/workout-logging';
@@ -51,6 +52,21 @@ export interface ActiveWorkoutStoreState {
   isHydrated: boolean;
   /** Ephemeral UI selection - which set `QuickAdjustBar` currently targets. Not part of the persisted aggregate. */
   focusedSetId: string | null;
+  /**
+   * P7: which `session_exercise` the currently-running rest timer belongs to
+   * - ephemeral UI state, the same category as `focusedSetId` above, not a
+   * persisted column. `active_session_state` has exactly one timer deadline
+   * per session (not one per exercise - see `database/schema.sql`), so
+   * nothing in the data model itself records "which exercise started this
+   * deadline"; this field is where that association lives for as long as
+   * the app stays alive. It is deliberately not restored on
+   * `useActiveSessionHydration`'s crash-recovery path (a relaunch always
+   * starts it `null` again) - `RestTimerBar`'s "open settings" handler falls
+   * back to `session.activeState.focusedSessionExerciseId` (a real,
+   * persisted column) when this is `null`, which is the last exercise the
+   * user was interacting with and a reasonable proxy after a kill/relaunch.
+   */
+  runningTimerSessionExerciseId: string | null;
   pendingWrites: number;
 }
 
@@ -61,6 +77,10 @@ interface ActiveWorkoutStoreActions {
   /** Rule 4: finish, discard, unmount. */
   clear: () => void;
   setFocusedSetId: (id: string | null) => void;
+  /** P7: pairs with `runningTimerSessionExerciseId` above. */
+  setRunningTimerSessionExerciseId: (id: string | null) => void;
+  /** P7: shallow-merges `patch` onto `session.activeState` - mirrors `patchExercise`'s pattern one level up the aggregate, for the rest-timer fields the set-completion hook updates locally ahead of the `saveActiveState` write it dispatches alongside this call. */
+  patchActiveState: (patch: Partial<ActiveSessionState>) => void;
   beginWrite: () => void;
   endWrite: () => void;
 
@@ -87,6 +107,7 @@ const initialState: ActiveWorkoutStoreState = {
   session: null,
   isHydrated: false,
   focusedSetId: null,
+  runningTimerSessionExerciseId: null,
   pendingWrites: 0,
 };
 
@@ -97,6 +118,17 @@ export const useActiveWorkoutStore = create<ActiveWorkoutStore>((set) => ({
   markHydrated: () => set({ isHydrated: true }),
   clear: () => set({ ...initialState }),
   setFocusedSetId: (focusedSetId) => set({ focusedSetId }),
+  setRunningTimerSessionExerciseId: (runningTimerSessionExerciseId) =>
+    set({ runningTimerSessionExerciseId }),
+  patchActiveState: (patch) =>
+    set((state) => {
+      if (!state.session) {
+        return state;
+      }
+      return {
+        session: { ...state.session, activeState: { ...state.session.activeState, ...patch } },
+      };
+    }),
   beginWrite: () => set((state) => ({ pendingWrites: state.pendingWrites + 1 })),
   endWrite: () => set((state) => ({ pendingWrites: Math.max(0, state.pendingWrites - 1) })),
 

@@ -8,12 +8,14 @@ reference, not a replacement. Section numbers below refer to `docs/ARCHITECTURE.
 
 P0 (project foundation), P1 (design system and UI primitives), P2 (persistence
 foundation), P3 (onboarding, profile and core settings), P4 (exercise library), P5
-(workout plans), and P6 (workout logging) are complete. The `onboarding`, `profile`,
-`exercise-library`, `plans`, and `workout-logging` features now have real
-implementations (screens, hooks, services, repository); the remaining six features
-(`rest-timer`, `records`, `statistics`, `body-metrics`, `calendar`, `data-transfer`)
-are still empty skeleton directories (components/hooks/screens/services/domain/
-repository/types/index.ts subfolders, no implementation) awaiting their own phase.
+(workout plans), P6 (workout logging), and P7 (rest timer) are complete. The
+`onboarding`, `profile`, `exercise-library`, `plans`, `workout-logging`, and
+`rest-timer` features now have real implementations (screens, hooks, services,
+repository where applicable - `rest-timer` itself owns no database table and
+therefore no repository, see below); the remaining five features (`records`,
+`statistics`, `body-metrics`, `calendar`, `data-transfer`) are still empty skeleton
+directories (components/hooks/screens/services/domain/repository/types/index.ts
+subfolders, no implementation) awaiting their own phase.
 
 The app now boots for real: `app/_layout.tsx` opens the database, runs migrations,
 seeds the exercise catalog (`database/seed/runSeed()`, idempotent - a P2 gap fixed in
@@ -291,6 +293,116 @@ low-severity, non-blocking notes (a `setSupersetGroup` update missing a
 service layer, not exploitable since every field it writes is either an id or a bound
 numeric column with no free text). No new npm dependency was added this phase.
 
+`RestTimerBar`'s slot, deliberately omitted from `ActiveWorkoutScreen` since P6, is
+populated as of P7: `features/rest-timer/domain/resolveRestSeconds.ts` implements the
+three-tier rest-duration precedence (exercise override, then plan day, then global
+default) as the single place that logic lives, and
+`features/rest-timer/domain/supersetRestRule.ts` implements D-03/ADR-0006's skip rule
+(completing a set of a non-terminal superset member starts no timer; the last member's
+does) - both pure calculators with fast-check property tests, per the project's
+domain-testing convention. `features/rest-timer/services/RestTimerNotificationService.ts`
+is an `expo-notifications` wrapper that schedules against an absolute deadline rather
+than a relative delay or a JS timer (R-04), sets up its own Android notification
+channel, requests permission lazily on the first real schedule attempt rather than
+during onboarding, cancels on early finish, and never throws - every failure path
+(denied permission, no native binding, a rejected native call) degrades to a no-op so
+the timer keeps ticking in-app with no OS notification behind it. `stores/
+restTimerStore.ts` is the project's second Zustand store holding real (non-ephemeral)
+timer state alongside `activeWorkoutStore` - it owns `deadlineAt`/`totalSeconds`/`now`
+and recomputes `remainingSeconds` fresh from a subtraction on every `tick()` rather
+than decrementing an interval, the "recompute, never accumulate" pattern R-04 requires
+to stay correct across backgrounding and Android Doze.
+
+`features/rest-timer/components/{RestTimerBar,TimerPresetChips,RestTimerSettingsSheet}.tsx`
+and `features/rest-timer/screens/TimerSettingsScreen.tsx` are the UI layer: the sticky
+in-workout countdown bar plus its two settings surfaces (`app/(modals)/
+rest-timer-settings.tsx` for the current exercise's override, `app/profile/settings/
+timers.tsx` for the global defaults - both shipped this phase per Step 0 decision 4).
+On the `workout-logging` side, `SqliteWorkoutSessionRepository.startFromPlanDay`/
+`addExercise` now seed `session_exercise.rest_seconds_override` through
+`resolveRestSeconds` instead of a bare plan-day value with no fallback - a real
+pre-existing gap (not a P7 regression) the plan found while scoping this phase:
+`startFromPlanDay` previously inherited `null` straight from the plan day with nothing
+downstream ever resolving it, and `addExercise` hardcoded `null` unconditionally.
+`WorkoutSessionService` reads `timer.defaultRestSeconds` from settings and passes it
+down as a plain number, keeping the repository free of settings-schema knowledge, the
+same layering rule used everywhere else in this codebase. A new repository method,
+`setExerciseRestOverride` (mirroring the existing `setExerciseNote` pattern), was
+added beyond the plan's original scope to support Step 0 decision 2 (tap-to-adjust
+persists the new duration to the session, not just the running countdown) - the same
+"found and closed within the phase" addition CLAUDE.md's P4/P5 write-ups already used
+this phrasing for. `ActiveStatePatch` gained `timerDeadlineAt`/`timerTotalSeconds`/
+`timerNotificationId` fields the plan's own brief had assumed P6 already added; it
+hadn't, so P7 added them. The rest-timer notification's tap target (`gymtracker://
+workout/active`) is now wired end-to-end in `app/_layout.tsx` (both the warm
+`addNotificationResponseReceivedListener` path and the cold-start
+`getLastNotificationResponseAsync` path), closing the deep-link gap
+`RestTimerNotificationService`'s own doc comment had flagged as deferred to this pass.
+
+Two "first real caller" moments worth noting the way P5/P6 called out their own:
+`services/haptics/timerFinished()` - declared when haptics was built, never invoked
+anywhere in the codebase since - now fires for real on timer expiry, gated on the
+`timer.vibration` setting; and `hooks/useAppState.ts`, a thin
+`AppState.addEventListener` wrapper, is the first occupant of the project-root
+`hooks/` folder CLAUDE.md's folder structure has listed as reserved since P0.
+
+P7 verification: typecheck, lint, and the full Jest suite (92 suites, 851 tests
+passing, 1 pre-existing skip) are clean; `npx expo export --platform ios` was used
+again as the build-verification proxy (no simulator/emulator/device dev-client
+available in this environment, same constraint as every prior phase). A security
+review (`reports/security-2026-08-11-p7.md`) found zero critical/high/medium/low
+findings and one informational note carried forward from P6 (`saveActiveState` still
+has no Zod schema at the service layer; this phase's three new timer columns land on
+that same unchecked pass-through but are all settings-bounded, Zod/UI-clamped, or an
+opaque `expo-notifications` id, never raw client input, so re-verified non-exploitable
+rather than newly flagged). An accessibility review
+(`reports/accessibility-2026-08-11-p7.md` - conducted by a general-purpose agent
+standing in for the accessibility-agent role, which is not registered in this
+environment's agent toolkit; noted here for provenance, not as a complaint) caught one
+BLOCKING finding and it was fixed within the phase, not left open: `RestTimerBar`
+handed `SwipeableRow` a bare `View` wrapping three separate interactive controls
+(decrease, countdown/open-settings, increase) as its sole child, which
+`SwipeableRow`'s child-cloning contract collapsed into one inert accessibility node
+with no `onPress` of its own - reachable by touch but a dead end for VoiceOver/
+TalkBack beyond the swipe-to-skip action. Fixed by restructuring so `SwipeableRow`
+wraps only the countdown `PressScale` (already a real, correctly-labeled `Pressable`),
+with the two adjust buttons rendered as independent siblings outside the swipeable
+region. A real RNTL mount test (`__tests__/features/rest-timer/components/
+RestTimerBar.test.tsx`) was added specifically to catch this regression class,
+verified by temporarily reverting the fix and confirming the test fails before
+restoring it - the same "verify the regression test actually regresses" discipline
+P5's write-up used for its own accessibility fix. Separately, a code-review pass (not
+accessibility-specific) caught and fixed two real correctness bugs before commit:
+finishing or discarding a workout while a rest timer was still running used to leave
+the timer running and its OS notification still scheduled (`useFinishDiscardWorkout`'s
+`clearAndExit` now cancels the scheduled notification and clears the countdown as part
+of `finish()`/`discard()`); and a `saveActiveState` write-ordering race where two
+rest-timer operations racing on independent async chains of different lengths could
+persist a stale, already-cancelled timer to disk (now guarded by a monotonic
+operation-sequence check, `bumpTimerOperationSequence`). The same code-review pass,
+separately again, also caught a countdown-announcement bug where a single upward
+timer adjustment could permanently silence the periodic remaining-time announcement
+for the rest of that countdown - fixed before the accessibility review even ran, and
+independently re-verified correct by that review rather than taken on faith.
+
+Deliberately out of scope, and why (same framing P6's write-up used): `timer.sound`
+ships as a working, persisted setting on `TimerSettingsScreen`, but has no
+audio-playback backend wired to it - this project has no sound-library dependency,
+and adding one was explicitly out of scope for this phase's fixes, not silently
+dropped.
+
+**Documentation-only addition (2026-08-11):** `daily-goals` is a new, twelfth feature
+added to the roadmap as `P17 - Daily goals and reminders` (`docs/ROADMAP.md`),
+architecture-planned in `docs/ARCHITECTURE.md` section 2.1 (FR-27..FR-30), section
+7.12 (schema - `daily_goal`, `daily_goal_entry`, `daily_reminder`), sections 9/9.1
+(folder structure, dependency graph) and section 10 (navigation), plus
+`docs/adr/0016-shared-notification-scheduler.md` and
+`docs/adr/0017-daily-goal-reminder-scheduling.md`. As of this update it is
+documentation and architecture planning only - no `features/daily-goals/` directory,
+no `app/goals/` routes, no `services/notifications/` implementation, and no
+`002_daily_goals.ts` migration exist in this repo yet. A future implementing session
+starts from those documents, not from any code.
+
 ## Product
 
 Offline-only React Native/Expo workout logging app. No backend, no accounts, no
@@ -386,10 +498,14 @@ item, non-blocking).
   called by it. Inverting this creates a cycle.
 - `statistics` depends only on read models.
 - `data-transfer` depends on everything and is built last.
+- `daily-goals` is also a leaf, deliberately isolated: no dependency on `plans`,
+  `workout-logging`, or `exercise-library` - goals are user-defined and must not be
+  tied to training days or workout state. `home` is its only dependent, via a summary
+  card (P17, documentation-only so far - see "Status" above).
 
-Eleven features total: `onboarding`, `profile`, `exercise-library`, `plans`,
+Twelve features total: `onboarding`, `profile`, `exercise-library`, `plans`,
 `workout-logging`, `rest-timer`, `records`, `statistics`, `body-metrics`,
-`calendar`, `data-transfer`.
+`calendar`, `data-transfer`, `daily-goals`.
 
 ## Data layer (sections 7-8)
 

@@ -109,6 +109,7 @@ export const en = {
     unitsRowSubtitleTemplate: '{{weight}} / {{length}}',
     hapticsRowTitle: 'Haptics',
     hapticsRowSubtitle: 'Vibration feedback for taps and completions',
+    timersRowTitle: 'Rest timer',
     aboutRowTitle: 'About',
   },
   unitsSettings: {
@@ -387,6 +388,35 @@ export const en = {
     },
     banner: {
       accessibilityLabelTemplate: '{{title}}, {{elapsed}} elapsed, tap to return',
+      accessibilityLabelWithRestTemplate:
+        '{{title}}, {{elapsed}} elapsed, {{rest}} rest remaining, tap to return',
+    },
+  },
+  restTimer: {
+    presetChipLabelTemplate: '{{seconds}}s',
+    restingLabel: 'Resting',
+    expiredLabel: 'Rest done',
+    expiredAnnouncement: 'Rest timer finished',
+    remainingAnnouncementTemplate: '{{seconds}}s rest remaining',
+    skipAccessibilityLabel: 'Skip rest',
+    decreaseAccessibilityLabelTemplate: 'Decrease rest by {{seconds}} seconds',
+    increaseAccessibilityLabelTemplate: 'Increase rest by {{seconds}} seconds',
+    adjustAccessibilityHint: 'Opens rest timer presets',
+    settingsSheet: {
+      title: 'Rest timer',
+      currentLabel: 'Current rest',
+      noneLabel: 'Not set',
+      presetsTitle: 'Presets',
+    },
+    timerSettings: {
+      title: 'Rest timer',
+      defaultRestTitle: 'Default rest duration',
+      soundRowTitle: 'Sound',
+      vibrationRowTitle: 'Vibration',
+      notificationRowTitle: 'Notifications',
+      notificationRowSubtitle: 'Alerts you when resting, even if you leave the app',
+      autoStartRowTitle: 'Auto-start',
+      autoStartRowSubtitle: 'Start resting automatically after completing a set',
     },
   },
   dbHealth: {

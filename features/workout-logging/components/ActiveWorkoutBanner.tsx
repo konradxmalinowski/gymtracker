@@ -1,16 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 import { router, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Row } from '@/components/layout';
 import { Text } from '@/components/ui';
 import { PressScale } from '@/components/gestures/PressScale';
+import { formatRestSeconds, useRestTimerTick } from '@/features/rest-timer';
 import { t } from '@/i18n';
 import { routes } from '@/navigation/routes';
 import { useContainer } from '@/services/container';
 import { useActiveWorkoutStore } from '@/stores/activeWorkoutStore';
+import { selectRemainingSeconds, useRestTimerStore } from '@/stores/restTimerStore';
 import { color, radius, space } from '@/theme/tokens';
 
 import { formatElapsedSeconds } from './formatElapsed';
@@ -33,13 +35,23 @@ const TAB_BAR_CONTENT_HEIGHT = Platform.select({ ios: 49, android: 56, default: 
 
 /**
  * ARCHITECTURE.md section 10.2: "a persistent `ActiveWorkoutBanner` docked
- * above the tab bar, showing elapsed time and rest countdown" (the rest
- * countdown half is P7 - nothing here renders one). Visible whenever
+ * above the tab bar, showing elapsed time and rest countdown." The rest
+ * countdown half is P7's addition - a compact `m:ss` next to the elapsed
+ * time, visible only while a timer is running, reusing the very deadline
+ * `ActiveWorkoutScreen`'s own `RestTimerBar` reads (`restTimerStore` is a
+ * single, session-wide value, not one instance per screen). Visible whenever
  * `activeWorkoutStore` holds a session and the current route is not
  * `workout/active` itself (i.e. the user minimized). Tapping it returns to
  * the workout. Reads the store through a selector (ADR-0008 rule 5), so a
  * set completing elsewhere never re-renders this banner beyond its own
  * second-by-second tick.
+ *
+ * `useRestTimerTick(clock)` is mounted here rather than assuming
+ * `ActiveWorkoutScreen`'s own instance is still driving it - the two are
+ * never mounted at the same time (`workout/active` is a root-level route
+ * outside `(tabs)`, so this banner is unmounted whenever that screen is on
+ * screen), so whichever of the two is currently visible has to own ticking
+ * for itself.
  */
 export function ActiveWorkoutBanner() {
   const { clock } = useContainer();
@@ -47,6 +59,11 @@ export function ActiveWorkoutBanner() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const [now, setNow] = useState(() => clock.now());
+
+  useRestTimerTick(clock);
+  const restTimerDeadlineAt = useRestTimerStore((state) => state.deadlineAt);
+  const restTimerTotalSeconds = useRestTimerStore((state) => state.totalSeconds);
+  const restTimerNow = useRestTimerStore((state) => state.now);
 
   useEffect(() => {
     if (!session) {
@@ -61,15 +78,32 @@ export function ActiveWorkoutBanner() {
   }
 
   const elapsed = formatElapsedSeconds(session.startedAt, session.pausedMs, now);
+  // `restTimerStore`'s own exported formula (code review finding, P7 pass 3
+  // follow-up) - `RestTimerBar.tsx` reads the same selector rather than
+  // each reimplementing the clamp/rounding math inline.
+  const restRemainingSeconds =
+    restTimerDeadlineAt === null
+      ? null
+      : selectRemainingSeconds({
+          deadlineAt: restTimerDeadlineAt,
+          totalSeconds: restTimerTotalSeconds,
+          now: restTimerNow,
+        });
+
+  const accessibilityLabel =
+    restRemainingSeconds === null
+      ? t('workoutLogging.banner.accessibilityLabelTemplate', { title: session.title, elapsed })
+      : t('workoutLogging.banner.accessibilityLabelWithRestTemplate', {
+          title: session.title,
+          elapsed,
+          rest: formatRestSeconds(restRemainingSeconds),
+        });
 
   return (
     <PressScale
       onPress={() => router.push(routes.workout.active())}
       accessibilityRole="button"
-      accessibilityLabel={t('workoutLogging.banner.accessibilityLabelTemplate', {
-        title: session.title,
-        elapsed,
-      })}
+      accessibilityLabel={accessibilityLabel}
       style={{
         position: 'absolute',
         left: space[3],
@@ -89,9 +123,21 @@ export function ActiveWorkoutBanner() {
             {session.title}
           </Text>
         </Row>
-        <Text variant="numeric" color="inverse">
-          {elapsed}
-        </Text>
+        <Row gap={2} align="center">
+          {restRemainingSeconds !== null ? (
+            <View testID="active-workout-banner-rest">
+              <Row gap={1} align="center">
+                <Ionicons name="time-outline" size={16} color={color.textInverse} />
+                <Text variant="numeric" color="inverse">
+                  {formatRestSeconds(restRemainingSeconds)}
+                </Text>
+              </Row>
+            </View>
+          ) : null}
+          <Text variant="numeric" color="inverse">
+            {elapsed}
+          </Text>
+        </Row>
       </Row>
     </PressScale>
   );

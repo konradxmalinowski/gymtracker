@@ -6,11 +6,13 @@ import { router } from 'expo-router';
 
 import { Column } from '@/components/layout';
 import { ConfirmDialog, EmptyState, Skeleton } from '@/components/feedback';
+import { RestTimerBar, useRestTimerTick } from '@/features/rest-timer';
 import type { SessionExercise, WorkoutSet } from '@/features/workout-logging';
 import { t } from '@/i18n';
 import { routes } from '@/navigation/routes';
 import { useContainer } from '@/services/container';
 import { useActiveWorkoutStore } from '@/stores/activeWorkoutStore';
+import { useRestTimerStore } from '@/stores/restTimerStore';
 import { color, space } from '@/theme/tokens';
 
 import { AddExerciseButton } from '../components/AddExerciseButton';
@@ -28,6 +30,7 @@ import {
 } from '../hooks/useExerciseMutations';
 import { useFinishDiscardWorkout } from '../hooks/useFinishDiscardWorkout';
 import { useSetExerciseNote, useSetSessionNotes } from '../hooks/useNotes';
+import { useAdjustRestTimerDelta, useSkipRestTimer } from '../hooks/useRestTimer';
 import {
   useAddDropSet,
   useAppendSet,
@@ -52,12 +55,18 @@ function findSet(exercises: readonly SessionExercise[], setId: string | null): W
 
 /**
  * `workout/active`'s screen body (ARCHITECTURE.md section 10.3):
- * `WorkoutHeader`, `FlashList<SessionExerciseCard>`, `QuickAdjustBar`,
- * `AddExerciseButton`. `RestTimerBar`'s slot is omitted entirely (P7) rather
- * than a structurally-present-but-inert placeholder - nothing in this phase
- * ever populates a timer deadline, so an empty slot would be dead space with
- * no state to react to.
+ * `WorkoutHeader`, `RestTimerBar`, `FlashList<SessionExerciseCard>`,
+ * `QuickAdjustBar`, `AddExerciseButton`. `RestTimerBar` is P7's addition -
+ * always mounted (it self-hides when no timer is running, the same pattern
+ * `ActiveWorkoutBanner` already uses), sitting directly under the header per
+ * section 10.3's documented composition order.
  *
+ * `useRestTimerTick(clock)` is mounted here unconditionally too, not only
+ * while a timer happens to be running - a cheap `setInterval` write to a
+ * single store field either way, and starting/stopping it around a timer's
+ * lifetime would be strictly more moving parts for no real cost saved.
+ *
+
  * Owns: the ADR-0008 mount-time hydration (`useActiveSessionHydration`), the
  * Android hardware-back interception (ADR-0007 rule 1 - `BackHandler` lives
  * here, not in `app/workout/_layout.tsx`, because the exit choice needs
@@ -77,11 +86,18 @@ function findSet(exercises: readonly SessionExercise[], setId: string | null): W
 export function ActiveWorkoutScreen() {
   useActiveSessionHydration();
 
-  const { sessionService } = useContainer();
+  const { sessionService, clock } = useContainer();
   const session = useActiveWorkoutStore((state) => state.session);
   const isHydrated = useActiveWorkoutStore((state) => state.isHydrated);
   const focusedSetId = useActiveWorkoutStore((state) => state.focusedSetId);
   const setFocusedSetId = useActiveWorkoutStore((state) => state.setFocusedSetId);
+  const runningTimerSessionExerciseId = useActiveWorkoutStore(
+    (state) => state.runningTimerSessionExerciseId,
+  );
+
+  useRestTimerTick(clock);
+  const restTimerDeadlineAt = useRestTimerStore((state) => state.deadlineAt);
+  const restTimerTotalSeconds = useRestTimerStore((state) => state.totalSeconds);
 
   const [exitSheetVisible, setExitSheetVisible] = useState(false);
   const [discardConfirmVisible, setDiscardConfirmVisible] = useState(false);
@@ -99,6 +115,8 @@ export function ActiveWorkoutScreen() {
   const deleteSet = useDeleteSet();
   const setExerciseNote = useSetExerciseNote();
   const setSessionNotes = useSetSessionNotes();
+  const adjustRestTimer = useAdjustRestTimerDelta();
+  const skipRestTimer = useSkipRestTimer();
   const { syncFocusedExercise, syncScrollOffset } = useActiveStateSync(session?.id);
 
   useEffect(() => {
@@ -177,6 +195,15 @@ export function ActiveWorkoutScreen() {
     setAppendingExerciseId(null);
   }
 
+  function handleOpenRestTimerSettings() {
+    const targetId =
+      runningTimerSessionExerciseId ?? activeSession.activeState.focusedSessionExerciseId;
+    if (!targetId) {
+      return;
+    }
+    router.push(routes.modals.restTimerSettings(targetId));
+  }
+
   function moveExercise(index: number, direction: -1 | 1) {
     const nextIndex = index + direction;
     if (nextIndex < 0 || nextIndex >= activeSession.exercises.length) {
@@ -204,6 +231,15 @@ export function ActiveWorkoutScreen() {
         onUpdateNotes={(notes) => void setSessionNotes(activeSession.id, notes)}
         isFinishing={isFinishing}
         testID="workout-header"
+      />
+
+      <RestTimerBar
+        deadlineAt={restTimerDeadlineAt}
+        totalSeconds={restTimerTotalSeconds}
+        onAdjust={adjustRestTimer}
+        onSkip={skipRestTimer}
+        onOpenSettings={handleOpenRestTimerSettings}
+        testID="rest-timer-bar"
       />
 
       <View style={{ flex: 1 }}>

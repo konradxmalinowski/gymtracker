@@ -20,6 +20,15 @@ export interface KvSchema {
   'units.length': 'cm' | 'in';
   /** Mirrors the haptics-enabled setting `services/haptics` currently reads locally. */
   'haptics.enabled': boolean;
+  /**
+   * P7: mirrors the `timer.vibration` app setting, for the same reason
+   * `haptics.enabled` is mirrored - `useRestTimerTick`'s expiry-triggered
+   * `haptics.timerFinished()` call fires from a store subscription callback,
+   * not a component render, and needs a synchronous read the same way
+   * `services/haptics/settings.ts`'s `isHapticsEnabled()` does for the
+   * global toggle.
+   */
+  'timer.vibration': boolean;
 }
 
 export type KvKey = keyof KvSchema;
