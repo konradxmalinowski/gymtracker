@@ -512,6 +512,68 @@ Commit: `chore: prepare production release builds and store submission assets`
 
 ---
 
+## P17 - Daily goals and reminders
+
+**Goal:** user-defined daily goals and reminders, independent of workout state and the
+first schema change to ship since P2's original migration.
+
+Scope: new feature module `features/daily-goals/` (a leaf in the section 9.1
+dependency graph - depends on nothing else, not even `exercise-library`, since goals
+are explicitly independent of training days per the product brief); its own migration
+`002_daily_goals.ts` implementing `daily_goal`, `daily_goal_entry` and
+`daily_reminder` from `docs/ARCHITECTURE.md` section 7.12 - unlike every other
+post-MVP phase, whose tables already existed in P2's single `001_initial.ts`
+migration, this phase's schema does not exist yet and has to be migrated for real;
+`DailyGoalRepository` and `DailyReminderRepository` on the same
+`BaseSqliteRepository` foundation every other feature repository uses;
+`DailyGoalService`/`DailyReminderService`, Zod-validated, the only door into the
+repositories from presentation; `services/notifications/NotificationScheduler`,
+finally implemented per ADR-0016 with `daily-goals` as its first real consumer; the
+daily-view screen (`app/goals/index.tsx`) showing only today's weekday-filtered active
+goals with quick complete/increment/decrement/add-progress actions requiring no
+navigation into configuration; goal configuration screens
+(`app/goals/manage/index.tsx`, `create.tsx`, `edit/[goalId].tsx`) covering
+create/edit/delete/enable/disable/reorder across the three goal types (boolean,
+counter, numeric) with per-goal weekday selection and an icon picker; a reminders
+configuration screen (`app/goals/manage/reminders.tsx`) for both per-goal and
+standalone reminders, scheduled or interval, with their own weekday configuration; a
+quick numeric/counter progress-entry modal (`app/(modals)/goal-progress-entry.tsx`),
+mirroring the existing `body-metric-entry.tsx` pattern; a `TodaysGoalsCard` on Home
+opening the daily view as the feature's only navigation entry point (no sixth tab, per
+`docs/ARCHITECTURE.md` section 10.2); and the weekday-bitmask, derived-completion, and
+today-only-interval-reminder scheduling strategy from ADR-0017.
+
+Acceptance: a goal configured for Tuesday/Thursday/Saturday/Sunday does not appear on
+the daily view on any other day; completing a boolean goal, incrementing a counter
+goal, and adding progress to a numeric goal all update the same day's
+`daily_goal_entry` row without creating a duplicate (the `(goal_id, local_date)`
+unique index enforces this); a new calendar day never overwrites a previous day's
+entry - yesterday's progress is still queryable after midnight; disabling a goal
+removes it from the daily view immediately but keeps its history intact; deleting a
+goal degrades any reminder pointing at it to standalone rather than deleting the
+reminder; a scheduled reminder fires at its configured time on an active weekday and
+not on an inactive one; an interval reminder re-arms correctly across an app
+foreground and a full process restart, scheduling only the remaining occurrences for
+the current day and never a long-lived repeating trigger (ADR-0017); repository tests
+cover every constraint in section 7.12, including the `goal_type`/`target_value` CHECK
+and the `reminder_type` scheduled/interval CHECK.
+
+Commit: `feat: add daily goals and reminders with configurable schedules and local notifications`
+
+Open decisions (require sign-off before or during implementation, not resolved by this
+documentation pass):
+- The curated Ionicons subset available for `daily_goal.icon`/`daily_reminder.icon` -
+  not chosen; deferred to P17's own implementation-time Step 0.
+- The quick-adjust increment granularity for counter/numeric goals - a fixed "+1" step,
+  or a per-goal-configurable one. The schema does not block either choice; deferred to
+  P17's own implementation-time UI planning.
+- The exact route file naming within `app/goals/**` beyond what is proposed in
+  `docs/ARCHITECTURE.md` sections 9 and 10.1 is a best-effort match to the
+  `exercises/` (`create.tsx`, `edit/[id].tsx`) precedent, not a direct match to any
+  single existing feature - flagged for review rather than treated as final.
+
+---
+
 ## Prioritized backlog (post-1.0)
 
 **Should have**
@@ -525,6 +587,7 @@ Commit: `chore: prepare production release builds and store submission assets`
 | Full Polish UI localization (D-11) | Infrastructure lands in P1; this is the translation catalog plus a language setting | S |
 | Biometric app lock (D-08) | Progress photos and bodyweight are personal | S |
 | Rest-day and deload awareness in the streak | The current streak punishes programmed rest | S |
+| Migrate rest-timer's notification wrapper onto the shared `NotificationScheduler` (ADR-0016) | Two independent local-notification code paths (rest-timer's own P7 wrapper vs. daily-goals' P17 shared service) is an accepted, tracked inconsistency, not a permanent one | S |
 
 **Could have**
 

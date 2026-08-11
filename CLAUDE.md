@@ -291,6 +291,18 @@ low-severity, non-blocking notes (a `setSupersetGroup` update missing a
 service layer, not exploitable since every field it writes is either an id or a bound
 numeric column with no free text). No new npm dependency was added this phase.
 
+**Documentation-only addition (2026-08-11):** `daily-goals` is a new, twelfth feature
+added to the roadmap as `P17 - Daily goals and reminders` (`docs/ROADMAP.md`),
+architecture-planned in `docs/ARCHITECTURE.md` section 2.1 (FR-27..FR-30), section
+7.12 (schema - `daily_goal`, `daily_goal_entry`, `daily_reminder`), sections 9/9.1
+(folder structure, dependency graph) and section 10 (navigation), plus
+`docs/adr/0016-shared-notification-scheduler.md` and
+`docs/adr/0017-daily-goal-reminder-scheduling.md`. As of this update it is
+documentation and architecture planning only - no `features/daily-goals/` directory,
+no `app/goals/` routes, no `services/notifications/` implementation, and no
+`002_daily_goals.ts` migration exist in this repo yet. A future implementing session
+starts from those documents, not from any code.
+
 ## Product
 
 Offline-only React Native/Expo workout logging app. No backend, no accounts, no
@@ -386,10 +398,14 @@ item, non-blocking).
   called by it. Inverting this creates a cycle.
 - `statistics` depends only on read models.
 - `data-transfer` depends on everything and is built last.
+- `daily-goals` is also a leaf, deliberately isolated: no dependency on `plans`,
+  `workout-logging`, or `exercise-library` - goals are user-defined and must not be
+  tied to training days or workout state. `home` is its only dependent, via a summary
+  card (P17, documentation-only so far - see "Status" above).
 
-Eleven features total: `onboarding`, `profile`, `exercise-library`, `plans`,
+Twelve features total: `onboarding`, `profile`, `exercise-library`, `plans`,
 `workout-logging`, `rest-timer`, `records`, `statistics`, `body-metrics`,
-`calendar`, `data-transfer`.
+`calendar`, `data-transfer`, `daily-goals`.
 
 ## Data layer (sections 7-8)
 
