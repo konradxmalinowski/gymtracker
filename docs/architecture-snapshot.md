@@ -1,5 +1,5 @@
 ---
-snapshot_commit: 141d884cfe557e750fb03ee2e1f0448722ff521b
+snapshot_commit: 4e59f18b037b74e226b41b3174d7d693bdf72aaa
 generated_from: CLAUDE.md, docs/ARCHITECTURE.md, docs/ROADMAP.md, docs/adr/*, docs/PRODUCT-BRIEF.md
 ---
 
@@ -10,22 +10,24 @@ Condensed synthesis for orchestration use. Full detail lives in docs/ARCHITECTUR
 needs verification, this file is a pointer, not a replacement.
 
 Note on `snapshot_commit`: this points at the working-tree HEAD at the time this file
-was regenerated (the tip of `feat/p6-workout-logging` before that branch's own P6
-commits, including this file's own update, land). It is therefore identical to the
-commit `main` was already at before P6 started - re-snapshot after the commit(s) that
-include this file's P6 update actually land, if the exact hash matters for a later
-diff. Same caveat this file already carried for `feat/p5-workout-plans` before its
-commit landed.
+was regenerated (the tip of `feat/p7-rest-timer` before that branch's own P7 commits,
+including this file's own update, land). It is therefore identical to the commit
+`main` was already at before P7 started - re-snapshot after the commit(s) that include
+this file's P7 update actually land, if the exact hash matters for a later diff. Same
+caveat this file already carried for `feat/p6-workout-logging` before its commit
+landed, and `feat/p5-workout-plans` before that.
 
 ## Status
 
 P0 (project foundation), P1 (design system/UI primitives), P2 (persistence
 foundation), P3 (onboarding, profile and core settings), P4 (exercise library), P5
-(workout plans), and P6 (workout logging) are complete and committed or ready to
-commit. `onboarding`, `profile`, `exercise-library`, `plans`, and `workout-logging`
-are the first five features with real implementations; the other six (`rest-timer`,
-`records`, `statistics`, `body-metrics`, `calendar`, `data-transfer`) remain empty
-skeletons awaiting their phase. The app boots for real as of P3, and as of P4 also
+(workout plans), P6 (workout logging), and P7 (rest timer) are complete and committed
+or ready to commit. `onboarding`, `profile`, `exercise-library`, `plans`,
+`workout-logging`, and `rest-timer` are the first six features with real
+implementations (`rest-timer` owns no database table and therefore no repository -
+see below); the other five (`records`, `statistics`, `body-metrics`, `calendar`,
+`data-transfer`) remain empty skeletons awaiting their phase. The app boots for real
+as of P3, and as of P4 also
 seeds the exercise catalog on every boot: `app/_layout.tsx` opens the database, runs
 migrations, runs `database/seed/runSeed()` (idempotent), builds the `AppContainer`,
 holds the splash screen until the profile query resolves, then gates to
@@ -113,6 +115,44 @@ skip) clean, `expo export --platform ios` used again as the build-verification p
 security review clean bar two low, non-blocking notes
 (`reports/security-2026-08-07-p6.md`). No new npm dependency.
 
+Rest timer (P7): `RestTimerBar`'s slot, omitted from `ActiveWorkoutScreen` since P6,
+is populated. `resolveRestSeconds`/`supersetRestRule` (`features/rest-timer/domain/`)
+are pure calculators - the three-tier rest-duration precedence (exercise override,
+plan day, global default) and D-03/ADR-0006's superset skip rule - both fast-check
+property tested. `RestTimerNotificationService` schedules `expo-notifications` against
+an absolute deadline (never a relative delay/JS timer, R-04), requests permission
+lazily on first real use, and never throws. `stores/restTimerStore.ts` is the app's
+second Zustand store holding real timer state (`deadlineAt`/`totalSeconds`/`now`,
+recomputed on every `tick()`, never decremented - "recompute, never accumulate").
+`SqliteWorkoutSessionRepository.startFromPlanDay`/`addExercise` were fixed to seed
+`rest_seconds_override` through `resolveRestSeconds` instead of a bare/null plan-day
+value - a pre-existing gap found while scoping this phase, not a P7 regression; a new
+`setExerciseRestOverride` method (mirroring `setExerciseNote`) supports tap-to-adjust
+persisting to the session; `ActiveStatePatch` gained the `timerDeadlineAt`/
+`timerTotalSeconds`/`timerNotificationId` fields P6 had not actually added despite the
+plan's brief assuming otherwise. The notification's deep link
+(`gymtracker://workout/active`) is wired end-to-end in `app/_layout.tsx` (warm
+listener + cold-start read). `services/haptics/timerFinished()` got its first real
+caller; `hooks/useAppState.ts` is the first occupant of the reserved root `hooks/`
+folder. `services/container.ts` has zero diff this phase - `rest-timer` owns no table
+and stays a dependency-free leaf per section 9.1, called by `workout-logging` rather
+than depending on it. Verification: typecheck/lint/Jest (92 suites, 851 tests, 1
+pre-existing skip) clean, `expo export --platform ios` used again as the
+build-verification proxy, security review clean bar one informational note carried
+forward from P6 (`reports/security-2026-08-11-p7.md`). Accessibility review
+(`reports/accessibility-2026-08-11-p7.md`, run by a general-purpose agent standing in
+for the unregistered accessibility-agent role) caught one blocking finding -
+`RestTimerBar` collapsed its decrease/countdown/increase controls into one inert
+accessibility node via a `SwipeableRow` misuse - fixed within the phase (`SwipeableRow`
+now wraps only the countdown control) and covered by a new RNTL regression test. A
+separate code-review pass fixed two correctness bugs before commit: finish/discard no
+longer leaves a running timer and its OS notification behind, and a `saveActiveState`
+write-ordering race (guarded by a new monotonic operation-sequence check) no longer
+lets a stale, already-cancelled timer overwrite a newer one. Deliberately out of
+scope: `timer.sound` is a working, persisted setting with no audio-playback backend
+wired to it (no sound-library dependency exists in this project). No new npm
+dependency.
+
 ## Product
 
 Offline-only React Native/Expo workout logging app. No backend, no accounts, no cloud.
@@ -167,8 +207,9 @@ feature: `onboarding`, `profile`, `exercise-library`, `plans`, `workout-logging`
 each with components/hooks/screens/services/domain/repository/types/index.ts;
 `onboarding` and `profile` are populated as of P3, `exercise-library` as of P4,
 `plans` as of P5 (the app's first aggregate-root feature repository - see below),
-`workout-logging` as of P6 (its second, see below), the rest are still empty),
-`hooks/`, `navigation/` (`routes.ts` - typed route helpers per
+`workout-logging` as of P6 (its second, see below), `rest-timer` as of P7 (a leaf with
+no repository - see below), the rest are still empty), `hooks/` (its first occupant,
+`useAppState.ts`, landed in P7), `navigation/` (`routes.ts` - typed route helpers per
 section 10.2, added P3), `repositories/` (shared infra: `contracts/`, `base/`,
 `mapping/`, `query/`, plus the cross-cutting `settings/` sibling), `services/`
 (`container.ts` composition root, `files/`,
@@ -239,8 +280,11 @@ exist yet (ADR-0004).
 smaller than ARCHITECTURE.md section 8.4's full shape - `profileRepository`/
 `profileService` (P3), `exerciseRepository`/`exerciseService` (P4),
 `planRepository`/`planService` (P5), and `sessionRepository`/`sessionService` (P6)
-are the first four feature repository pairs to land; the rest land one at a time
-from P7 onward, each phase extending `AppContainer` rather than replacing it.
+are the first four feature repository pairs to land; P7 (rest-timer) added none - it
+owns no database table and stays a dependency-free leaf, called by `workout-logging`
+rather than needing its own container entry - so this stays a four-pair container
+with the rest landing one at a time from P8 onward, each phase extending
+`AppContainer` rather than replacing it.
 `SqliteExerciseRepository` is the first real consumer of `BaseSqliteRepository`
 beyond `SqliteProfileRepository`, and maintains the `exercise_fts` FTS5 index
 incrementally per single-row write (contentless-table `'delete'` special command
