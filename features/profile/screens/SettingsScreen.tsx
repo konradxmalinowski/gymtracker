@@ -42,6 +42,12 @@ export function SettingsScreen() {
             }
           />
           <ListRow
+            title={t('profileSettings.timersRowTitle')}
+            onPress={() => router.push(routes.profileSettings.timers())}
+            showChevron
+            testID="settings-timers-row"
+          />
+          <ListRow
             title={t('profileSettings.aboutRowTitle')}
             onPress={() => router.push(routes.profileSettings.about())}
             showChevron

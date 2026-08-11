@@ -16,6 +16,8 @@ import { Uuid7IdGenerator } from '@/services/id';
 
 const START = Date.UTC(2026, 7, 6, 18, 0, 0);
 const SCHEMA_PATH = join(__dirname, '..', '..', '..', '..', 'database', 'schema.sql');
+/** Matches `timer.defaultRestSeconds`'s own settings default - stands in for the value `WorkoutSessionService` would read and pass down in real usage. */
+const DEFAULT_REST_SECONDS = 90;
 
 function setup() {
   const db = createTestDatabase();
@@ -117,8 +119,8 @@ describe('SqliteWorkoutSessionRepository - overlapping starts (ux_session_single
     const planDayId = await insertPlanDay(db, ['ex-1', 'ex-2']);
 
     const results = await Promise.allSettled([
-      repo.startFromPlanDay(planDayId, START),
-      repo.startFromPlanDay(planDayId, START),
+      repo.startFromPlanDay(planDayId, START, DEFAULT_REST_SECONDS),
+      repo.startFromPlanDay(planDayId, START, DEFAULT_REST_SECONDS),
     ]);
 
     expect(settledNames(results)).toEqual(['fulfilled', 'SessionAlreadyInProgressError']);
@@ -139,7 +141,9 @@ describe('SqliteWorkoutSessionRepository - overlapping starts (ux_session_single
     const planDayId = await insertPlanDay(db, ['ex-1', 'ex-2']);
     const existing = await repo.startEmpty(START);
 
-    const error = await repo.startFromPlanDay(planDayId, START + 1000).catch((e: unknown) => e);
+    const error = await repo
+      .startFromPlanDay(planDayId, START + 1000, DEFAULT_REST_SECONDS)
+      .catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(SessionAlreadyInProgressError);
     expect((error as SessionAlreadyInProgressError).existingSessionId).toBe(existing.id);
@@ -163,7 +167,7 @@ describe('SqliteWorkoutSessionRepository - mutations arriving after the row is g
     const context = setup();
     await insertExercise(context.db, 'ex-1');
     const session = await context.repo.startEmpty(START);
-    const exercise = await context.repo.addExercise(session.id, 'ex-1');
+    const exercise = await context.repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     const set = await context.repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
     return { ...context, session, exercise, set };
   }
@@ -259,7 +263,7 @@ describe('SqliteWorkoutSessionRepository - crash recovery across a real connecti
     await insertExercise(beforeCrash, 'ex-3', 'Curl');
     const planDayId = await insertPlanDay(beforeCrash, ['ex-1', 'ex-2', 'ex-3']);
 
-    const session = await repo.startFromPlanDay(planDayId, START);
+    const session = await repo.startFromPlanDay(planDayId, START, DEFAULT_REST_SECONDS);
     const [bench, row, curl] = session.exercises;
 
     clock.advance(60_000);
@@ -350,7 +354,7 @@ describe('SqliteWorkoutSessionRepository - crash recovery across a real connecti
     const repo = new SqliteWorkoutSessionRepository({ db: beforeCrash, clock, idGenerator });
     await insertExercise(beforeCrash, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     const set = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
     await repo.completeSet(set.id, {});
     await repo.finish(session.id, START + 60_000);

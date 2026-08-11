@@ -13,10 +13,25 @@
  */
 import { z } from 'zod';
 
+/**
+ * `timer.defaultRestSeconds`'s bounds, named and exported so every other
+ * place a rest-duration value needs the same [5, 1800] range - P7's
+ * per-exercise `session_exercise.rest_seconds_override` validation
+ * (`WorkoutSessionService.setExerciseRestOverride`) and the rest-timer bar's
+ * own delta-adjust clamp (`features/workout-logging/hooks/useRestTimer.ts`)
+ * - imports the same two numbers instead of each re-declaring its own copy
+ * that a future bound change could silently desync from this one.
+ */
+export const REST_SECONDS_MIN = 5;
+export const REST_SECONDS_MAX = 1800;
+
 const settingsSchemaDefinition = {
   'units.weight': { schema: z.enum(['kg', 'lb']), default: 'kg' },
   'units.length': { schema: z.enum(['cm', 'in']), default: 'cm' },
-  'timer.defaultRestSeconds': { schema: z.number().int().min(5).max(1800), default: 90 },
+  'timer.defaultRestSeconds': {
+    schema: z.number().int().min(REST_SECONDS_MIN).max(REST_SECONDS_MAX),
+    default: 90,
+  },
   'timer.sound': { schema: z.boolean(), default: true },
   'timer.vibration': { schema: z.boolean(), default: true },
   'timer.notification': { schema: z.boolean(), default: true },

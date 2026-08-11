@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 
 import { useContainer } from '@/services/container';
 import { useActiveWorkoutStore } from '@/stores/activeWorkoutStore';
+import { useRestTimerStore } from '@/stores/restTimerStore';
 
 /**
  * ADR-0008 rule 1: "the store is hydrated from SQLite on mount, and only on
@@ -18,9 +19,18 @@ import { useActiveWorkoutStore } from '@/stores/activeWorkoutStore';
  * same way any other write failure is, by whichever mutation eventually
  * notices `session` is `null` and shows a toast, not by this hook inventing
  * its own error UI.
+ *
+ * P7: also restores `restTimerStore`'s deadline from
+ * `activeState.timerDeadlineAt` when one survived a kill/relaunch - the
+ * mechanism `plans/2026-08-08-p7-rest-timer.md`'s "Crash/kill recovery"
+ * section calls for. `setDeadline` with a past `deadlineAt` is not a special
+ * case: `selectRemainingSeconds`/`selectIsExpired`'s own zero-clamp already
+ * renders that as "expired" the instant `RestTimerBar` reads it, matching
+ * "shows the timer expired, not still counting" from this phase's
+ * acceptance criteria.
  */
 export function useActiveSessionHydration(): void {
-  const { sessionService } = useContainer();
+  const { sessionService, clock } = useContainer();
   const hasStarted = useRef(false);
 
   useEffect(() => {
@@ -37,10 +47,20 @@ export function useActiveSessionHydration(): void {
       }
       useActiveWorkoutStore.getState().setSession(snapshot?.session ?? null);
       useActiveWorkoutStore.getState().markHydrated();
+
+      const { timerDeadlineAt, timerTotalSeconds } = snapshot?.session.activeState ?? {
+        timerDeadlineAt: null,
+        timerTotalSeconds: null,
+      };
+      if (timerDeadlineAt !== null) {
+        useRestTimerStore
+          .getState()
+          .setDeadline(timerDeadlineAt, timerTotalSeconds ?? 0, clock.now());
+      }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [sessionService]);
+  }, [sessionService, clock]);
 }
