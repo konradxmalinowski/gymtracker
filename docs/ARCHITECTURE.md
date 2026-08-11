@@ -77,6 +77,7 @@ and the data model.
 | FR-28 | Daily view shows only today's active goals with quick complete/increment/decrement/add-progress actions requiring no navigation into configuration. | P17 |
 | FR-29 | Daily goal progress is persisted per calendar day, separately from goal configuration, so history is never overwritten - modeled to support future streaks, completion-rate and weekly/monthly statistics. | P17 |
 | FR-30 | Optional reminders, per-goal or standalone, as scheduled (time-of-day) or interval notifications, respecting their own weekday configuration. | P17 |
+| FR-31 | Interactive Done/Not done actions on every reminder notification, answerable without opening the app; a goal-linked reminder's "Done" action writes the same `daily_goal_entry` the in-app Daily View would; a per-reminder response-statistics view shows done/not-done/ignored counts. | P17 |
 
 ### 2.2 Non-functional requirements
 
@@ -974,6 +975,16 @@ CREATE TABLE daily_reminder (
     CHECK ((reminder_type = 'scheduled' AND time_of_day IS NOT NULL AND interval_minutes IS NULL)
         OR (reminder_type = 'interval' AND interval_minutes IS NOT NULL AND time_of_day IS NULL))
 );
+
+CREATE TABLE daily_reminder_response (
+    id           TEXT PRIMARY KEY,
+    reminder_id  TEXT NOT NULL REFERENCES daily_reminder(id) ON DELETE CASCADE,
+    local_date   TEXT NOT NULL,
+    response     TEXT NOT NULL CHECK (response IN ('done','not_done')),
+    responded_at INTEGER NOT NULL,
+    created_at   INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX ux_daily_reminder_response_reminder_date ON daily_reminder_response (reminder_id, local_date);
 ```
 
 `daily_goal` is the recurring configuration/template row (one per user-defined goal,
@@ -1010,6 +1021,53 @@ No `notification_id`/scheduled-instance column is needed on `daily_reminder`, un
 re-arm-on-foreground scheduling strategy (ADR-0017) means the OS-scheduled instance is
 always ephemeral and re-derivable from the reminder's own config plus "today," never a
 piece of state that has to survive independently.
+
+Every reminder notification carries two OS-level action buttons - "Zrealizowane" (Done)
+and "Nie" (Not done) - answerable without opening the app, uniformly across both
+`reminder_type` values and regardless of whether the reminder is goal-linked or
+standalone. `daily_reminder_response` is what backs them: a response **log**, one row
+per `(reminder_id, local_date)` - a third instance of the same template-vs-instance
+split `plan`/`plan_day` vs. `workout_session` and `daily_goal` vs. `daily_goal_entry`
+already use in this schema, this time for "did the user respond to today's reminder."
+The unique index means only the latest tap per reminder per day is kept - if the user
+taps "Nie" then changes their mind and taps the notification's "Zrealizowane" action
+again before it's dismissed (both actions likely stay visible on the same notification
+until it's cleared), the response record reflects whichever was last, not a history of
+flip-flops - that granularity is not a goal here.
+
+"Never responded" (the notification was swiped away, ignored, or simply never seen
+because the app happened to be opened and the goal completed through the normal Daily
+View instead) is deliberately **not** a stored state - it's the absence of a
+`daily_reminder_response` row for that `(reminder_id, local_date)`, the same
+"absence means not-yet-interacted-with" convention `daily_goal_entry` already uses. A
+stats view computes "ignored" as `(active days in range) - (rows present in range)`,
+not from a stored third enum value.
+
+`ON DELETE CASCADE` on `reminder_id` (not `SET NULL`) is deliberate and different from
+`daily_reminder.goal_id`'s own `SET NULL` above - a reminder's response history has no
+meaning independent of the reminder that generated it (unlike a goal surviving its
+reminder's deletion), so deleting a reminder should take its response log with it, not
+orphan it.
+
+For a goal-linked reminder (`daily_reminder.goal_id` is not null), tapping
+"Zrealizowane" writes the same `daily_goal_entry` row the in-app Daily View would write
+for that goal/date - one source of truth, not a separate parallel completion state. For
+a `boolean` goal this means `progress_value = 1`. For `counter`/`numeric` goals, since a
+notification action button has no way to specify a partial amount, tapping
+"Zrealizowane" sets `progress_value = daily_goal.target_value` (marks it fully complete
+in one tap) rather than incrementing by some assumed step - this is the chosen
+behavior, not an ambiguity, since a notification button genuinely cannot collect a
+numeric quantity from the user. Tapping "Nie" does **not** write anything to
+`daily_goal_entry` (leaving it at its default "not yet interacted with" state, same as
+if the user never opened the app that day) - it only records the reminder response
+itself. For a standalone reminder (`goal_id IS NULL`), there is no goal to write
+progress to either way - "Zrealizowane"/"Nie" only ever affect the reminder's own
+response log.
+
+This table is also what backs the per-reminder statistics view - a screen showing
+counts/rates of done vs. not-done vs. ignored over a date range, the same kind of read
+`daily_goal_entry` already enables for goal-level history, just scoped to reminder
+engagement instead of goal progress.
 
 ---
 

@@ -540,8 +540,17 @@ standalone reminders, scheduled or interval, with their own weekday configuratio
 quick numeric/counter progress-entry modal (`app/(modals)/goal-progress-entry.tsx`),
 mirroring the existing `body-metric-entry.tsx` pattern; a `TodaysGoalsCard` on Home
 opening the daily view as the feature's only navigation entry point (no sixth tab, per
-`docs/ARCHITECTURE.md` section 10.2); and the weekday-bitmask, derived-completion, and
-today-only-interval-reminder scheduling strategy from ADR-0017.
+`docs/ARCHITECTURE.md` section 10.2); the weekday-bitmask, derived-completion, and
+today-only-interval-reminder scheduling strategy from ADR-0017; interactive
+"Zrealizowane"/"Nie" action buttons on every reminder notification (both
+`reminder_type` values, goal-linked and standalone alike), backed by the new
+`daily_reminder_response` table (`docs/ARCHITECTURE.md` section 7.12) - a goal-linked
+reminder's "Zrealizowane" action writes the same `daily_goal_entry` row the Daily View
+would (full `target_value` for counter/numeric goals, since a notification button
+cannot collect a partial amount), "Nie" only logs the response; and a per-reminder
+statistics screen (`app/goals/manage/reminders/[reminderId]/stats.tsx`, matching the
+`app/goals/manage/reminders.tsx` naming already proposed above - not a direct precedent
+match, see "Open decisions") showing done/not-done/ignored counts over a date range.
 
 Acceptance: a goal configured for Tuesday/Thursday/Saturday/Sunday does not appear on
 the daily view on any other day; completing a boolean goal, incrementing a counter
@@ -554,9 +563,16 @@ goal degrades any reminder pointing at it to standalone rather than deleting the
 reminder; a scheduled reminder fires at its configured time on an active weekday and
 not on an inactive one; an interval reminder re-arms correctly across an app
 foreground and a full process restart, scheduling only the remaining occurrences for
-the current day and never a long-lived repeating trigger (ADR-0017); repository tests
-cover every constraint in section 7.12, including the `goal_type`/`target_value` CHECK
-and the `reminder_type` scheduled/interval CHECK.
+the current day and never a long-lived repeating trigger (ADR-0017); tapping
+"Zrealizowane" on a goal-linked reminder's notification updates the same day's
+`daily_goal_entry` the Daily View would show (full `target_value` for counter/numeric
+goals), without opening the app; tapping "Nie" does not write a `daily_goal_entry` row;
+a standalone reminder's actions only ever affect its own response log; a second tap
+on the same reminder/day overwrites the previous response rather than accumulating a
+history; and a reminder's stats view reflects done/not-done/ignored counts correctly
+for a generated history; repository tests cover every constraint in section 7.12,
+including the `goal_type`/`target_value` CHECK, the `reminder_type` scheduled/interval
+CHECK, and the `daily_reminder_response.response` CHECK.
 
 Commit: `feat: add daily goals and reminders with configurable schedules and local notifications`
 
@@ -570,7 +586,24 @@ documentation pass):
 - The exact route file naming within `app/goals/**` beyond what is proposed in
   `docs/ARCHITECTURE.md` sections 9 and 10.1 is a best-effort match to the
   `exercises/` (`create.tsx`, `edit/[id].tsx`) precedent, not a direct match to any
-  single existing feature - flagged for review rather than treated as final.
+  single existing feature - flagged for review rather than treated as final. The
+  per-reminder stats route proposed above (`app/goals/manage/reminders/[reminderId]/
+  stats.tsx`) is the same kind of best-effort match, not a direct precedent either.
+- Background/killed-app reliability of notification action responses. Expo
+  Notifications' response listener (`addNotificationResponseReceivedListener`/
+  `getLastNotificationResponseAsync`, the same mechanism P7's rest-timer already uses
+  for its simple notification-tap deep link) is confirmed to fire when the user's tap
+  brings the app to the foreground, but whether an action-button tap can be processed
+  reliably when the app is fully killed (not just backgrounded) - without the user
+  ever seeing the UI open - varies by platform and Expo's managed-workflow
+  capabilities. Per this project's own conventions for unverifiable-without-a-device
+  claims (see `CLAUDE.md`'s "Known gaps" section), this is not something to assert
+  works from documentation alone - it needs on-device verification at P17's own
+  implementation time, in the same spirit as ADR-0017's "never rely on a long-lived
+  background primitive" caution. If killed-app delivery turns out unreliable, the
+  fallback is that the action still works whenever the app is foregrounded or
+  backgrounded (not killed), and the notification body itself remains tappable to
+  open the app normally regardless.
 
 ---
 
