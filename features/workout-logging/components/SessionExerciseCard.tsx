@@ -3,10 +3,13 @@ import { Card, Divider } from '@/components/ui';
 import {
   assignSetDisplayNumbers,
   orderSetsForDisplay,
+  useProgressionSuggestion,
   type SessionExercise,
   type UpdateSetPatch,
   type WorkoutSet,
 } from '@/features/workout-logging';
+import { ProgressionHint, type PersonalRecord } from '@/features/records';
+import { useContainer } from '@/services/container';
 import { space } from '@/theme/tokens';
 
 import { AddSetButton } from './AddSetButton';
@@ -19,6 +22,8 @@ export interface SessionExerciseCardProps {
   canMoveUp: boolean;
   canMoveDown: boolean;
   focusedSetId: string | null;
+  /** P8: the most recently completed set's new PRs (`activeWorkoutStore.latestPR`), or `null` when nothing to show. Threaded down to whichever `SetRow` matches `setId`, mirroring how `focusedSetId` already flows through this same prop chain. */
+  latestPR: { setId: string; records: readonly PersonalRecord[] } | null;
   onMoveUp: () => void;
   onMoveDown: () => void;
   onRemove: () => void;
@@ -48,6 +53,7 @@ export function SessionExerciseCard({
   canMoveUp,
   canMoveDown,
   focusedSetId,
+  latestPR,
   onMoveUp,
   onMoveDown,
   onRemove,
@@ -65,6 +71,37 @@ export function SessionExerciseCard({
   const orderedSets = orderSetsForDisplay(exercise.sets);
   const displayNumbers = assignSetDisplayNumbers(exercise.sets);
 
+  const { exerciseHistoryRepository, settings } = useContainer();
+  const {
+    previousPerformance,
+    suggestion,
+    isPending: isHistoryPending,
+  } = useProgressionSuggestion(
+    { exerciseHistoryRepository, settings },
+    {
+      exerciseId: exercise.exerciseId,
+      primaryMuscleBodyPart: exercise.exercise.bodyPart,
+      equipmentSlug: exercise.exercise.equipmentSlug,
+      beforeSessionId: exercise.sessionId,
+    },
+  );
+
+  // The apply affordance needs somewhere to write the suggestion to - the
+  // first not-yet-completed set, the same "what am I about to do next"
+  // reading a lifter would use. `undefined` (not a no-op handler) when there
+  // is none, so `ProgressionHint` hides the affordance instead of rendering
+  // an inert tap target (this phase's own brief: "disable or hide ... rather
+  // than doing nothing silently on tap").
+  const nextIncompleteSet = exercise.sets.find((candidate) => !candidate.isCompleted) ?? null;
+  const handleApplySuggestion =
+    nextIncompleteSet && suggestion && suggestion.kind !== 'first_time'
+      ? () =>
+          onUpdateSet(nextIncompleteSet.id, {
+            weightKg: suggestion.weightKg,
+            reps: suggestion.reps,
+          })
+      : undefined;
+
   return (
     <Card variant="elevated" padding={4} testID={testID}>
       <Column gap={3}>
@@ -79,7 +116,17 @@ export function SessionExerciseCard({
           testID={testID ? `${testID}-header` : undefined}
         />
 
-        <PreviousPerformancePanel testID={testID ? `${testID}-previous-performance` : undefined} />
+        <PreviousPerformancePanel
+          previousPerformance={previousPerformance}
+          isPending={isHistoryPending}
+          testID={testID ? `${testID}-previous-performance` : undefined}
+        />
+
+        <ProgressionHint
+          suggestion={suggestion}
+          onApply={handleApplySuggestion}
+          testID={testID ? `${testID}-progression-hint` : undefined}
+        />
 
         {orderedSets.length > 0 ? (
           <Column style={{ marginHorizontal: -space[2] }}>
@@ -88,6 +135,8 @@ export function SessionExerciseCard({
               if (!displayNumber) {
                 return null;
               }
+              const prRecords: readonly PersonalRecord[] | undefined =
+                latestPR?.setId === workoutSet.id ? latestPR.records : undefined;
               return (
                 <Column key={workoutSet.id}>
                   {index > 0 ? <Divider /> : null}
@@ -95,6 +144,7 @@ export function SessionExerciseCard({
                     set={workoutSet}
                     displayNumber={displayNumber}
                     isFocused={focusedSetId === workoutSet.id}
+                    prRecords={prRecords}
                     onFocus={onFocusSet}
                     onComplete={onCompleteSet}
                     onUncomplete={onUncompleteSet}

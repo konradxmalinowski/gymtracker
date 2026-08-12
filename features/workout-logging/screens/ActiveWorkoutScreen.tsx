@@ -37,6 +37,9 @@ import {
   useUpdateSet,
 } from '../hooks/useSetMutations';
 
+/** How long a `PRBadge` stays visible before `activeWorkoutStore.latestPR` self-clears - long enough to notice, short enough that it reads as "just happened" rather than a permanent tag on that set. */
+const LATEST_PR_DISPLAY_MS = 4000;
+
 function findSet(exercises: readonly SessionExercise[], setId: string | null): WorkoutSet | null {
   if (!setId) {
     return null;
@@ -82,6 +85,7 @@ export function ActiveWorkoutScreen() {
   const isHydrated = useActiveWorkoutStore((state) => state.isHydrated);
   const focusedSetId = useActiveWorkoutStore((state) => state.focusedSetId);
   const setFocusedSetId = useActiveWorkoutStore((state) => state.setFocusedSetId);
+  const latestPR = useActiveWorkoutStore((state) => state.latestPR);
 
   const [exitSheetVisible, setExitSheetVisible] = useState(false);
   const [discardConfirmVisible, setDiscardConfirmVisible] = useState(false);
@@ -108,6 +112,21 @@ export function ActiveWorkoutScreen() {
     });
     return () => subscription.remove();
   }, []);
+
+  // P8: `latestPR` is a one-shot celebratory badge, not persisted state - it
+  // clears itself a few seconds after appearing rather than staying attached
+  // to that set indefinitely. Keyed on `latestPR` itself (not just its
+  // presence) so completing a *different* set that also earns a PR restarts
+  // the timer for the new badge instead of the old timeout firing early.
+  useEffect(() => {
+    if (!latestPR) {
+      return;
+    }
+    const timeout = setTimeout(() => {
+      useActiveWorkoutStore.getState().clearLatestPR();
+    }, LATEST_PR_DISPLAY_MS);
+    return () => clearTimeout(timeout);
+  }, [latestPR]);
 
   if (!isHydrated) {
     return (
@@ -221,6 +240,13 @@ export function ActiveWorkoutScreen() {
             onScroll={(event) => syncScrollOffset(event.nativeEvent.contentOffset.y)}
             scrollEventThrottle={250}
             contentContainerStyle={{ padding: space[4] }}
+            // `focusedSetId`/`latestPR` are read from closures inside
+            // `renderItem`, not from `data` itself - FlashList (like
+            // FlatList) only re-renders a cell when the cell's own item
+            // reference or `extraData` changes, so without this a P8 PR
+            // badge (or the existing focus highlight) could go stale until
+            // some unrelated `data` change happened to also touch that row.
+            extraData={{ focusedSetId, latestPR }}
             renderItem={({ item: exercise, index }) => {
               const card = (
                 <SessionExerciseCard
@@ -228,6 +254,7 @@ export function ActiveWorkoutScreen() {
                   canMoveUp={index > 0}
                   canMoveDown={index < activeSession.exercises.length - 1}
                   focusedSetId={focusedSetId}
+                  latestPR={latestPR}
                   onMoveUp={() => moveExercise(index, -1)}
                   onMoveDown={() => moveExercise(index, 1)}
                   onRemove={() => removeExercise(exercise)}

@@ -7,6 +7,7 @@ import { Checkbox, Chip, NumberField, Text, TextField } from '@/components/ui';
 import { SwipeableRow, type SwipeableRowAction } from '@/components/gestures/SwipeableRow';
 import { PressScale } from '@/components/gestures/PressScale';
 import type { SetDisplayNumber, UpdateSetPatch, WorkoutSet } from '@/features/workout-logging';
+import { PRBadge, type PersonalRecord } from '@/features/records';
 import { t } from '@/i18n';
 import { color, radius, space } from '@/theme/tokens';
 
@@ -17,6 +18,8 @@ export interface SetRowProps {
   set: WorkoutSet;
   displayNumber: SetDisplayNumber;
   isFocused: boolean;
+  /** P8: this set's newly-earned PRs (`SessionExerciseCard`'s `latestPR` prop, matched by set id), `undefined` when this isn't the set that just earned one. */
+  prRecords?: readonly PersonalRecord[] | undefined;
   onFocus: (setId: string) => void;
   onComplete: (set: WorkoutSet) => void;
   onUncomplete: (setId: string) => void;
@@ -49,6 +52,7 @@ export function SetRow({
   set,
   displayNumber,
   isFocused,
+  prRecords,
   onFocus,
   onComplete,
   onUncomplete,
@@ -90,147 +94,174 @@ export function SetRow({
     ? t('workoutLogging.set.uncompleteAccessibilityLabelTemplate', { number: displayNumber.label })
     : t('workoutLogging.set.completeAccessibilityLabelTemplate', { number: displayNumber.label });
 
+  // P8's `PRBadge` is deliberately rendered as a sibling *outside*
+  // `SwipeableRow`'s single child rather than inside it (accessibility
+  // finding A11Y-P8-001). `SwipeableRow` clones its `accessible`/
+  // `accessibilityActions` props onto whatever single element it's given as
+  // `children` (see `attachAccessibilityActions` in
+  // `components/gestures/SwipeableRow.tsx`) - that's the exact same
+  // collapse-a-multi-control-child pattern P7's `RestTimerBar` fix already
+  // solved for this codebase (CLAUDE.md's P7 section), and the fix here is
+  // the same shape: keep the swipe gesture's target scoped to the row's own
+  // controls, and render the badge as an independent sibling below it so it
+  // isn't swallowed by that clone. `PRBadge` has no `onPress` and no swipe
+  // affinity of its own - it never needed to be inside the swipeable region.
   return (
-    <SwipeableRow leftAction={leftAction} rightAction={rightAction} testID={testID}>
-      <View
-        style={{
-          backgroundColor: isFocused ? color.surfaceElevated : 'transparent',
-          borderRadius: radius.md,
-        }}
-      >
-        <Row
-          gap={2}
-          align="center"
+    <View>
+      <SwipeableRow leftAction={leftAction} rightAction={rightAction} testID={testID}>
+        <View
           style={{
-            paddingVertical: space[2],
-            paddingHorizontal: space[2],
-            marginLeft: isDropSegment ? space[6] : 0,
+            backgroundColor: isFocused ? color.surfaceElevated : 'transparent',
+            borderRadius: radius.md,
           }}
         >
-          <PressScale
-            onPress={() => onFocus(set.id)}
-            accessibilityRole="button"
-            accessibilityLabel={t('workoutLogging.set.focusAccessibilityLabelTemplate', {
-              number: displayNumber.label,
-              type: setTypeLabel(set.setType),
-            })}
-            style={{ minWidth: 56, alignItems: 'flex-start' }}
-          >
-            <Column gap={1}>
-              <Text variant="numeric" color="primary">
-                {displayNumber.label}
-              </Text>
-              {isDropSegment ? (
-                <Text variant="caption" color="tertiary">
-                  {t('workoutLogging.set.dropLabel')}
-                </Text>
-              ) : (
-                <View
-                  style={{
-                    paddingHorizontal: space[1],
-                    borderRadius: radius.sm,
-                    backgroundColor: setTypeBadgeColor(set.setType),
-                    alignSelf: 'flex-start',
-                  }}
-                >
-                  <Text variant="caption" color="inverse" numberOfLines={1}>
-                    {setTypeLabel(set.setType)}
-                  </Text>
-                </View>
-              )}
-            </Column>
-          </PressScale>
-
-          <NumberField
-            value={weightDraft}
-            onChange={setWeightDraft}
-            precision={2}
-            min={0}
-            unitSuffix={t('workoutLogging.set.weightUnitSuffix')}
-            accessibilityLabel={t('workoutLogging.set.weightAccessibilityLabel')}
-            testID={testID ? `${testID}-weight` : undefined}
-          />
-          <NumberField
-            value={repsDraft}
-            onChange={setRepsDraft}
-            min={0}
-            max={1000}
-            accessibilityLabel={t('workoutLogging.set.repsAccessibilityLabel')}
-            testID={testID ? `${testID}-reps` : undefined}
-          />
-
-          <View style={{ marginLeft: 'auto' }}>
-            <Checkbox
-              value={set.isCompleted}
-              onValueChange={(next) => (next ? onComplete(set) : onUncomplete(set.id))}
-              accessibilityLabel={completeLabel}
-              testID={testID ? `${testID}-complete` : undefined}
-            />
-          </View>
-        </Row>
-
-        {expanded ? (
-          <Column
-            gap={3}
+          <Row
+            gap={2}
+            align="center"
             style={{
+              paddingVertical: space[2],
               paddingHorizontal: space[2],
-              paddingBottom: space[3],
               marginLeft: isDropSegment ? space[6] : 0,
             }}
           >
-            {!isDropSegment ? (
-              <Row gap={2} wrap>
-                {PICKABLE_SET_TYPES.map((type) => (
-                  <Chip
-                    key={type}
-                    label={setTypeLabel(type)}
-                    selected={set.setType === type}
-                    onPress={() => onUpdate(set.id, { setType: type })}
-                    size="sm"
-                    testID={testID ? `${testID}-type-${type}` : undefined}
-                  />
-                ))}
-              </Row>
-            ) : (
-              <Text variant="footnote" color="secondary">
-                {t('workoutLogging.set.dropSegmentLabel')}
-              </Text>
-            )}
+            <PressScale
+              onPress={() => onFocus(set.id)}
+              accessibilityRole="button"
+              accessibilityLabel={t('workoutLogging.set.focusAccessibilityLabelTemplate', {
+                number: displayNumber.label,
+                type: setTypeLabel(set.setType),
+              })}
+              style={{ minWidth: 56, alignItems: 'flex-start' }}
+            >
+              <Column gap={1}>
+                <Text variant="numeric" color="primary">
+                  {displayNumber.label}
+                </Text>
+                {isDropSegment ? (
+                  <Text variant="caption" color="tertiary">
+                    {t('workoutLogging.set.dropLabel')}
+                  </Text>
+                ) : (
+                  <View
+                    style={{
+                      paddingHorizontal: space[1],
+                      borderRadius: radius.sm,
+                      backgroundColor: setTypeBadgeColor(set.setType),
+                      alignSelf: 'flex-start',
+                    }}
+                  >
+                    <Text variant="caption" color="inverse" numberOfLines={1}>
+                      {setTypeLabel(set.setType)}
+                    </Text>
+                  </View>
+                )}
+              </Column>
+            </PressScale>
 
-            <Row gap={3} align="center">
-              <Text variant="footnote" color="secondary">
-                {t('workoutLogging.set.rpeAccessibilityLabel')}
-              </Text>
-              <NumberField
-                value={rpeDraft}
-                onChange={setRpeDraft}
-                min={1}
-                max={10}
-                precision={1}
-                accessibilityLabel={t('workoutLogging.set.rpeAccessibilityLabel')}
-                testID={testID ? `${testID}-rpe` : undefined}
-              />
-            </Row>
-
-            <TextField
-              label={t('workoutLogging.set.noteLabel')}
-              value={noteDraft}
-              onChangeText={setNoteDraft}
-              placeholder={t('workoutLogging.set.notePlaceholder')}
-              testID={testID ? `${testID}-note` : undefined}
+            <NumberField
+              value={weightDraft}
+              onChange={setWeightDraft}
+              precision={2}
+              min={0}
+              unitSuffix={t('workoutLogging.set.weightUnitSuffix')}
+              accessibilityLabel={t('workoutLogging.set.weightAccessibilityLabel')}
+              testID={testID ? `${testID}-weight` : undefined}
+            />
+            <NumberField
+              value={repsDraft}
+              onChange={setRepsDraft}
+              min={0}
+              max={1000}
+              accessibilityLabel={t('workoutLogging.set.repsAccessibilityLabel')}
+              testID={testID ? `${testID}-reps` : undefined}
             />
 
-            {!isDropSegment ? (
-              <Chip
-                label={t('workoutLogging.set.addDropSetButtonLabel')}
-                icon={<Ionicons name="add" size={14} color={color.textPrimary} />}
-                onPress={() => onAddDropSet(set.id)}
-                testID={testID ? `${testID}-add-drop-set` : undefined}
+            <View style={{ marginLeft: 'auto' }}>
+              <Checkbox
+                value={set.isCompleted}
+                onValueChange={(next) => (next ? onComplete(set) : onUncomplete(set.id))}
+                accessibilityLabel={completeLabel}
+                testID={testID ? `${testID}-complete` : undefined}
               />
-            ) : null}
-          </Column>
-        ) : null}
-      </View>
-    </SwipeableRow>
+            </View>
+          </Row>
+
+          {expanded ? (
+            <Column
+              gap={3}
+              style={{
+                paddingHorizontal: space[2],
+                paddingBottom: space[3],
+                marginLeft: isDropSegment ? space[6] : 0,
+              }}
+            >
+              {!isDropSegment ? (
+                <Row gap={2} wrap>
+                  {PICKABLE_SET_TYPES.map((type) => (
+                    <Chip
+                      key={type}
+                      label={setTypeLabel(type)}
+                      selected={set.setType === type}
+                      onPress={() => onUpdate(set.id, { setType: type })}
+                      size="sm"
+                      testID={testID ? `${testID}-type-${type}` : undefined}
+                    />
+                  ))}
+                </Row>
+              ) : (
+                <Text variant="footnote" color="secondary">
+                  {t('workoutLogging.set.dropSegmentLabel')}
+                </Text>
+              )}
+
+              <Row gap={3} align="center">
+                <Text variant="footnote" color="secondary">
+                  {t('workoutLogging.set.rpeAccessibilityLabel')}
+                </Text>
+                <NumberField
+                  value={rpeDraft}
+                  onChange={setRpeDraft}
+                  min={1}
+                  max={10}
+                  precision={1}
+                  accessibilityLabel={t('workoutLogging.set.rpeAccessibilityLabel')}
+                  testID={testID ? `${testID}-rpe` : undefined}
+                />
+              </Row>
+
+              <TextField
+                label={t('workoutLogging.set.noteLabel')}
+                value={noteDraft}
+                onChangeText={setNoteDraft}
+                placeholder={t('workoutLogging.set.notePlaceholder')}
+                testID={testID ? `${testID}-note` : undefined}
+              />
+
+              {!isDropSegment ? (
+                <Chip
+                  label={t('workoutLogging.set.addDropSetButtonLabel')}
+                  icon={<Ionicons name="add" size={14} color={color.textPrimary} />}
+                  onPress={() => onAddDropSet(set.id)}
+                  testID={testID ? `${testID}-add-drop-set` : undefined}
+                />
+              ) : null}
+            </Column>
+          ) : null}
+        </View>
+      </SwipeableRow>
+
+      {prRecords && prRecords.length > 0 ? (
+        <View
+          style={{
+            paddingHorizontal: space[2],
+            paddingBottom: space[2],
+            marginLeft: isDropSegment ? space[6] : 0,
+            alignItems: 'flex-start',
+          }}
+        >
+          <PRBadge records={prRecords} testID={testID ? `${testID}-pr-badge` : undefined} />
+        </View>
+      ) : null}
+    </View>
   );
 }

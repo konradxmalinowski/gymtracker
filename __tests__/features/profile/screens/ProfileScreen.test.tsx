@@ -75,4 +75,16 @@ describe('ProfileScreen', () => {
 
     expect(router.push).toHaveBeenCalledWith('/profile/settings');
   });
+
+  it('P8: navigates to the personal-records list from the records row', async () => {
+    const container = createContainer(createTestDatabase());
+    await container.profileService.completeOnboarding({ nickname: 'Konrad' });
+
+    const { findByText, getByTestId } = await renderProfileScreen({ container });
+    await findByText('Konrad');
+
+    await fireEvent.press(getByTestId('profile-records-row'));
+
+    expect(router.push).toHaveBeenCalledWith('/profile/records');
+  });
 });

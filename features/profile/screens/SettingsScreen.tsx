@@ -1,21 +1,54 @@
+import { useEffect, useState } from 'react';
+import { AccessibilityInfo, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 
 import { Column, Screen } from '@/components/layout';
 import { ListRow, Surface, Switch } from '@/components/ui';
+import { ConfirmDialog } from '@/components/feedback';
+import { useRebuildRecords } from '@/features/records';
 import { useHapticsSetting, useUnitsSettings } from '@/features/profile/hooks/useSettings';
 import { t } from '@/i18n';
 import { routes } from '@/navigation/routes';
-import { space } from '@/theme/tokens';
+import { useContainer } from '@/services/container';
+import { useToastStore } from '@/stores/toastStore';
+import { color, space } from '@/theme/tokens';
 
 /** `app/profile/settings/index.tsx`'s screen body. */
 export function SettingsScreen() {
+  const { recordService } = useContainer();
   const { enabled: hapticsEnabled, isPending: hapticsPending, setEnabled } = useHapticsSetting();
   const { weightUnit, lengthUnit } = useUnitsSettings();
+  const rebuildRecords = useRebuildRecords(recordService);
+
+  const [confirmRebuildVisible, setConfirmRebuildVisible] = useState(false);
+
+  // `ListRow` + a bare `ActivityIndicator` had no `busy` accessibility state
+  // and no "why did this row just become unavailable" signal for a
+  // screen-reader user (accessibility report A11Y-P8-004, mirroring
+  // `Button.tsx`'s already-solved `loading` prop). `ListRow`'s `busy` prop
+  // (new, this pass) covers the `accessibilityState` half; this one-time
+  // announcement on the pending transition covers the "in progress" wording
+  // the row's own static title/subtitle never surfaces.
+  useEffect(() => {
+    if (rebuildRecords.isPending) {
+      AccessibilityInfo.announceForAccessibility(t('records.recalculate.inProgressLabel'));
+    }
+  }, [rebuildRecords.isPending]);
 
   const unitsSubtitle =
     weightUnit && lengthUnit
       ? t('profileSettings.unitsRowSubtitleTemplate', { weight: weightUnit, length: lengthUnit })
       : undefined;
+
+  async function handleConfirmRebuild() {
+    setConfirmRebuildVisible(false);
+    try {
+      await rebuildRecords.mutateAsync();
+      useToastStore.getState().show({ message: t('records.recalculate.successMessage') });
+    } catch {
+      useToastStore.getState().show({ message: t('records.recalculate.errorMessage') });
+    }
+  }
 
   return (
     <Screen scroll edges={['bottom']} testID="settings-screen">
@@ -27,6 +60,13 @@ export function SettingsScreen() {
             onPress={() => router.push(routes.profileSettings.units())}
             showChevron
             testID="settings-units-row"
+          />
+          <ListRow
+            title={t('profileSettings.progressionRowTitle')}
+            subtitle={t('profileSettings.progressionRowSubtitle')}
+            onPress={() => router.push(routes.profileSettings.progression())}
+            showChevron
+            testID="settings-progression-row"
           />
           <ListRow
             title={t('profileSettings.hapticsRowTitle')}
@@ -42,6 +82,22 @@ export function SettingsScreen() {
             }
           />
           <ListRow
+            title={t('records.recalculate.rowTitle')}
+            subtitle={t('records.recalculate.rowSubtitle')}
+            onPress={() => setConfirmRebuildVisible(true)}
+            disabled={rebuildRecords.isPending}
+            busy={rebuildRecords.isPending}
+            trailing={
+              rebuildRecords.isPending ? (
+                <ActivityIndicator
+                  color={color.textTertiary}
+                  accessibilityLabel={t('records.recalculate.inProgressLabel')}
+                />
+              ) : undefined
+            }
+            testID="settings-recalculate-records-row"
+          />
+          <ListRow
             title={t('profileSettings.aboutRowTitle')}
             onPress={() => router.push(routes.profileSettings.about())}
             showChevron
@@ -49,6 +105,16 @@ export function SettingsScreen() {
           />
         </Surface>
       </Column>
+
+      <ConfirmDialog
+        visible={confirmRebuildVisible}
+        title={t('records.recalculate.confirmTitle')}
+        message={t('records.recalculate.confirmMessage')}
+        confirmLabel={t('records.recalculate.confirmButtonLabel')}
+        onConfirm={() => void handleConfirmRebuild()}
+        onCancel={() => setConfirmRebuildVisible(false)}
+        testID="settings-recalculate-records-confirm-dialog"
+      />
     </Screen>
   );
 }

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import type { PersonalRecord } from '@/features/records';
 import type {
   ActiveSessionAggregate,
   SessionExercise,
@@ -52,6 +53,18 @@ export interface ActiveWorkoutStoreState {
   /** Ephemeral UI selection - which set `QuickAdjustBar` currently targets. Not part of the persisted aggregate. */
   focusedSetId: string | null;
   pendingWrites: number;
+  /**
+   * P8: the most recent `CompletedSetResult.newPRs` `useCompleteSet` received,
+   * for `PRBadge` to render. Purely transient UI feedback - not part of the
+   * persisted aggregate and not reconciled from the database the way `session`
+   * is - so it lives as its own field rather than a `SessionExercise`/
+   * `WorkoutSet` patch. Written from `useCompleteSet`'s async `.then()`
+   * continuation (after the synchronous NFR-01 hot path already ran), and
+   * cleared by whichever component renders it once display is done, the same
+   * "the consumer clears what it consumed" pattern `focusedSetId` doesn't need
+   * but a one-shot celebratory badge does.
+   */
+  latestPR: { setId: string; records: readonly PersonalRecord[] } | null;
 }
 
 interface ActiveWorkoutStoreActions {
@@ -63,6 +76,11 @@ interface ActiveWorkoutStoreActions {
   setFocusedSetId: (id: string | null) => void;
   beginWrite: () => void;
   endWrite: () => void;
+
+  /** Written from `useCompleteSet` once `completeSet()` resolves with a non-empty `newPRs`. A subsequent completion (of any set) overwrites this, the same "newest wins" precedent `toastStore.ts` documents for its own single-slot state. */
+  setLatestPR: (setId: string, records: readonly PersonalRecord[]) => void;
+  /** Called by the component that rendered `latestPR` (`SetRow`/`SessionExerciseCard`) once its `PRBadge` has fired its haptic and shown the badge. */
+  clearLatestPR: () => void;
 
   /** Inserts a new `SessionExercise` or replaces an existing one by id - used both for a freshly added exercise and for restoring one from the undo toast. */
   upsertExercise: (exercise: SessionExercise) => void;
@@ -88,6 +106,7 @@ const initialState: ActiveWorkoutStoreState = {
   isHydrated: false,
   focusedSetId: null,
   pendingWrites: 0,
+  latestPR: null,
 };
 
 export const useActiveWorkoutStore = create<ActiveWorkoutStore>((set) => ({
@@ -99,6 +118,8 @@ export const useActiveWorkoutStore = create<ActiveWorkoutStore>((set) => ({
   setFocusedSetId: (focusedSetId) => set({ focusedSetId }),
   beginWrite: () => set((state) => ({ pendingWrites: state.pendingWrites + 1 })),
   endWrite: () => set((state) => ({ pendingWrites: Math.max(0, state.pendingWrites - 1) })),
+  setLatestPR: (setId, records) => set({ latestPR: { setId, records } }),
+  clearLatestPR: () => set({ latestPR: null }),
 
   upsertExercise: (exercise) =>
     set((state) => {

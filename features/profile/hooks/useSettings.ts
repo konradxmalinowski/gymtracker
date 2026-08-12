@@ -100,3 +100,79 @@ export function useUnitsSettings() {
     setLengthUnit: setLengthUnitMutation.mutate,
   };
 }
+
+/**
+ * ADR-0015 Decision 1's `oneRm.formula` setting - Epley by default, Brzycki
+ * selectable. Not mirrored into MMKV (unlike `haptics.enabled`/`units.*`):
+ * nothing reads this setting from a synchronous, render-adjacent code path
+ * the way `services/haptics` reads `haptics.enabled` - every consumer already
+ * goes through a React Query hook.
+ */
+export function useOneRmFormulaSetting() {
+  const { settings } = useContainer();
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ['settings', 'oneRm.formula'],
+    queryFn: () => settings.get('oneRm.formula'),
+  });
+
+  const mutation = useMutation({
+    scope: { id: 'settings:oneRm.formula' },
+    mutationFn: (value: 'epley' | 'brzycki') => settings.set('oneRm.formula', value),
+    onSuccess: (_data, value) => {
+      queryClient.setQueryData(['settings', 'oneRm.formula'], value);
+    },
+  });
+
+  return {
+    formula: query.data,
+    isPending: query.isPending,
+    isError: query.isError,
+    setFormula: mutation.mutate,
+  };
+}
+
+/**
+ * ADR-0015 Decision 2's per-movement progression increments
+ * (`progression.upperIncrementKg`/`progression.lowerIncrementKg`). Read/write
+ * together, same reasoning `useUnitsSettings` gives for its own pair - the
+ * Progression settings screen shows and edits both side by side.
+ */
+export function useProgressionIncrementSettings() {
+  const { settings } = useContainer();
+  const queryClient = useQueryClient();
+
+  const upperQuery = useQuery({
+    queryKey: ['settings', 'progression.upperIncrementKg'],
+    queryFn: () => settings.get('progression.upperIncrementKg'),
+  });
+  const lowerQuery = useQuery({
+    queryKey: ['settings', 'progression.lowerIncrementKg'],
+    queryFn: () => settings.get('progression.lowerIncrementKg'),
+  });
+
+  const setUpperMutation = useMutation({
+    scope: { id: 'settings:progression.upperIncrementKg' },
+    mutationFn: (value: number) => settings.set('progression.upperIncrementKg', value),
+    onSuccess: (_data, value) => {
+      queryClient.setQueryData(['settings', 'progression.upperIncrementKg'], value);
+    },
+  });
+  const setLowerMutation = useMutation({
+    scope: { id: 'settings:progression.lowerIncrementKg' },
+    mutationFn: (value: number) => settings.set('progression.lowerIncrementKg', value),
+    onSuccess: (_data, value) => {
+      queryClient.setQueryData(['settings', 'progression.lowerIncrementKg'], value);
+    },
+  });
+
+  return {
+    upperIncrementKg: upperQuery.data,
+    lowerIncrementKg: lowerQuery.data,
+    isPending: upperQuery.isPending || lowerQuery.isPending,
+    isError: upperQuery.isError || lowerQuery.isError,
+    setUpperIncrementKg: setUpperMutation.mutate,
+    setLowerIncrementKg: setLowerMutation.mutate,
+  };
+}

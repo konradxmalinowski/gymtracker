@@ -102,3 +102,23 @@ export {
  * one door in" rule exists to prevent one level up.
  */
 export { useStartWorkout, type UseStartWorkoutResult } from './hooks/useStartWorkout';
+
+/**
+ * P8 pass 3: `usePreviousPerformance`/`useProgressionSuggestion` are this
+ * feature's presentation-facing wrapper over the read-only
+ * `ExerciseHistoryRepository` (no accompanying service, by design - see the
+ * repository's own doc comment). Both take their repository/settings
+ * dependencies as parameters instead of calling `useContainer()` internally
+ * - see `hooks/useExerciseHistory.ts`'s own header comment for why (the same
+ * import-cycle reason `useStartWorkout(sessionService)` above already
+ * establishes precedent for). `app/(tabs)/exercises/[id].tsx` and
+ * `SessionExerciseCard.tsx` are this export's callers, both already holding
+ * `useContainer()` themselves.
+ */
+export {
+  exerciseHistoryKeys,
+  usePreviousPerformance,
+  useProgressionSuggestion,
+  type UseProgressionSuggestionDependencies,
+  type UseProgressionSuggestionInput,
+} from './hooks/useExerciseHistory';

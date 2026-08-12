@@ -7,6 +7,7 @@ import { createTestDatabase } from '@/database/node/createTestDatabase';
 import { SettingsScreen } from '@/features/profile/screens/SettingsScreen';
 import { ContainerProvider, createContainer } from '@/services/container';
 import { kv } from '@/services/kv';
+import { useToastStore } from '@/stores/toastStore';
 
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), replace: jest.fn() },
@@ -22,6 +23,7 @@ afterEach(() => {
   activeQueryClient?.clear();
   activeQueryClient?.unmount();
   activeQueryClient = undefined;
+  useToastStore.setState({ current: null });
 });
 
 async function renderSettingsScreen() {
@@ -85,5 +87,31 @@ describe('SettingsScreen', () => {
     await fireEvent.press(await findByTestId('settings-about-row'));
 
     expect(router.push).toHaveBeenCalledWith('/profile/settings/about');
+  });
+
+  it('navigates to the progression screen from the progression row (P8)', async () => {
+    const { findByTestId } = await renderSettingsScreen();
+
+    await fireEvent.press(await findByTestId('settings-progression-row'));
+
+    expect(router.push).toHaveBeenCalledWith('/profile/settings/progression');
+  });
+
+  it('P8: "Recalculate records" asks for confirmation, then rebuilds and toasts on success', async () => {
+    const { container, findByTestId, findByText } = await renderSettingsScreen();
+    const rebuildSpy = jest.spyOn(container.recordService, 'rebuild');
+
+    await fireEvent.press(await findByTestId('settings-recalculate-records-row'));
+    // Confirmation is required - the rebuild has not run yet.
+    expect(rebuildSpy).not.toHaveBeenCalled();
+
+    await fireEvent.press(await findByText('Recalculate'));
+
+    await waitFor(() => {
+      expect(rebuildSpy).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(useToastStore.getState().current?.message).toBe('Records recalculated');
+    });
   });
 });

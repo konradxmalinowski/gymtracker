@@ -30,6 +30,19 @@ export const routes = {
     index: (): Href => '/profile/settings',
     units: (): Href => '/profile/settings/units',
     about: (): Href => '/profile/settings/about',
+    /** P8: `oneRm.formula`/`progression.upperIncrementKg`/`progression.lowerIncrementKg`. */
+    progression: (): Href => '/profile/settings/progression',
+  },
+
+  /**
+   * P8: profile-scoped routes that aren't settings (a settings toggle vs. a
+   * standalone list screen read differently enough that grouping this under
+   * `profileSettings` would misname it) - `profile.records` is the first
+   * member, sibling in spirit to `profileSettings` rather than nested under
+   * it.
+   */
+  profile: {
+    records: (): Href => '/profile/records',
   },
 
   /**

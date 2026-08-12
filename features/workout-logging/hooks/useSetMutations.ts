@@ -56,8 +56,15 @@ export function useUpdateSet() {
  * The NFR-01 hot path (ARCHITECTURE.md section 5.1): the store update and the
  * haptic fire synchronously, before the service call even starts - nothing
  * here is awaited by the caller (`SetRow`'s checkbox `onPress` calls this and
- * returns immediately). PR evaluation and the rest timer are out of scope
- * (`CompletedSetResult.newPRs` is always `[]` in P6).
+ * returns immediately). The rest timer is still out of scope for this file.
+ *
+ * PR evaluation (P8) lands in the async `.then()` continuation, after the
+ * synchronous hot path has already run - `result.newPRs` is written to
+ * `activeWorkoutStore.latestPR` only when non-empty, so a set that beat
+ * nothing never overwrites whatever badge is already showing. This does not
+ * touch the hot path's timing: nothing here is awaited any differently than
+ * before, `result.newPRs` was already part of `result` this continuation was
+ * already reading to call `upsertSet`.
  */
 export function useCompleteSet() {
   const { sessionService } = useContainer();
@@ -70,7 +77,12 @@ export function useCompleteSet() {
       });
       haptics.setCompleted();
       void sessionService.completeSet(workoutSet.id, values).then(
-        (result) => useActiveWorkoutStore.getState().upsertSet(result.set),
+        (result) => {
+          useActiveWorkoutStore.getState().upsertSet(result.set);
+          if (result.newPRs.length > 0) {
+            useActiveWorkoutStore.getState().setLatestPR(result.set.id, result.newPRs);
+          }
+        },
         () => recoverFromWriteFailure(sessionService),
       );
     },

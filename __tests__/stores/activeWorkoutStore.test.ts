@@ -270,4 +270,50 @@ describe('activeWorkoutStore', () => {
     useActiveWorkoutStore.getState().endWrite();
     expect(useActiveWorkoutStore.getState().pendingWrites).toBe(0);
   });
+
+  describe('latestPR (P8)', () => {
+    it('starts null, is set by setLatestPR and cleared by clearLatestPR', () => {
+      expect(useActiveWorkoutStore.getState().latestPR).toBeNull();
+
+      const record = {
+        id: 'pr-1',
+        exerciseId: 'ex-1',
+        recordType: 'max_weight' as const,
+        repBucket: null,
+        value: 100,
+        weightKg: 100,
+        reps: 5,
+        workoutSetId: 'set-1',
+        sessionId: 'session-1',
+        achievedAt: 1000,
+        previousValue: null,
+        isCurrent: true,
+        createdAt: 1000,
+        updatedAt: 1000,
+      };
+      useActiveWorkoutStore.getState().setLatestPR('set-1', [record]);
+
+      expect(useActiveWorkoutStore.getState().latestPR).toEqual({
+        setId: 'set-1',
+        records: [record],
+      });
+
+      useActiveWorkoutStore.getState().clearLatestPR();
+      expect(useActiveWorkoutStore.getState().latestPR).toBeNull();
+    });
+
+    it('a later setLatestPR call replaces the earlier one (newest wins)', () => {
+      useActiveWorkoutStore.getState().setLatestPR('set-1', []);
+      useActiveWorkoutStore.getState().setLatestPR('set-2', []);
+
+      expect(useActiveWorkoutStore.getState().latestPR?.setId).toBe('set-2');
+    });
+
+    it('clear() (finish/discard/unmount) resets latestPR along with the rest of the state', () => {
+      useActiveWorkoutStore.getState().setLatestPR('set-1', []);
+      useActiveWorkoutStore.getState().clear();
+
+      expect(useActiveWorkoutStore.getState().latestPR).toBeNull();
+    });
+  });
 });

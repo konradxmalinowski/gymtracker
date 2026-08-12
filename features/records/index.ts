@@ -65,3 +65,42 @@ export {
   type PersonalRecordServiceDependencies,
 } from './services/PersonalRecordService';
 export { RecordValidationError } from './services/errors';
+
+/**
+ * P8 pass 3 (docs/ROADMAP.md): the presentational components and
+ * presentation hooks land here. `workout-logging` imports `PRBadge`/
+ * `ProgressionHint` through this barrel (the allowed `workout-logging ->
+ * records` direction); `app/(tabs)/exercises/[id].tsx` and `profile`'s
+ * `SettingsScreen` import the hooks the same way.
+ *
+ * `useCurrentRecords`/`useRecentRecords`/`useRebuildRecords`
+ * (`hooks/useRecords.ts`) take their `PersonalRecordService` as a parameter
+ * rather than calling `useContainer()` internally - `services/container.ts`
+ * itself imports `PersonalRecordService` from this barrel, so a hook here
+ * that imported `@/services/container` directly would close a real import
+ * cycle (barrel -> hook -> container -> barrel). See that file's own header
+ * comment; this mirrors `useStartWorkout(sessionService)`'s existing
+ * precedent in `workout-logging`'s barrel.
+ *
+ * `PersonalRecordsScreen` (`screens/PersonalRecordsScreen.tsx`) and
+ * `useRecordExerciseNames` (`hooks/useRecordExerciseNames.ts`) are
+ * deliberately NOT re-exported here, matching every other feature's own
+ * barrel: no screen is ever barrel-exported in this codebase (`app/` always
+ * imports a screen by its direct file path - see `ProfileScreen`/
+ * `ExerciseDetailScreen`'s own route wrappers), and
+ * `useRecordExerciseNames` is a same-feature implementation detail of that
+ * one screen, not a cross-feature surface.
+ */
+export { PRBadge, type PRBadgeProps } from './components/PRBadge';
+export { ProgressionHint, type ProgressionHintProps } from './components/ProgressionHint';
+export {
+  formatAchievedDate,
+  formatRecordValue,
+  recordTypeLabel,
+} from './components/personalRecordFormatting';
+export {
+  recordKeys,
+  useCurrentRecords,
+  useRebuildRecords,
+  useRecentRecords,
+} from './hooks/useRecords';

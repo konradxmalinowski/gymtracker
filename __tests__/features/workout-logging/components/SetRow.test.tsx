@@ -3,6 +3,38 @@ import { fireEvent, render } from '@testing-library/react-native';
 import { assignSetDisplayNumbers } from '@/features/workout-logging';
 import type { WorkoutSet } from '@/features/workout-logging';
 import { SetRow } from '@/features/workout-logging/components/SetRow';
+import type { PersonalRecord } from '@/features/records';
+
+jest.mock('@/services/haptics', () => ({
+  haptics: {
+    personalRecord: jest.fn(),
+    setCompleted: jest.fn(),
+    adjust: jest.fn(),
+    select: jest.fn(),
+    destructive: jest.fn(),
+    timerFinished: jest.fn(),
+  },
+}));
+
+function makePersonalRecord(overrides: Partial<PersonalRecord> = {}): PersonalRecord {
+  return {
+    id: 'pr-1',
+    exerciseId: 'ex-1',
+    recordType: 'max_weight',
+    repBucket: null,
+    value: 100,
+    weightKg: 100,
+    reps: 5,
+    workoutSetId: 'set-1',
+    sessionId: 'session-1',
+    achievedAt: 1000,
+    previousValue: null,
+    isCurrent: true,
+    createdAt: 1000,
+    updatedAt: 1000,
+    ...overrides,
+  };
+}
 
 interface JsonNode {
   type?: string;
@@ -24,6 +56,16 @@ function findByProp(node: JsonNode | string | null, propName: string): JsonNode 
     }
   }
   return null;
+}
+
+function subtreeContainsTestID(node: JsonNode | string | null, testID: string): boolean {
+  if (node == null || typeof node === 'string') {
+    return false;
+  }
+  if (node.props?.testID === testID) {
+    return true;
+  }
+  return (node.children ?? []).some((child) => subtreeContainsTestID(child, testID));
 }
 
 function makeSet(overrides: Partial<WorkoutSet> = {}): WorkoutSet {
@@ -140,5 +182,39 @@ describe('SetRow', () => {
     // drop's label is "1.1" (see that function's own doc comment).
     expect(await findByText('1.1')).toBeTruthy();
     expect(await findByText('Drop')).toBeTruthy();
+  });
+
+  describe('P8: PR badge', () => {
+    it('renders no PR badge when prRecords is not passed', async () => {
+      const { queryByText } = await renderRow();
+      expect(queryByText(/New PR/)).toBeNull();
+    });
+
+    it('renders the PR badge when prRecords is non-empty', async () => {
+      const { findByText } = await renderRow({ prRecords: [makePersonalRecord()] });
+      expect(await findByText('New PR!')).toBeTruthy();
+    });
+
+    it("renders the PR badge outside SwipeableRow's collapsed accessibility subtree (A11Y-P8-001 regression)", async () => {
+      // SwipeableRow clones accessible=true plus its swipe accessibilityActions
+      // onto whatever single element it's handed as children
+      // (attachAccessibilityActions in components/gestures/SwipeableRow.tsx).
+      // PRBadge must render as a sibling of that cloned node, not a
+      // descendant of it, or it becomes unreachable as an independent
+      // VoiceOver/TalkBack stop - see reports/accessibility-2026-08-11-p8.md
+      // finding A11Y-P8-001.
+      const { toJSON, findByTestId } = await renderRow({
+        prRecords: [makePersonalRecord()],
+      });
+
+      // The badge is present in the tree at all.
+      expect(await findByTestId('set-row-pr-badge')).toBeTruthy();
+
+      // But it is not nested inside the node SwipeableRow attached its
+      // cloned accessibility actions to.
+      const actionsNode = findByProp(toJSON() as JsonNode, 'accessibilityActions');
+      expect(actionsNode).not.toBeNull();
+      expect(subtreeContainsTestID(actionsNode, 'set-row-pr-badge')).toBe(false);
+    });
   });
 });
