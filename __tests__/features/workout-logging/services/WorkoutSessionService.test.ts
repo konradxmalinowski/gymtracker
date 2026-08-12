@@ -9,6 +9,7 @@ import {
   WorkoutValidationError,
 } from '@/features/workout-logging/services/errors';
 import { SessionNotInProgressError } from '@/features/workout-logging/repository/errors';
+import { SqlitePersonalRecordRepository } from '@/features/records/repository/SqlitePersonalRecordRepository';
 import { RepositoryNotFoundError } from '@/repositories/base';
 import type { DatabaseContext } from '@/repositories/contracts/database';
 import { SqliteSettingsRepository } from '@/repositories/settings';
@@ -22,8 +23,19 @@ function setup() {
   const db = createTestDatabase();
   const clock = new FixedClock(START);
   const idGenerator = new Uuid7IdGenerator(clock);
-  const repository = new SqliteWorkoutSessionRepository({ db, clock, idGenerator });
   const settings = new SqliteSettingsRepository(db, clock);
+  const personalRecordRepository = new SqlitePersonalRecordRepository({
+    db,
+    clock,
+    idGenerator,
+    settings,
+  });
+  const repository = new SqliteWorkoutSessionRepository({
+    db,
+    clock,
+    idGenerator,
+    personalRecordRepository,
+  });
   const service = new WorkoutSessionService({ repository, settings, clock });
   return { db, clock, repository, settings, service };
 }
@@ -145,7 +157,6 @@ describe('WorkoutSessionService - validation at the boundary', () => {
     );
     await expect(service.completeSet(set.id, { completedAt: START + 1000 })).resolves.toMatchObject(
       {
-        newPRs: [],
         set: { isCompleted: true, completedAt: START + 1000 },
       },
     );

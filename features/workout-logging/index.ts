@@ -48,6 +48,21 @@ export type {
   UpdateSetPatch,
   WorkoutSet,
 } from './repository/WorkoutSessionRepository';
+/**
+ * `ExerciseHistoryRepository` (P8 pass 2) - the read-model interface type
+ * only, never `SqliteExerciseHistoryRepository`, same "never the Sqlite
+ * implementation class" rule every other export in this barrel follows.
+ * Exported so Pass 3's `useExerciseHistory` hook (and any other presentation
+ * consumer) can type against it without reaching into
+ * `features/workout-logging/repository/` directly.
+ */
+export type {
+  BestPerformance,
+  ExerciseHistoryRepository,
+  ExerciseSessionEntry,
+  PreviousPerformance,
+  PreviousPerformanceSet,
+} from './repository/ExerciseHistoryRepository';
 
 export { setVolumeKg, totalVolumeKg, type SetVolumeInput } from './domain/SetVolume';
 export {

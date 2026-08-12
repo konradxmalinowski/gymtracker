@@ -25,7 +25,11 @@ const settingsSchemaDefinition = {
   'workout.confirmDiscard': { schema: z.boolean(), default: true },
   'oneRm.formula': { schema: z.enum(['epley', 'brzycki']), default: 'epley' },
   'progression.upperIncrementKg': { schema: z.number().positive(), default: 2.5 },
-  'progression.lowerIncrementKg': { schema: z.number().positive(), default: 1.25 },
+  // ADR-0015 Decision 2: 5 kg default for lower-body movements (a squat or
+  // deadlift can absorb a much bigger jump than an upper-body accessory
+  // lift). Was 1.25 until P8 pass 1 caught the mismatch against the ADR's
+  // own prose and worked example - a real bug, not a P8 scope decision.
+  'progression.lowerIncrementKg': { schema: z.number().positive(), default: 5 },
   'catalog.version': { schema: z.string().min(1), default: '0' },
   'diagnostics.crashReporting': { schema: z.boolean(), default: false },
   // P3 addition (docs/ROADMAP.md): global haptics toggle read by

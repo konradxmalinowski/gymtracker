@@ -1,8 +1,10 @@
 import { createTestDatabase } from '@/database/node/createTestDatabase';
 import { SqliteWorkoutSessionRepository } from '@/features/workout-logging/repository/SqliteWorkoutSessionRepository';
 import { SupersetSpansMultipleSessionsError } from '@/features/workout-logging/repository/errors';
+import { SqlitePersonalRecordRepository } from '@/features/records/repository/SqlitePersonalRecordRepository';
 import { RepositoryNotFoundError } from '@/repositories/base';
 import type { DatabaseContext } from '@/repositories/contracts/database';
+import { SqliteSettingsRepository } from '@/repositories/settings';
 import { FixedClock } from '@/services/clock';
 import { Uuid7IdGenerator } from '@/services/id';
 
@@ -12,7 +14,19 @@ function setup() {
   const db = createTestDatabase();
   const clock = new FixedClock(START);
   const idGenerator = new Uuid7IdGenerator(clock);
-  const repo = new SqliteWorkoutSessionRepository({ db, clock, idGenerator });
+  const settings = new SqliteSettingsRepository(db, clock);
+  const personalRecordRepository = new SqlitePersonalRecordRepository({
+    db,
+    clock,
+    idGenerator,
+    settings,
+  });
+  const repo = new SqliteWorkoutSessionRepository({
+    db,
+    clock,
+    idGenerator,
+    personalRecordRepository,
+  });
   return { db, clock, idGenerator, repo };
 }
 
