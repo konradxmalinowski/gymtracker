@@ -8,12 +8,25 @@ reference, not a replacement. Section numbers below refer to `docs/ARCHITECTURE.
 
 P0 (project foundation), P1 (design system and UI primitives), P2 (persistence
 foundation), P3 (onboarding, profile and core settings), P4 (exercise library), P5
-(workout plans), and P6 (workout logging) are complete. The `onboarding`, `profile`,
-`exercise-library`, `plans`, and `workout-logging` features now have real
-implementations (screens, hooks, services, repository); the remaining six features
-(`rest-timer`, `records`, `statistics`, `body-metrics`, `calendar`, `data-transfer`)
-are still empty skeleton directories (components/hooks/screens/services/domain/
-repository/types/index.ts subfolders, no implementation) awaiting their own phase.
+(workout plans), P6 (workout logging), and P8 (progressive overload and personal
+records) are complete on this branch. P7 (rest timer) is deliberately absent from
+this branch's history, not an oversight: `feat/p8-progressive-overload` was cut from
+`main` before `feat/p7-rest-timer`'s PR merged, a documented decision made when P8
+was kicked off so the two phases could be reviewed independently (see
+`plans/2026-08-11-p8-progressive-overload.md`'s "Branch note"). `features/rest-timer`
+here is still the empty skeleton directory `main` had before P7 landed, and
+`RestTimerBar`'s slot in `ActiveWorkoutScreen` is still omitted entirely, exactly as
+P6 left it. Merging this branch and P7's is expected to conflict in the files both
+phases touch (`WorkoutSessionRepository.ts`/`SqliteWorkoutSessionRepository.ts`,
+`WorkoutSessionService.ts`, `services/container.ts`, `ActiveWorkoutScreen.tsx`) -
+expected and normal, not a bug in either phase's plan; whoever merges second resolves
+it. The `onboarding`, `profile`, `exercise-library`, `plans`, `workout-logging`, and
+`records` features now have real implementations (screens, hooks, services,
+repository - `records` itself owns a real repository as of this phase, see below);
+the remaining five features (`rest-timer`, `statistics`, `body-metrics`, `calendar`,
+`data-transfer`) are still empty skeleton directories (components/hooks/screens/
+services/domain/repository/types/index.ts subfolders, no implementation) awaiting
+their own phase.
 
 The app now boots for real: `app/_layout.tsx` opens the database, runs migrations,
 seeds the exercise catalog (`database/seed/runSeed()`, idempotent - a P2 gap fixed in
@@ -291,6 +304,180 @@ low-severity, non-blocking notes (a `setSupersetGroup` update missing a
 service layer, not exploitable since every field it writes is either an id or a bound
 numeric column with no free text). No new npm dependency was added this phase.
 
+`CompletedSetResult.newPRs`, typed `readonly never[]` and always `[]` since P6, is
+real as of P8: `features/records/domain/{Estimated1RM.ts,ProgressionAdvisor.ts,
+evaluateCandidateRecords.ts}` implement ADR-0015's three decisions (Epley/Brzycki
+e1RM with documented guard rails, double-progression suggestions, and per-record-type
+comparison), and `features/records/repository/{PersonalRecordRepository.ts,
+SqlitePersonalRecordRepository.ts}` (`listCurrent`, `listRecent`, `evaluateAndUpsert`,
+`listHistory`, `rebuild`) is the app's third aggregate-adjacent feature repository.
+`SqliteWorkoutSessionRepository.completeSet` calls `evaluateAndUpsert` inside its own
+transaction (the allowed `workout-logging -> records` dependency direction,
+ARCHITECTURE.md section 9.1) and now returns real `newPRs`.
+`features/workout-logging/repository/{ExerciseHistoryRepository.ts,
+SqliteExerciseHistoryRepository.ts}` is a new read-only read model
+(`getPreviousPerformance`, `getBestPerformance`, `listRecentSessionsForExercise`)
+with no accompanying service, by design - it returns flat DTOs with nothing to
+validate, the same shape a later `StatisticsRepository` is expected to have.
+`services/container.ts` gained `recordRepository`/`recordService`/
+`exerciseHistoryRepository`, the fifth and sixth feature repository pairs (counting
+the read-only one) after P3-P6's profile, exercise-library, plans and
+workout-logging ones.
+
+The UI layer landed in the same phase's third pass. `features/records/components/
+{PRBadge,ProgressionHint}.tsx` are presentational-only (no fetching of their own) and
+exported through the `records` barrel so `workout-logging` can render them - `PRBadge`
+fires `services/haptics.personalRecord()` (declared when haptics was built, never
+invoked anywhere in the codebase since - the same "first real caller" pattern P7's
+own write-up used for `timerFinished()`) exactly once per distinct non-empty
+`records` value it receives, keyed on the records' own ids so an unrelated re-render
+never re-fires it. `SetRow.tsx` renders `PRBadge` per-set; `SessionExerciseCard.tsx`
+renders `PreviousPerformancePanel` (now backed by real data instead of P6's
+hardcoded empty state) and `ProgressionHint` alongside it, both computed by a new
+`features/workout-logging/hooks/useExerciseHistory.ts`
+(`usePreviousPerformance`/`useProgressionSuggestion`). `ProgressionAdvisor`'s
+`primaryMuscleBodyPart` input turned out to already be flowing through the app with
+no extension needed: `exercise.body_part` (-> `SessionExercise.exercise.bodyPart`,
+an `ExerciseListItem` field) is derived at catalog-build time from the exercise's
+primary muscle's `muscle.body_part` (`scripts/build-catalog.ts`'s
+`MUSCLE_TO_BODY_PART`), so it already carries the exact value the domain calculator
+wants. `targetRepRange` is always passed `null` instead - `SessionExercise` carries no
+`target_rep_min`/`target_rep_max` fields (P8 pass 2 did not thread the plan day's rep
+range onto the in-session exercise, and extending that repository contract was outside
+pass 3's owned files) - `suggestNextProgression`'s own "derive one from the last
+session's rep count" fallback covers this correctly, a real documented consequence of
+scope rather than a silently dropped requirement.
+
+`activeWorkoutStore` gained a `latestPR: { setId, records } | null` field (plus
+`setLatestPR`/`clearLatestPR`), written from `useCompleteSet`'s existing async
+`.then()` continuation - after the synchronous NFR-01 hot path already ran, so PR
+evaluation adds no latency to "tap the checkbox, feel the haptic instantly."
+`ActiveWorkoutScreen` self-clears it 4 seconds after it appears (a one-shot
+celebratory badge, not state that should stick to a set forever) and passes it into
+`FlashList` as part of a new `extraData` prop alongside `focusedSetId` - added because
+both values are read from render-time closures rather than from `data` itself, and
+this phase's own PR-badge integration test had caught a repaint that looked stale
+without it. Test-agent's later coverage pass found the fuller picture, though:
+`ActiveWorkoutScreen`'s `renderItem` is an inline arrow function defined in the
+component body, so `FlashList`'s (like `FlatList`'s) cell-level `React.memo`
+comparison already fails - and every cell already repaints - on every parent render,
+independent of whether `extraData` changed. `extraData` is a correct, real addition
+(it documents the actual dependency and keeps the badge correct the moment
+`renderItem` is ever hoisted to a stable reference as a future perf pass), but it is
+not, today, the mechanism actually keeping `PRBadge`/the focus highlight painted -
+the inline `renderItem` is. Left in rather than pulled out: removing it would work
+today and quietly reintroduce this exact staleness bug the day `renderItem` gets
+memoized. See "Known gaps" below.
+
+`ExerciseDetailScreen` gained two optional slot props (`previousPerformanceSlot`/
+`personalRecordsSlot`, both `ReactNode`, both defaulting to the existing
+`PerformanceEmptySection` treatment when omitted) rather than a new import -
+`exercise-library` stays a dependency-free leaf (ARCHITECTURE.md section 9.1).
+`app/(tabs)/exercises/[id].tsx` (previously a two-line wrapper) fills both slots using
+`records`'/`workout-logging`'s hooks, the same "app/ composes feature barrels, even
+though it can't reach a repository directly" pattern `useStartWorkout`'s own doc
+comment already established.
+
+Profile gained a "Personal records" row (`features/records/screens/
+PersonalRecordsScreen.tsx`, the first screen in that feature's `screens/` folder,
+reached via a new `routes.profile.records()` -> `/profile/records`) listing every
+current PR, most recently achieved first, FlashList-backed per the project's own
+list-size Definition-of-Done rule. It resolves exercise names for its rows via a new
+`useRecordExerciseNames` hook - the one place `records` reaches into
+`exercise-library`'s barrel (documented as a deliberate, cycle-safe judgment call in
+that hook's own header comment: `exercise-library` is a leaf with no dependency of
+its own, so this cannot create a cycle, and nothing in ARCHITECTURE.md section 9.1
+forbids it, only the reverse direction). Settings gained a "Recalculate records" row
+(confirm dialog, then `recordService.rebuild()`, with a pending spinner and a
+success/failure toast) and a new `features/profile/screens/
+ProgressionSettingsScreen.tsx` (`app/profile/settings/progression.tsx`) for
+`oneRm.formula`/`progression.upperIncrementKg`/`progression.lowerIncrementKg` -
+structurally mirroring `UnitsSettingsScreen.tsx` rather than P7's `timers.tsx`, since
+this branch predates P7's implementation and `UnitsSettingsScreen` is the real
+precedent that exists on disk. `features/profile/hooks/useSettings.ts` gained
+`useOneRmFormulaSetting`/`useProgressionIncrementSettings`, the same
+`useQuery`/`useMutation` shape as `useHapticsSetting`/`useUnitsSettings`.
+
+A real import cycle surfaced while wiring the presentation hooks and was fixed, not
+worked around: `features/records/hooks/useRecords.ts` and `features/workout-logging/
+hooks/useExerciseHistory.ts` are both re-exported through their feature's barrel (so
+`profile`/`app/` can reach them), and `services/container.ts` itself imports each
+feature's service from that same barrel - a hook in either file that called
+`useContainer()` internally would close a real `barrel -> hook -> container ->
+barrel` cycle, caught immediately by `import/no-cycle`. Both files take their
+service/repository as a parameter instead (`useCurrentRecords(recordService,
+exerciseId)`, `usePreviousPerformance(exerciseHistoryRepository, exerciseId)`), the
+same pattern `useStartWorkout(sessionService)` already established in
+`workout-logging`'s own barrel for exactly this reason - documented in both new
+files' header comments so the next phase doesn't have to rediscover it. Screens are
+never barrel-exported in this codebase (confirmed against every existing feature
+before this phase, not assumed) - `PersonalRecordsScreen`/`ProgressionSettingsScreen`
+follow that precedent and are imported by their `app/` route wrapper via direct file
+path, which sidesteps the same class of cycle for the screens themselves.
+
+P8 verification: typecheck, lint, and the full Jest suite (96 suites, 914 tests
+passing, 1 pre-existing skip) are clean; `npx expo export --platform ios` was used
+again as the build-verification proxy (no simulator/emulator/device dev-client
+available in this environment, same constraint as every prior phase - `npm start`
+device verification remains deferred per the user's own standing preference, noted
+here for continuity rather than silently dropped). New RNTL coverage: `PRBadge`,
+`ProgressionHint`, `PersonalRecordsScreen`, `ProgressionSettingsScreen`,
+`PreviousPerformancePanel`, plus extensions to `useSetMutations.test.tsx`,
+`activeWorkoutStore.test.ts`, `SetRow.test.tsx`, `ActiveWorkoutScreen.test.tsx`,
+`SettingsScreen.test.tsx` and `ProfileScreen.test.tsx` for the new wiring and rows.
+A later test-agent coverage pass added five more: a property-based e1RM/progression
+equivalence test (fast-check, verified non-tautological by deliberately breaking
+`rebuild()`'s `ORDER BY` and confirming the test actually failed before restoring
+it), ineligible-set-type cases (`assisted`/`partial`), a `completeSet`
+transactional-atomicity test, a content-based (not reference-based) `PRBadge` haptic
+dedup test, and a `FlashList` `extraData` isolation test - taking the suite from 908
+to 913, with the accessibility fix pass's own new regression test (below) bringing it
+to the 914 above. No new npm dependency was added this phase.
+
+A security review (`reports/security-2026-08-11-p8.md`, security-agent-sonnet,
+routine scope) found zero critical/high/medium findings, one low, and one
+informational note. The low: `ConfirmDialog`'s Confirm button has no in-flight guard
+of its own, so a fast double-tap on "Recalculate records" could start two overlapping
+`rebuild()` transactions - not a P8-introduced pattern (every `ConfirmDialog`-gated
+mutation in this codebase has the same unguarded shape, e.g. `PlanListScreen`'s
+delete-plan flow) and non-corrupting regardless, since `rebuild()` is idempotent and
+`ux_pr_current` backstops the single-current-row invariant at the SQLite level either
+way. The informational note confirmed parameterized queries throughout both new
+repositories and confirmed `completeSet`'s PR-evaluation write joins the caller's own
+transaction rather than opening a second one - a throwing `evaluateAndUpsert` rolls
+back the entire `completeSet` call, verified against a real integration test that
+injects a failing repository and re-reads the database afterward, not just read from
+the code. Nothing blocked commit.
+
+An accessibility review (`reports/accessibility-2026-08-11-p8.md` - conducted by a
+general-purpose agent standing in for the accessibility-agent role, the same
+substitution P7's own write-up used) caught one BLOCKING finding and it was fixed
+within the phase, not left open: `PRBadge` rendered inside `SetRow`'s pre-existing
+`SwipeableRow`-cloned single accessible node. The container predates P8 (P6 already
+handed `SwipeableRow` a compound, multi-control child), but P8's own new element
+landed inside it and was swallowed by it - empirically confirmed via an RNTL
+prop-tree dump, not just a static read. Fixed by rendering `PRBadge` as an
+independent sibling below `SwipeableRow` rather than inside its single child, the
+same "pull the non-interactive element out from under the collapse" shape P7's
+write-up used to fix `RestTimerBar`'s equivalent bug. A real RNTL mount test
+(`__tests__/features/workout-logging/components/SetRow.test.tsx`, "renders the PR
+badge outside SwipeableRow's collapsed accessibility subtree (A11Y-P8-001
+regression)") was added specifically to catch this regression class, verified with
+the same revert-and-confirm discipline P7's write-up already established - reverting
+the fix and confirming the test fails, before restoring it. Three further,
+non-blocking findings from the same review were fixed in the same pass rather than
+left open: `PRBadge`'s `accessibilityRole="text"` gained the paired `accessible` prop
+it was missing (LOW); `PersonalRecordsScreen` gained the same
+`AccessibilityInfo.announceForAccessibility` loading/empty-state pattern
+`ProgressionSettingsScreen`'s own same-phase implementation already used, closing an
+inconsistency within this phase's own diff rather than a codebase-wide gap (HIGH);
+and `components/ui/ListRow.tsx` gained a `busy` prop
+(`accessibilityState={{ disabled, busy }}`), mirroring `Button.tsx`'s existing
+`loading`-prop pattern, wired into `SettingsScreen.tsx`'s "Recalculate records" row so
+its in-flight state is announced rather than only implied by `disabled` (MEDIUM). See
+"Known gaps" below for `SetRow`'s deeper, structural collapse concern that this fix
+deliberately did not attempt to resolve.
+
 ## Product
 
 Offline-only React Native/Expo workout logging app. No backend, no accounts, no
@@ -547,6 +734,54 @@ PlanDayExerciseRow}.test.tsx`), not just a synthetic `<Text>` stand-in -
   `reports/accessibility-2026-08-06-p5.md`. See the gap entry above this one
   for a related, still-open, device-unverified concern this fix did not
   (and structurally could not, without a device) resolve.
+
+- **`features/workout-logging/components/SetRow.tsx`'s checkbox/weight-field/
+  reps-field/focus-button group is the same `SwipeableRow`-collapse shape the
+  gap entry above this one describes for `DraggableList`'s row consumers, on
+  the same `SwipeableRow` primitive `SwipeableRow.tsx`'s own A11Y-004 finding
+  already flagged.** `SetRow`'s outer `View` (the `Row` holding the set-number
+  `PressScale`, the two `NumberField`s, and the completion `Checkbox`) is the
+  single child `SwipeableRow` clones its `accessible={true}` plus
+  `leftAction`/`rightAction` `accessibilityActions` onto - confirmed via a
+  real RNTL mount (accessibility report A11Y-P8-001,
+  `reports/accessibility-2026-08-11-p8.md`) that every one of those controls
+  is a descendant of that one already-`accessible` node, not a sibling of it.
+  P8's fix for this same finding moved `PRBadge` (a non-interactive,
+  `onPress`-free element with no reason to sit inside the swipeable region at
+  all) out to render as a sibling below the `SwipeableRow`, mirroring how
+  P7's `RestTimerBar` fix pulled its two adjust buttons out from under an
+  equivalent collapse - but that fix deliberately did not touch `SetRow`'s
+  actual interactive controls. Restructuring those - which control, if any,
+  becomes the swipe-attachable primary target, and how the row keeps its "two
+  taps, no keyboard" completion flow (NFR-01) working with several
+  independently-operable controls instead of one - is a real design decision,
+  not a prop tweak, and (per the entry above this one) RN Testing Library's
+  prop-tree inspection cannot confirm or rule out how the native accessibility
+  engine actually collapses this subtree on a real device. Do not attempt that
+  restructuring without on-device VoiceOver/TalkBack verification first, for
+  the same "don't trade a confirmed-safe layout for an unverified one" reason
+  already given above. Source: accessibility audit finding A11Y-P8-001,
+  `reports/accessibility-2026-08-11-p8.md`.
+
+- **`ActiveWorkoutScreen`'s `FlashList` `extraData={{ focusedSetId, latestPR }}`
+  prop (P8) is not currently the thing keeping `SessionExerciseCard`/`SetRow`
+  repaints correct.** `renderItem` (`features/workout-logging/screens/
+ActiveWorkoutScreen.tsx`) is an inline arrow function defined inside the
+  component body, so a new function reference is created on every
+  `ActiveWorkoutScreen` render - `FlashList`'s (like `FlatList`'s) cell-level
+  `React.memo` comparison already fails, and every cell already repaints, on
+  every parent render for that reason alone, independent of whether
+  `extraData` changed. `extraData` was added for a real reason -
+  `focusedSetId`/`latestPR` are read from render-time closures, not `data`
+  itself - and stays correct, load-bearing practice going forward: the moment
+  `renderItem` is hoisted to a stable, memoized reference (a legitimate
+  future perf pass), `extraData` becomes the only thing keeping cell repaints
+  synchronized with those two values, and removing it now would plant a bug
+  for that future change to trip over. Found by test-agent's P8 coverage
+  pass, not fixed - no user-visible symptom today, and the fix (hoisting
+  `renderItem`, threading per-cell dependencies through some other means) is
+  a real optimization pass of its own, not a one-line change. Source:
+  `plans/2026-08-11-p8-progressive-overload-state.md`'s "Known follow-ups."
 
 - **`expo-asset` is not hoisted, which breaks Jest module resolution for
   `@expo/vector-icons` inside a rendered RNTL test.** It's present in
