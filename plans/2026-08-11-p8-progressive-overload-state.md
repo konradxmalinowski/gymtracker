@@ -25,9 +25,9 @@ Everything below is uncommitted in the working tree.
 | Security review | security-agent-sonnet | done | 0 critical/high/medium, 1 low (ConfirmDialog double-tap guard missing, pre-existing pattern across the whole codebase, not P8-specific), 1 info. Nothing blocking. Report: reports/security-2026-08-11-p8.md |
 | Accessibility review | general-purpose (standing in) | done | 1 BLOCKING (PRBadge collapses into SetRow's pre-existing SwipeableRow single accessible node - same anti-pattern class as P1/P5/P7), 1 HIGH (PersonalRecordsScreen missing loading/empty announcements), 1 MEDIUM (Recalculate-records ActivityIndicator has no label/busy state), 1 LOW (PRBadge accessibilityRole="text" missing paired accessible prop). Report: reports/accessibility-2026-08-11-p8.md. Routing all four back for fixes before commit, per process. |
 | Accessibility fix pass | frontend-agent | dispatched | - |
-| Docs | docs-agent | not started | Verify/polish the CLAUDE.md write-up pass 3 already drafted; regenerate docs/architecture-snapshot.md (stale since P6 commit 13e8e1f). |
-| Commit | git-commit-agent | not started | Split by topic per Step 11: domain, repository/service, UI, settings, docs. |
-| Push + PR | orchestrator (needs user approval) | not started | - |
+| Docs | docs-agent | done | Verified and corrected the pass-3 CLAUDE.md draft (fixed stale test count, fixed an overstated claim about FlashList extraData, added accessibility/security review paragraphs). Regenerated docs/architecture-snapshot.md. |
+| Commit | git-commit-agent | done | 3 commits: c5ea82e (domain+repository/service backend), 3d109e8 (UI: badges, hints, screens, settings), 88a82e0 (docs: CLAUDE.md, snapshot, plans, reports). Each commit boundary independently verified buildable (tsc/eslint/jest) before staging. |
+| Push + PR | orchestrator (needs user approval) | awaiting approval | - |
 
 ## Known follow-ups already flagged (not blockers)
 
