@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import type { EntityId } from '@/repositories/contracts/repository';
-import type { SettingsRepository } from '@/repositories/settings';
+import {
+  REST_SECONDS_MAX,
+  REST_SECONDS_MIN,
+  type SettingsRepository,
+} from '@/repositories/settings';
 import type { Clock } from '@/services/clock';
 import { SET_TYPES } from '../domain/setSemantics';
 import { isSessionStale } from '../domain/sessionStaleness';
@@ -56,6 +60,8 @@ const completeSetValuesSchema = z.object({
 const nullableNoteSchema = noteSchema.nullable();
 const titleSchema = z.string().trim().min(1).max(SESSION_TITLE_MAX_LENGTH);
 const supersetGroupSchema = z.number().int().min(0).nullable();
+/** `timer.defaultRestSeconds`'s own settings schema bounds (`repositories/settings/settingsSchema.ts`, `REST_SECONDS_MIN`/`MAX`) - a manually adjusted rest override is the same kind of value. */
+const restSecondsOverrideSchema = z.number().int().min(REST_SECONDS_MIN).max(REST_SECONDS_MAX);
 
 /**
  * Validation-only counterpart to a `schema.parse()` - the same
@@ -131,7 +137,10 @@ export class WorkoutSessionService {
   async startFromPlanDay(planDayId: EntityId, startedAt?: number): Promise<StartSessionResult> {
     const at = startedAt ?? this.deps.clock.now();
     check(timestampSchema, at);
-    return this.start(() => this.deps.repository.startFromPlanDay(planDayId, at));
+    const globalDefaultRestSeconds = await this.deps.settings.get('timer.defaultRestSeconds');
+    return this.start(() =>
+      this.deps.repository.startFromPlanDay(planDayId, at, globalDefaultRestSeconds),
+    );
   }
 
   /** "Quick Start". @throws {WorkoutValidationError} when `title` is empty or too long. */
@@ -148,14 +157,15 @@ export class WorkoutSessionService {
     );
   }
 
-  addExercise(
+  async addExercise(
     sessionId: EntityId,
     exerciseId: EntityId,
     atIndex?: number,
   ): Promise<SessionExercise> {
+    const globalDefaultRestSeconds = await this.deps.settings.get('timer.defaultRestSeconds');
     return atIndex === undefined
-      ? this.deps.repository.addExercise(sessionId, exerciseId)
-      : this.deps.repository.addExercise(sessionId, exerciseId, atIndex);
+      ? this.deps.repository.addExercise(sessionId, exerciseId, globalDefaultRestSeconds)
+      : this.deps.repository.addExercise(sessionId, exerciseId, globalDefaultRestSeconds, atIndex);
   }
 
   /** Soft delete - pairs with {@link restoreExercise} as the undo toast's call target. */
@@ -177,6 +187,16 @@ export class WorkoutSessionService {
   async setExerciseNote(sessionExerciseId: EntityId, note: string | null): Promise<void> {
     check(nullableNoteSchema, note);
     return this.deps.repository.setExerciseNote(sessionExerciseId, note);
+  }
+
+  /**
+   * P7 tap-to-adjust write path (Step 0 decision 2 in
+   * `plans/2026-08-08-p7-rest-timer.md`). @throws {WorkoutValidationError}
+   * @throws {RepositoryNotFoundError} when the `session_exercise` does not exist or is soft-deleted.
+   */
+  async setExerciseRestOverride(sessionExerciseId: EntityId, restSeconds: number): Promise<void> {
+    check(restSecondsOverrideSchema, restSeconds);
+    return this.deps.repository.setExerciseRestOverride(sessionExerciseId, restSeconds);
   }
 
   reorderExercises(sessionId: EntityId, orderedIds: readonly EntityId[]): Promise<void> {

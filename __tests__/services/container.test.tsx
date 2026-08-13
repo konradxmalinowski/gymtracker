@@ -99,7 +99,7 @@ describe('createContainer', () => {
     );
 
     const started = await container.sessionRepository.startEmpty(now);
-    const exercise = await container.sessionRepository.addExercise(started.id, 'ex-1');
+    const exercise = await container.sessionRepository.addExercise(started.id, 'ex-1', 90);
     const set = await container.sessionRepository.appendSet(exercise.id, {
       weightKg: 100,
       reps: 5,

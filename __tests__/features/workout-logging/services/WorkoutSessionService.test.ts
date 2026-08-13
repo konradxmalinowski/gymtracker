@@ -109,6 +109,58 @@ describe('WorkoutSessionService - starting and resuming', () => {
   });
 });
 
+describe('WorkoutSessionService - rest duration resolution (P7)', () => {
+  async function insertPlanDayWithNullRest(
+    db: DatabaseContext,
+    exerciseId: string,
+  ): Promise<string> {
+    await db.run(
+      `INSERT INTO plan (id, name, is_active, sort_order, created_at, updated_at)
+       VALUES ('plan-1', 'Push Pull Legs', 1, 0, ?, ?)`,
+      [START, START],
+    );
+    await db.run(
+      `INSERT INTO plan_day (id, plan_id, name, sort_order, created_at, updated_at)
+       VALUES ('day-1', 'plan-1', 'Push A', 0, ?, ?)`,
+      [START, START],
+    );
+    await db.run(
+      `INSERT INTO plan_day_exercise (id, plan_day_id, exercise_id, sort_order, rest_seconds, created_at, updated_at)
+       VALUES ('pde-0', 'day-1', ?, 0, NULL, ?, ?)`,
+      [exerciseId, START, START],
+    );
+    return 'day-1';
+  }
+
+  it('addExercise reads timer.defaultRestSeconds from settings and applies it as the fallback', async () => {
+    const { db, service, settings } = setup();
+    await insertExercise(db);
+    const started = await service.startEmpty(START);
+    if (started.outcome !== 'started') {
+      throw new Error('unreachable');
+    }
+    await settings.set('timer.defaultRestSeconds', 150);
+
+    const exercise = await service.addExercise(started.session.id, 'ex-1');
+
+    expect(exercise.restSecondsOverride).toBe(150);
+  });
+
+  it('startFromPlanDay reads timer.defaultRestSeconds from settings when the plan day left it unset', async () => {
+    const { db, service, settings } = setup();
+    await insertExercise(db);
+    const planDayId = await insertPlanDayWithNullRest(db, 'ex-1');
+    await settings.set('timer.defaultRestSeconds', 200);
+
+    const result = await service.startFromPlanDay(planDayId, START);
+
+    if (result.outcome !== 'started') {
+      throw new Error('unreachable');
+    }
+    expect(result.session.exercises[0]!.restSecondsOverride).toBe(200);
+  });
+});
+
 describe('WorkoutSessionService - validation at the boundary', () => {
   async function withExercise() {
     const context = setup();
@@ -240,6 +292,54 @@ describe('WorkoutSessionService - notes (FR-16)', () => {
       RepositoryNotFoundError,
     );
     await expect(service.setSessionNotes('nope', 'x')).rejects.toBeInstanceOf(
+      RepositoryNotFoundError,
+    );
+  });
+});
+
+// P7 (`plans/2026-08-08-p7-rest-timer.md`, pass 3): `setExerciseRestOverride`
+// is pass 3's own addition to the P6/pass-2 service contract, mirroring
+// `setExerciseNote`'s shape and validation-boundary style exactly - see this
+// pass's report for why this landed here rather than in pass 2.
+describe('WorkoutSessionService - rest timer override (P7)', () => {
+  async function withExercise() {
+    const context = setup();
+    await insertExercise(context.db);
+    const result = await context.service.startEmpty(START);
+    if (result.outcome !== 'started') {
+      throw new Error('unreachable');
+    }
+    const exercise = await context.service.addExercise(result.session.id, 'ex-1');
+    return { ...context, session: result.session, exercise };
+  }
+
+  it('writes session_exercise.rest_seconds_override', async () => {
+    const { service, exercise } = await withExercise();
+
+    await expect(service.setExerciseRestOverride(exercise.id, 120)).resolves.toBeUndefined();
+    const snapshot = await service.findInProgress();
+    expect(snapshot!.session.exercises[0]!.restSecondsOverride).toBe(120);
+  });
+
+  it('rejects a value outside the [5, 1800] bound before it reaches the repository', async () => {
+    const { service, exercise } = await withExercise();
+
+    await expect(service.setExerciseRestOverride(exercise.id, 4)).rejects.toBeInstanceOf(
+      WorkoutValidationError,
+    );
+    await expect(service.setExerciseRestOverride(exercise.id, 1801)).rejects.toBeInstanceOf(
+      WorkoutValidationError,
+    );
+
+    const snapshot = await service.findInProgress();
+    expect(snapshot!.session.exercises[0]!.restSecondsOverride).not.toBe(4);
+    expect(snapshot!.session.exercises[0]!.restSecondsOverride).not.toBe(1801);
+  });
+
+  it('propagates RepositoryNotFoundError for an unknown session_exercise', async () => {
+    const { service } = await withExercise();
+
+    await expect(service.setExerciseRestOverride('nope', 60)).rejects.toBeInstanceOf(
       RepositoryNotFoundError,
     );
   });

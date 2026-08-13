@@ -18,6 +18,8 @@ import { Uuid7IdGenerator } from '@/services/id';
 import type { IdGenerator } from '@/services/id';
 
 const START = Date.UTC(2026, 7, 6, 18, 0, 0);
+/** Matches `timer.defaultRestSeconds`'s own settings default - stands in for the value `WorkoutSessionService` would read and pass down in real usage. */
+const DEFAULT_REST_SECONDS = 90;
 
 /** Builds a `SqliteWorkoutSessionRepository` plus the `personalRecordRepository` it now requires, bound to the same `db` instance. */
 function makeRepo(
@@ -129,7 +131,7 @@ describe('SqliteWorkoutSessionRepository - starting a workout (ADR-0005)', () =>
     await insertExercise(db, 'ex-3', 'Triceps Pushdown');
     const fixture = await insertPlanDay(db, ['ex-1', 'ex-2', 'ex-3']);
 
-    const session = await repo.startFromPlanDay(fixture.planDayId, START);
+    const session = await repo.startFromPlanDay(fixture.planDayId, START, DEFAULT_REST_SECONDS);
 
     expect(session.planId).toBe('plan-1');
     expect(session.planDayId).toBe('day-1');
@@ -149,7 +151,7 @@ describe('SqliteWorkoutSessionRepository - starting a workout (ADR-0005)', () =>
 
   it('startFromPlanDay throws RepositoryNotFoundError for a missing or deleted plan day', async () => {
     const { repo } = setup();
-    await expect(repo.startFromPlanDay('nope', START)).rejects.toBeInstanceOf(
+    await expect(repo.startFromPlanDay('nope', START, DEFAULT_REST_SECONDS)).rejects.toBeInstanceOf(
       RepositoryNotFoundError,
     );
   });
@@ -201,9 +203,9 @@ describe('SqliteWorkoutSessionRepository - exercises', () => {
     await insertExercise(db, 'ex-3', 'Curl');
     const session = await repo.startEmpty(START);
 
-    await repo.addExercise(session.id, 'ex-1');
-    await repo.addExercise(session.id, 'ex-2');
-    const inserted = await repo.addExercise(session.id, 'ex-3', 0);
+    await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+    await repo.addExercise(session.id, 'ex-2', DEFAULT_REST_SECONDS);
+    const inserted = await repo.addExercise(session.id, 'ex-3', DEFAULT_REST_SECONDS, 0);
 
     expect(inserted.sortOrder).toBe(0);
     const reloaded = await repo.findInProgress();
@@ -216,12 +218,12 @@ describe('SqliteWorkoutSessionRepository - exercises', () => {
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
 
-    await expect(repo.addExercise(session.id, 'missing')).rejects.toBeInstanceOf(
-      RepositoryNotFoundError,
-    );
+    await expect(
+      repo.addExercise(session.id, 'missing', DEFAULT_REST_SECONDS),
+    ).rejects.toBeInstanceOf(RepositoryNotFoundError);
 
     await repo.finish(session.id, START + 1000);
-    await expect(repo.addExercise(session.id, 'ex-1')).rejects.toBeInstanceOf(
+    await expect(repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS)).rejects.toBeInstanceOf(
       SessionNotInProgressError,
     );
   });
@@ -231,8 +233,8 @@ describe('SqliteWorkoutSessionRepository - exercises', () => {
     await insertExercise(db, 'ex-1');
     await insertExercise(db, 'ex-2', 'Row');
     const session = await repo.startEmpty(START);
-    const a = await repo.addExercise(session.id, 'ex-1');
-    const b = await repo.addExercise(session.id, 'ex-2');
+    const a = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const b = await repo.addExercise(session.id, 'ex-2', DEFAULT_REST_SECONDS);
 
     await repo.reorderExercises(session.id, [b.id, a.id]);
 
@@ -245,8 +247,8 @@ describe('SqliteWorkoutSessionRepository - exercises', () => {
     await insertExercise(db, 'ex-1');
     await insertExercise(db, 'ex-2', 'Row');
     const first = await repo.startEmpty(START);
-    const a = await repo.addExercise(first.id, 'ex-1');
-    const b = await repo.addExercise(first.id, 'ex-2');
+    const a = await repo.addExercise(first.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const b = await repo.addExercise(first.id, 'ex-2', DEFAULT_REST_SECONDS);
 
     await repo.setSupersetGroup([a.id, b.id], 1);
     let reloaded = await repo.findInProgress();
@@ -258,11 +260,89 @@ describe('SqliteWorkoutSessionRepository - exercises', () => {
 
     await repo.finish(first.id, START + 1000);
     const second = await repo.startEmpty(START + 2000);
-    const c = await repo.addExercise(second.id, 'ex-1');
+    const c = await repo.addExercise(second.id, 'ex-1', DEFAULT_REST_SECONDS);
 
     await expect(repo.setSupersetGroup([a.id, c.id], 2)).rejects.toBeInstanceOf(
       SupersetSpansMultipleSessionsError,
     );
+  });
+});
+
+describe('SqliteWorkoutSessionRepository - rest duration resolution (P7)', () => {
+  async function insertExerciseUserData(
+    db: DatabaseContext,
+    exerciseId: string,
+    defaultRestSeconds: number | null,
+  ): Promise<void> {
+    await db.run(
+      `INSERT INTO exercise_user_data (exercise_id, default_rest_seconds, created_at, updated_at)
+       VALUES (?, ?, ?, ?)`,
+      [exerciseId, defaultRestSeconds, START, START],
+    );
+  }
+
+  async function insertPlanDayWithNullRest(
+    db: DatabaseContext,
+    exerciseId: string,
+  ): Promise<string> {
+    await db.run(
+      `INSERT INTO plan (id, name, is_active, sort_order, created_at, updated_at)
+       VALUES ('plan-1', 'Push Pull Legs', 1, 0, ?, ?)`,
+      [START, START],
+    );
+    await db.run(
+      `INSERT INTO plan_day (id, plan_id, name, sort_order, created_at, updated_at)
+       VALUES ('day-1', 'plan-1', 'Push A', 0, ?, ?)`,
+      [START, START],
+    );
+    await db.run(
+      `INSERT INTO plan_day_exercise (id, plan_day_id, exercise_id, sort_order, rest_seconds, created_at, updated_at)
+       VALUES ('pde-0', 'day-1', ?, 0, NULL, ?, ?)`,
+      [exerciseId, START, START],
+    );
+    return 'day-1';
+  }
+
+  it("startFromPlanDay prefers the exercise-level default over the plan day's own rest_seconds", async () => {
+    const { db, repo } = setup();
+    await insertExercise(db, 'ex-1');
+    await insertExerciseUserData(db, 'ex-1', 45);
+    const fixture = await insertPlanDay(db, ['ex-1']);
+
+    const session = await repo.startFromPlanDay(fixture.planDayId, START, DEFAULT_REST_SECONDS);
+
+    expect(session.exercises[0]!.restSecondsOverride).toBe(45);
+  });
+
+  it('startFromPlanDay falls back to the global default when neither the exercise nor the plan day set one', async () => {
+    const { db, repo } = setup();
+    await insertExercise(db, 'ex-1');
+    const planDayId = await insertPlanDayWithNullRest(db, 'ex-1');
+
+    const session = await repo.startFromPlanDay(planDayId, START, DEFAULT_REST_SECONDS);
+
+    expect(session.exercises[0]!.restSecondsOverride).toBe(DEFAULT_REST_SECONDS);
+  });
+
+  it('addExercise uses the exercise-level default when set', async () => {
+    const { db, repo } = setup();
+    await insertExercise(db, 'ex-1');
+    await insertExerciseUserData(db, 'ex-1', 45);
+    const session = await repo.startEmpty(START);
+
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+
+    expect(exercise.restSecondsOverride).toBe(45);
+  });
+
+  it('addExercise falls back to the global default when the exercise has no override (no plan day tier applies)', async () => {
+    const { db, repo } = setup();
+    await insertExercise(db, 'ex-1');
+    const session = await repo.startEmpty(START);
+
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+
+    expect(exercise.restSecondsOverride).toBe(DEFAULT_REST_SECONDS);
   });
 });
 
@@ -271,7 +351,7 @@ describe('SqliteWorkoutSessionRepository - appendSet pre-fill (FR-11)', () => {
     const { db, repo } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
 
     const set = await repo.appendSet(exercise.id, {});
 
@@ -289,7 +369,7 @@ describe('SqliteWorkoutSessionRepository - appendSet pre-fill (FR-11)', () => {
     const { db, repo } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
 
     const first = await repo.appendSet(exercise.id, { setType: 'warmup', weightKg: 40, reps: 12 });
     const second = await repo.appendSet(exercise.id, {});
@@ -303,7 +383,7 @@ describe('SqliteWorkoutSessionRepository - appendSet pre-fill (FR-11)', () => {
     await insertExercise(db, 'ex-1');
 
     const previous = await repo.startEmpty(START);
-    const previousExercise = await repo.addExercise(previous.id, 'ex-1');
+    const previousExercise = await repo.addExercise(previous.id, 'ex-1', DEFAULT_REST_SECONDS);
     const warmup = await repo.appendSet(previousExercise.id, {
       setType: 'warmup',
       weightKg: 40,
@@ -319,7 +399,7 @@ describe('SqliteWorkoutSessionRepository - appendSet pre-fill (FR-11)', () => {
     await repo.finish(previous.id, START + 3_600_000);
 
     const today = await repo.startEmpty(START + 86_400_000);
-    const todayExercise = await repo.addExercise(today.id, 'ex-1');
+    const todayExercise = await repo.addExercise(today.id, 'ex-1', DEFAULT_REST_SECONDS);
     const set = await repo.appendSet(todayExercise.id, {});
 
     expect(set).toMatchObject({ setType: 'normal', weightKg: 102.5, reps: 6 });
@@ -330,13 +410,13 @@ describe('SqliteWorkoutSessionRepository - appendSet pre-fill (FR-11)', () => {
     await insertExercise(db, 'ex-1');
 
     const discarded = await repo.startEmpty(START);
-    const discardedExercise = await repo.addExercise(discarded.id, 'ex-1');
+    const discardedExercise = await repo.addExercise(discarded.id, 'ex-1', DEFAULT_REST_SECONDS);
     const set = await repo.appendSet(discardedExercise.id, { weightKg: 200, reps: 1 });
     await repo.completeSet(set.id, {});
     await repo.discard(discarded.id);
 
     const today = await repo.startEmpty(START + 86_400_000);
-    const todayExercise = await repo.addExercise(today.id, 'ex-1');
+    const todayExercise = await repo.addExercise(today.id, 'ex-1', DEFAULT_REST_SECONDS);
 
     expect(await repo.appendSet(todayExercise.id, {})).toMatchObject({
       weightKg: null,
@@ -348,7 +428,7 @@ describe('SqliteWorkoutSessionRepository - appendSet pre-fill (FR-11)', () => {
     const { db, repo } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
 
     const overridden = await repo.appendSet(exercise.id, { weightKg: 105, reps: null, rpe: 8 });
@@ -362,7 +442,7 @@ describe('SqliteWorkoutSessionRepository - drop sets (ADR-0006)', () => {
     const { db, repo, clock } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     const parentSet = await repo.appendSet(exercise.id, { weightKg: 100, reps: 8 });
     return { db, repo, clock, session, exercise, parentSet };
   }
@@ -441,7 +521,7 @@ describe('SqliteWorkoutSessionRepository - completing sets', () => {
     const { db, repo, clock } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     const set = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
     clock.advance(30_000);
 
@@ -469,7 +549,7 @@ describe('SqliteWorkoutSessionRepository - completing sets', () => {
     const { db, repo } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     const set = await repo.appendSet(exercise.id, { setType: 'warmup', weightKg: 100, reps: 5 });
 
     const result = await repo.completeSet(set.id, {});
@@ -504,7 +584,7 @@ describe('SqliteWorkoutSessionRepository - completing sets', () => {
       const { db, repo } = setup();
       await insertExercise(db, 'ex-1');
       const session = await repo.startEmpty(START);
-      const exercise = await repo.addExercise(session.id, 'ex-1');
+      const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
       const set = await repo.appendSet(exercise.id, { setType, weightKg: 100, reps: 5 });
 
       const result = await repo.completeSet(set.id, {});
@@ -546,7 +626,7 @@ describe('SqliteWorkoutSessionRepository - completing sets', () => {
     });
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     const set = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
 
     await expect(repo.completeSet(set.id, { reps: 6, rpe: 9 })).rejects.toThrow(
@@ -571,7 +651,7 @@ describe('SqliteWorkoutSessionRepository - completing sets', () => {
     const { db, repo, clock } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
 
     const first = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
     const firstResult = await repo.completeSet(first.id, {});
@@ -591,7 +671,7 @@ describe('SqliteWorkoutSessionRepository - completing sets', () => {
     const { db, repo, clock } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
 
     const first = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
     await repo.completeSet(first.id, {});
@@ -613,7 +693,7 @@ describe('SqliteWorkoutSessionRepository - completing sets', () => {
     const { db, repo } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     const set = await repo.appendSet(exercise.id, { weightKg: 60, reps: 10 });
 
     const result = await repo.completeSet(set.id, {});
@@ -625,7 +705,7 @@ describe('SqliteWorkoutSessionRepository - completing sets', () => {
     const { db, repo } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     const set = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
     await repo.completeSet(set.id, {});
 
@@ -649,7 +729,7 @@ describe('SqliteWorkoutSessionRepository - completing sets', () => {
     );
 
     clock.advance(5000);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     clock.advance(5000);
     const set = await repo.appendSet(exercise.id, {});
     clock.advance(5000);
@@ -669,7 +749,7 @@ describe('SqliteWorkoutSessionRepository - independent soft-delete lifecycles', 
     const { db, repo, clock } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     const set = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
 
     clock.advance(1000);
@@ -687,7 +767,7 @@ describe('SqliteWorkoutSessionRepository - independent soft-delete lifecycles', 
     const { db, repo, clock } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     const parentSet = await repo.appendSet(exercise.id, { weightKg: 100, reps: 8 });
     const dropSet = await repo.addDropSet(parentSet.id, { weightKg: 80, reps: 6 });
 
@@ -707,7 +787,7 @@ describe('SqliteWorkoutSessionRepository - independent soft-delete lifecycles', 
     const { db, repo, clock } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     const kept = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
     const deletedSeparately = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
 
@@ -730,7 +810,7 @@ describe('SqliteWorkoutSessionRepository - independent soft-delete lifecycles', 
     const { db, repo } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     const set = await repo.appendSet(exercise.id, {});
 
     await repo.deleteSet(set.id);
@@ -753,7 +833,7 @@ describe('SqliteWorkoutSessionRepository - notes (FR-16)', () => {
     const { db, repo, clock } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     const stampBefore = (await repo.findInProgress())!.activeState.updatedAt;
 
     clock.advance(1000);
@@ -775,7 +855,7 @@ describe('SqliteWorkoutSessionRepository - notes (FR-16)', () => {
     const { db, repo } = setup();
     await insertExercise(db, 'ex-1');
     const fixture = await insertPlanDay(db, ['ex-1']);
-    const session = await repo.startFromPlanDay(fixture.planDayId, START);
+    const session = await repo.startFromPlanDay(fixture.planDayId, START, DEFAULT_REST_SECONDS);
     expect(session.exercises[0]!.note).toBe('Slow eccentric');
 
     await repo.setExerciseNote(session.exercises[0]!.id, null);
@@ -792,7 +872,7 @@ describe('SqliteWorkoutSessionRepository - notes (FR-16)', () => {
     const { db, repo } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
 
     await expect(repo.setExerciseNote('nope', 'x')).rejects.toBeInstanceOf(RepositoryNotFoundError);
 
@@ -847,7 +927,7 @@ describe('SqliteWorkoutSessionRepository - active state', () => {
     const { db, repo } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
 
     await repo.saveActiveState({ sessionId: session.id, focusedSessionExerciseId: exercise.id });
     await repo.saveActiveState({ sessionId: session.id, scrollOffset: 420.5 });
@@ -862,6 +942,76 @@ describe('SqliteWorkoutSessionRepository - active state', () => {
       timerNotificationId: null,
     });
   });
+
+  // P7 (`plans/2026-08-08-p7-rest-timer.md`, pass 3): `saveActiveState`'s
+  // timer columns and `setExerciseRestOverride` are this pass's own
+  // extension of the P6/pass-2 `ActiveStatePatch`/repository contract - see
+  // this pass's report for why that extension landed here rather than in
+  // pass 2.
+  it('saveActiveState upserts the timer columns independently of focus/scroll', async () => {
+    const { repo } = setup();
+    const session = await repo.startEmpty(START);
+
+    await repo.saveActiveState({
+      sessionId: session.id,
+      timerDeadlineAt: START + 90_000,
+      timerTotalSeconds: 90,
+      timerNotificationId: 'notif-1',
+    });
+
+    expect((await repo.findInProgress())!.activeState).toMatchObject({
+      timerDeadlineAt: START + 90_000,
+      timerTotalSeconds: 90,
+      timerNotificationId: 'notif-1',
+    });
+
+    // Clearing is a real write too (`undefined` vs `null` matters - only
+    // fields actually present on the patch are touched, per the method's
+    // own contract; explicit `null` clears).
+    await repo.saveActiveState({
+      sessionId: session.id,
+      timerDeadlineAt: null,
+      timerTotalSeconds: null,
+      timerNotificationId: null,
+    });
+
+    expect((await repo.findInProgress())!.activeState).toMatchObject({
+      timerDeadlineAt: null,
+      timerTotalSeconds: null,
+      timerNotificationId: null,
+    });
+  });
+
+  it('setExerciseRestOverride writes rest_seconds_override and re-stamps the active state', async () => {
+    const { db, repo, clock } = setup();
+    await insertExercise(db, 'ex-1');
+    const session = await repo.startEmpty(START);
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const stampBefore = (await repo.findInProgress())!.activeState.updatedAt;
+
+    clock.advance(1000);
+    await repo.setExerciseRestOverride(exercise.id, 120);
+
+    const reloaded = await repo.findInProgress();
+    expect(reloaded!.exercises[0]!.restSecondsOverride).toBe(120);
+    expect(reloaded!.activeState.updatedAt).toBeGreaterThan(stampBefore);
+  });
+
+  it('setExerciseRestOverride throws for an unknown or removed session_exercise', async () => {
+    const { db, repo } = setup();
+    await insertExercise(db, 'ex-1');
+    const session = await repo.startEmpty(START);
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+
+    await expect(repo.setExerciseRestOverride('nope', 60)).rejects.toBeInstanceOf(
+      RepositoryNotFoundError,
+    );
+
+    await repo.removeExercise(exercise.id);
+    await expect(repo.setExerciseRestOverride(exercise.id, 60)).rejects.toBeInstanceOf(
+      RepositoryNotFoundError,
+    );
+  });
 });
 
 describe('SqliteWorkoutSessionRepository - finishing and discarding', () => {
@@ -869,7 +1019,7 @@ describe('SqliteWorkoutSessionRepository - finishing and discarding', () => {
     const { db, repo } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     const warmup = await repo.appendSet(exercise.id, { setType: 'warmup', weightKg: 40, reps: 10 });
     const working = await repo.appendSet(exercise.id, {
       setType: 'normal',
@@ -926,7 +1076,7 @@ describe('SqliteWorkoutSessionRepository - finishing and discarding', () => {
     const { db, repo } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
-    const exercise = await repo.addExercise(session.id, 'ex-1');
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     for (const values of [
       { setType: 'warmup' as const, weightKg: 40, reps: 12 },
       { setType: 'normal' as const, weightKg: 100, reps: 5 },
@@ -952,8 +1102,8 @@ describe('SqliteWorkoutSessionRepository - finishing and discarding', () => {
     await insertExercise(db, 'ex-1');
     await insertExercise(db, 'ex-2', 'Row');
     const session = await repo.startEmpty(START);
-    const kept = await repo.addExercise(session.id, 'ex-1');
-    const removed = await repo.addExercise(session.id, 'ex-2');
+    const kept = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const removed = await repo.addExercise(session.id, 'ex-2', DEFAULT_REST_SECONDS);
     const keptSet = await repo.appendSet(kept.id, { weightKg: 100, reps: 5 });
     const removedSet = await repo.appendSet(removed.id, { weightKg: 50, reps: 10 });
     await repo.completeSet(keptSet.id, {});
@@ -992,7 +1142,7 @@ describe('SqliteWorkoutSessionRepository - crash recovery (FR-19 / ADR-0005)', (
     await insertExercise(db, 'ex-2', 'Row');
     const fixture = await insertPlanDay(db, ['ex-1', 'ex-2']);
 
-    const session = await repo.startFromPlanDay(fixture.planDayId, START);
+    const session = await repo.startFromPlanDay(fixture.planDayId, START, DEFAULT_REST_SECONDS);
     const [benchPress, row] = session.exercises;
 
     const logged: { id: string; weightKg: number; reps: number }[] = [];

@@ -30,6 +30,8 @@ export const routes = {
     index: (): Href => '/profile/settings',
     units: (): Href => '/profile/settings/units',
     about: (): Href => '/profile/settings/about',
+    /** P7: the global rest-timer defaults screen (Step 0 decision 4) - mirrors `units`/`about`'s own shape exactly. */
+    timers: (): Href => '/profile/settings/timers',
     /** P8: `oneRm.formula`/`progression.upperIncrementKg`/`progression.lowerIncrementKg`. */
     progression: (): Href => '/profile/settings/progression',
   },
@@ -83,6 +85,19 @@ export const routes = {
    */
   modals: {
     exercisePicker: (): Href => '/(modals)/exercise-picker',
+    /**
+     * P7: the in-workout rest-timer settings surface (Step 0 decision 4) -
+     * `sessionExerciseId` identifies whose override the sheet shows/edits,
+     * the same "plain id as a route param" choice `plans.day`/`exercises.detail`
+     * already make (unlike `exercisePicker`, this flow's "result" is a
+     * single primitive value with an obvious, cheap round trip through the
+     * route itself - no store needed the way the unbounded exercise-id list
+     * required).
+     */
+    restTimerSettings: (sessionExerciseId: string): Href => ({
+      pathname: '/(modals)/rest-timer-settings',
+      params: { sessionExerciseId },
+    }),
   },
 
   /**

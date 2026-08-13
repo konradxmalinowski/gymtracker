@@ -13,6 +13,7 @@ import { useActiveWorkoutStore } from '@/stores/activeWorkoutStore';
 import { useToastStore } from '@/stores/toastStore';
 
 import { recoverFromWriteFailure } from './sessionSync';
+import { useMaybeStartRestTimer } from './useRestTimer';
 
 /** `AddSetButton` - pre-fill is the repository's own job (FR-11); this only needs to commit whatever comes back. Not front-run optimistically for the same reason `useAddExercise` isn't: no client-side id yet. */
 export function useAppendSet() {
@@ -56,18 +57,34 @@ export function useUpdateSet() {
  * The NFR-01 hot path (ARCHITECTURE.md section 5.1): the store update and the
  * haptic fire synchronously, before the service call even starts - nothing
  * here is awaited by the caller (`SetRow`'s checkbox `onPress` calls this and
- * returns immediately). The rest timer is still out of scope for this file.
+ * returns immediately).
  *
- * PR evaluation (P8) lands in the async `.then()` continuation, after the
- * synchronous hot path has already run - `result.newPRs` is written to
- * `activeWorkoutStore.latestPR` only when non-empty, so a set that beat
- * nothing never overwrites whatever badge is already showing. This does not
- * touch the hot path's timing: nothing here is awaited any differently than
- * before, `result.newPRs` was already part of `result` this continuation was
- * already reading to call `upsertSet`.
+ * P7: `maybeStartRestTimer` is fired alongside the (already fire-and-forget)
+ * `sessionService.completeSet` call, not chained after it - the superset
+ * skip rule and the rest duration to start from are both already resolvable
+ * from the store's current snapshot (`shouldStartRestTimer` only needs
+ * `session.exercises`' superset grouping, and the exercise's
+ * `restSecondsOverride` was already seeded at add/start time by Pass 2), so
+ * there is nothing about starting the timer that depends on this
+ * `completeSet` write actually landing. A rapid double-tap on the same set
+ * does not double-start a timer in practice: `patchSet` above updates
+ * `isCompleted` synchronously, so the checkbox's controlled `value` already
+ * reflects "completed" (routing a fast second tap to `useUncompleteSet`
+ * instead, see `SetRow`'s `onValueChange`) well before a human can
+ * physically tap again.
+ *
+ * P8: PR evaluation lands in the async `.then()` continuation, after the
+ * synchronous hot path (store patch, haptic, rest-timer start) has already
+ * run - `result.newPRs` is written to `activeWorkoutStore.latestPR` only
+ * when non-empty, so a set that beat nothing never overwrites whatever badge
+ * is already showing. This does not touch the hot path's timing: nothing
+ * here is awaited any differently than before, `result.newPRs` was already
+ * part of `result` this continuation was already reading to call
+ * `upsertSet`.
  */
 export function useCompleteSet() {
   const { sessionService } = useContainer();
+  const maybeStartRestTimer = useMaybeStartRestTimer();
   return useCallback(
     (workoutSet: WorkoutSet, values: CompleteSetValues = {}) => {
       useActiveWorkoutStore.getState().patchSet(workoutSet.id, {
@@ -85,8 +102,9 @@ export function useCompleteSet() {
         },
         () => recoverFromWriteFailure(sessionService),
       );
+      maybeStartRestTimer(workoutSet.sessionExerciseId);
     },
-    [sessionService],
+    [sessionService, maybeStartRestTimer],
   );
 }
 

@@ -62,11 +62,10 @@ export function SettingsScreen() {
             testID="settings-units-row"
           />
           <ListRow
-            title={t('profileSettings.progressionRowTitle')}
-            subtitle={t('profileSettings.progressionRowSubtitle')}
-            onPress={() => router.push(routes.profileSettings.progression())}
+            title={t('profileSettings.timersRowTitle')}
+            onPress={() => router.push(routes.profileSettings.timers())}
             showChevron
-            testID="settings-progression-row"
+            testID="settings-timers-row"
           />
           <ListRow
             title={t('profileSettings.hapticsRowTitle')}
@@ -80,6 +79,13 @@ export function SettingsScreen() {
                 testID="settings-haptics-switch"
               />
             }
+          />
+          <ListRow
+            title={t('profileSettings.progressionRowTitle')}
+            subtitle={t('profileSettings.progressionRowSubtitle')}
+            onPress={() => router.push(routes.profileSettings.progression())}
+            showChevron
+            testID="settings-progression-row"
           />
           <ListRow
             title={t('records.recalculate.rowTitle')}

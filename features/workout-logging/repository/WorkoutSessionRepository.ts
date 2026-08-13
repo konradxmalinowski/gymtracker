@@ -164,16 +164,24 @@ export interface CompletedSetResult {
  * What `saveActiveState` may write. `sessionId` identifies the row; every other
  * field is optional and only the ones present are written.
  *
- * The timer columns (`timer_deadline_at`, `timer_total_seconds`,
- * `timer_notification_id`) are intentionally not part of this type yet - P7
- * owns the rest timer and will extend it. Nothing in P6 has a deadline to
- * write, and declaring the fields before there is a writer is the placeholder
- * scaffolding ADR-0004 forbids.
+ * The timer fields (`timerDeadlineAt`, `timerTotalSeconds`,
+ * `timerNotificationId`) are P7's extension of this type, added by pass 3
+ * (`plans/2026-08-08-p7-rest-timer.md`) rather than left for pass 2: the
+ * rest-timer set-completion hook needs to persist a started/adjusted/cancelled
+ * deadline through this exact patch shape, and the P6-era placeholder comment
+ * that used to sit here ("P7 owns the rest timer and will extend it") is
+ * what this replaces - the extension it predicted.
  */
 export interface ActiveStatePatch {
   sessionId: EntityId;
   focusedSessionExerciseId?: EntityId | null;
   scrollOffset?: number | null;
+  /** Absolute epoch ms the timer counts down to, or `null` to clear it. */
+  timerDeadlineAt?: number | null;
+  /** The full duration `timerDeadlineAt` was started/adjusted for, in seconds. */
+  timerTotalSeconds?: number | null;
+  /** The scheduled `expo-notifications` id backing `timerDeadlineAt`, or `null` when nothing is scheduled (denied permission, `timer.notification` off, or the native call failed). */
+  timerNotificationId?: string | null;
 }
 
 /** What `finish()` returns: the denormalized totals it just wrote, so a caller need not re-read the row. The summary *screen*'s shape is P9's concern, not this. */
@@ -224,12 +232,23 @@ export interface WorkoutSessionRepository {
    * (order, superset groups and rest overrides included), and its
    * `active_session_state` row - one transaction.
    *
+   * Each copied exercise's `rest_seconds_override` is resolved through
+   * `resolveRestSeconds` (`features/rest-timer`) rather than taken verbatim
+   * from `plan_day_exercise.rest_seconds`: the exercise's own
+   * `exercise_user_data.default_rest_seconds` wins if set, the plan day's own
+   * value is next, and `globalDefaultRestSeconds` is the final fallback so a
+   * plan day that never set a rest target still seeds a real value instead of
+   * `null`. The caller (`WorkoutSessionService`) reads
+   * `timer.defaultRestSeconds` from settings and passes it in - this
+   * repository stays free of settings-schema knowledge.
+   *
    * @throws {SessionAlreadyInProgressError} when a session is already in progress.
    * @throws {RepositoryNotFoundError} when `planDayId` does not exist.
    */
   startFromPlanDay(
     planDayId: EntityId,
     startedAt: number,
+    globalDefaultRestSeconds: number,
     tx?: SqlExecutor,
   ): Promise<ActiveSessionAggregate>;
 
@@ -254,10 +273,36 @@ export interface WorkoutSessionRepository {
     tx?: SqlExecutor,
   ): Promise<void>;
 
-  /** Appends at the end, or inserts at `atIndex` and shifts everything at or after it down. */
+  /**
+   * P7 (`plans/2026-08-08-p7-rest-timer.md`, Step 0 decision 2): writes
+   * `session_exercise.rest_seconds_override` directly, mirroring
+   * {@link setExerciseNote}'s shape exactly. This is the tap-to-adjust write
+   * path - every remaining set of this exercise this session inherits the
+   * adjusted duration, since `startFromPlanDay`/`addExercise` only resolve
+   * this column once, at add/start time.
+   *
+   * @throws {RepositoryNotFoundError} when the `session_exercise` does not exist or is soft-deleted.
+   */
+  setExerciseRestOverride(
+    sessionExerciseId: EntityId,
+    restSeconds: number,
+    tx?: SqlExecutor,
+  ): Promise<void>;
+
+  /**
+   * Appends at the end, or inserts at `atIndex` and shifts everything at or
+   * after it down. There is no plan day to seed `rest_seconds_override` from
+   * here (a manually added exercise has no plan day), so it is resolved
+   * through `resolveRestSeconds` with `planDaySeconds: null` - the exercise's
+   * own `exercise_user_data.default_rest_seconds` if set, else
+   * `globalDefaultRestSeconds`. See {@link startFromPlanDay}'s doc comment for
+   * why the global default is a plain parameter rather than a settings read
+   * inside this repository.
+   */
   addExercise(
     sessionId: EntityId,
     exerciseId: EntityId,
+    globalDefaultRestSeconds: number,
     atIndex?: number,
     tx?: SqlExecutor,
   ): Promise<SessionExercise>;

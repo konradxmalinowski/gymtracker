@@ -9,6 +9,8 @@ import { FixedClock } from '@/services/clock';
 import { Uuid7IdGenerator } from '@/services/id';
 
 const START = Date.UTC(2026, 7, 6, 18, 0, 0);
+/** Matches `timer.defaultRestSeconds`'s own settings default - stands in for the value `WorkoutSessionService` would read and pass down in real usage. */
+const DEFAULT_REST_SECONDS = 90;
 
 function setup() {
   const db = createTestDatabase();
@@ -60,7 +62,7 @@ describe('SqliteWorkoutSessionRepository - drop-set cascade independence (ADR-00
     const context = setup();
     await insertExercise(context.db, 'ex-1');
     const session = await context.repo.startEmpty(START);
-    const exercise = await context.repo.addExercise(session.id, 'ex-1');
+    const exercise = await context.repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     const parent = await context.repo.appendSet(exercise.id, { weightKg: 100, reps: 8 });
     const first = await context.repo.addDropSet(parent.id, { weightKg: 80, reps: 6 });
     context.clock.advance(1000);
@@ -142,8 +144,8 @@ describe('SqliteWorkoutSessionRepository - constraint violations and rollback pa
     await insertExercise(context.db, 'ex-1');
     await insertExercise(context.db, 'ex-2', 'Row');
     const session = await context.repo.startEmpty(START);
-    const first = await context.repo.addExercise(session.id, 'ex-1');
-    const second = await context.repo.addExercise(session.id, 'ex-2');
+    const first = await context.repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const second = await context.repo.addExercise(session.id, 'ex-2', DEFAULT_REST_SECONDS);
     return { ...context, session, first, second };
   }
 
@@ -170,7 +172,7 @@ describe('SqliteWorkoutSessionRepository - constraint violations and rollback pa
 
     await repo.finish(session.id, START + 1000);
     const other = await repo.startEmpty(START + 2000);
-    const foreign = await repo.addExercise(other.id, 'ex-1');
+    const foreign = await repo.addExercise(other.id, 'ex-1', DEFAULT_REST_SECONDS);
 
     await expect(repo.reorderExercises(other.id, [foreign.id, first.id])).rejects.toBeInstanceOf(
       RepositoryNotFoundError,
@@ -274,7 +276,7 @@ describe('SqliteWorkoutSessionRepository - constraint violations and rollback pa
     const { repo, session, first } = await withTwoExercises();
     await repo.finish(session.id, START + 1000);
     const other = await repo.startEmpty(START + 2000);
-    const foreign = await repo.addExercise(other.id, 'ex-1');
+    const foreign = await repo.addExercise(other.id, 'ex-1', DEFAULT_REST_SECONDS);
 
     await expect(repo.setSupersetGroup([first.id, foreign.id], 1)).rejects.toBeInstanceOf(
       SupersetSpansMultipleSessionsError,
@@ -297,7 +299,7 @@ describe('SqliteWorkoutSessionRepository - transaction composition', () => {
     await insertExercise(context.db, 'ex-1');
     await insertExercise(context.db, 'ex-2', 'Row');
     const session = await context.repo.startEmpty(START);
-    const exercise = await context.repo.addExercise(session.id, 'ex-1');
+    const exercise = await context.repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     return { ...context, session, exercise };
   }
 
@@ -308,7 +310,13 @@ describe('SqliteWorkoutSessionRepository - transaction composition', () => {
       const set = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 }, tx);
       await repo.completeSet(set.id, { rpe: 8 }, tx);
       await repo.addDropSet(set.id, { weightKg: 80, reps: 5 }, tx);
-      const second = await repo.addExercise(session.id, 'ex-2', undefined, tx);
+      const second = await repo.addExercise(
+        session.id,
+        'ex-2',
+        DEFAULT_REST_SECONDS,
+        undefined,
+        tx,
+      );
       await repo.setSupersetGroup([exercise.id, second.id], 2, tx);
       await repo.setExerciseNote(exercise.id, 'Paused reps', tx);
       await repo.setSessionNotes(session.id, 'Good session', tx);
