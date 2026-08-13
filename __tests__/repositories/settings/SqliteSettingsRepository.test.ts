@@ -22,6 +22,7 @@ describe('SETTINGS_SCHEMA', () => {
         'timer.autoStart',
         'workout.staleAfterHours',
         'workout.confirmDiscard',
+        'workout.showEstimatedCalories',
         'oneRm.formula',
         'progression.upperIncrementKg',
         'progression.lowerIncrementKg',
@@ -93,6 +94,8 @@ function sampleFor(key: SettingsKey): unknown {
     case 'diagnostics.crashReporting':
     case 'haptics.enabled':
       return false;
+    case 'workout.showEstimatedCalories':
+      return true;
     case 'workout.staleAfterHours':
       return 12;
     case 'oneRm.formula':
