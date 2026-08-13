@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 
 import { restTimerNotificationService } from '@/features/rest-timer';
 import { t } from '@/i18n';
@@ -13,6 +13,7 @@ import { useToastStore } from '@/stores/toastStore';
 
 import { invalidateAfterWorkoutFinish } from './invalidation';
 import { bumpTimerOperationSequence } from './useRestTimer';
+import { sessionSummaryKeys } from './useSessionHistory';
 
 export interface UseFinishDiscardWorkoutResult {
   finish: (sessionId: string) => Promise<void>;
@@ -26,9 +27,17 @@ export interface UseFinishDiscardWorkoutResult {
  * store; ADR-0005 mechanism 6: clear the MMKV flags; ADR-0008's invalidation
  * convention: invalidate the query keys finishing a workout can affect) and
  * both navigate with `router.replace`, not `push` (ADR-0007 rule 3's intent -
- * "the user cannot swipe back into a workout that no longer exists" - applied
- * to Home instead of the not-yet-built `workout/summary` route, per this
- * phase's brief).
+ * "the user cannot swipe back into a workout that no longer exists"). They
+ * land on different destinations as of P9: `discard()` still replaces with
+ * Home (nothing to show for a discarded workout), while `finish()` replaces
+ * with `workout/summary/[sessionId]` - the route graph's `SUM --> HOME` edge,
+ * not `ACT --> HOME` directly. Before navigating, `finish()` seeds the query
+ * cache at `sessionSummaryKeys.detail(sessionId)` with the real
+ * `SessionSummary` `sessionService.finish()` just returned (including
+ * `newPRs`, which cannot be re-derived later - see that field's own doc
+ * comment on `WorkoutSessionRepository.SessionSummary`) so
+ * `WorkoutSummaryScreen`'s `useSessionSummary` reads it back with no extra
+ * request the instant it mounts.
  *
  * P7 (code review finding, pass 3 follow-up): finishing or discarding while
  * a rest timer is still running used to leave it behind entirely - neither
@@ -54,36 +63,40 @@ export function useFinishDiscardWorkout(): UseFinishDiscardWorkoutResult {
   const [isFinishing, setIsFinishing] = useState(false);
   const [isDiscarding, setIsDiscarding] = useState(false);
 
-  const clearAndExit = useCallback(() => {
-    bumpTimerOperationSequence();
+  const clearAndExit = useCallback(
+    (destination: Href) => {
+      bumpTimerOperationSequence();
 
-    const timerNotificationId =
-      useActiveWorkoutStore.getState().session?.activeState.timerNotificationId ?? null;
-    if (timerNotificationId) {
-      void restTimerNotificationService.cancelScheduledNotification(timerNotificationId);
-    }
-    useRestTimerStore.getState().clearDeadline();
+      const timerNotificationId =
+        useActiveWorkoutStore.getState().session?.activeState.timerNotificationId ?? null;
+      if (timerNotificationId) {
+        void restTimerNotificationService.cancelScheduledNotification(timerNotificationId);
+      }
+      useRestTimerStore.getState().clearDeadline();
 
-    useActiveWorkoutStore.getState().clear();
-    kv.set('session.active', false);
-    kv.delete('session.activeId');
-    invalidateAfterWorkoutFinish(queryClient);
-    router.replace(routes.tabs.home());
-  }, [queryClient]);
+      useActiveWorkoutStore.getState().clear();
+      kv.set('session.active', false);
+      kv.delete('session.activeId');
+      invalidateAfterWorkoutFinish(queryClient);
+      router.replace(destination);
+    },
+    [queryClient],
+  );
 
   const finish = useCallback(
     async (sessionId: string) => {
       setIsFinishing(true);
       try {
-        await sessionService.finish(sessionId);
-        clearAndExit();
+        const summary = await sessionService.finish(sessionId);
+        queryClient.setQueryData(sessionSummaryKeys.detail(sessionId), summary);
+        clearAndExit(routes.workout.summary(sessionId));
       } catch {
         useToastStore.getState().show({ message: t('workoutLogging.active.finishErrorMessage') });
       } finally {
         setIsFinishing(false);
       }
     },
-    [sessionService, clearAndExit],
+    [sessionService, clearAndExit, queryClient],
   );
 
   const discard = useCallback(
@@ -91,7 +104,7 @@ export function useFinishDiscardWorkout(): UseFinishDiscardWorkoutResult {
       setIsDiscarding(true);
       try {
         await sessionService.discard(sessionId);
-        clearAndExit();
+        clearAndExit(routes.tabs.home());
       } catch {
         useToastStore.getState().show({ message: t('workoutLogging.active.discardErrorMessage') });
       } finally {

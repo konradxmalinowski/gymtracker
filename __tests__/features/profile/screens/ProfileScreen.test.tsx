@@ -87,4 +87,16 @@ describe('ProfileScreen', () => {
 
     expect(router.push).toHaveBeenCalledWith('/profile/records');
   });
+
+  it('P9: navigates to the training-history list from the history row', async () => {
+    const container = createContainer(createTestDatabase());
+    await container.profileService.completeOnboarding({ nickname: 'Konrad' });
+
+    const { findByText, getByTestId } = await renderProfileScreen({ container });
+    await findByText('Konrad');
+
+    await fireEvent.press(getByTestId('profile-history-row'));
+
+    expect(router.push).toHaveBeenCalledWith('/profile/history');
+  });
 });

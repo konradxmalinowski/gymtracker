@@ -59,6 +59,12 @@ export function ProfileScreen() {
             testID="profile-records-row"
           />
           <ListRow
+            title={t('workoutLogging.history.rowTitle')}
+            onPress={() => router.push(routes.profile.history())}
+            showChevron
+            testID="profile-history-row"
+          />
+          <ListRow
             title={t('profile.settingsRowTitle')}
             subtitle={t('profile.settingsRowSubtitle')}
             onPress={() => router.push(routes.profileSettings.index())}

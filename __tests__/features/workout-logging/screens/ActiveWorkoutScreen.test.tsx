@@ -202,7 +202,7 @@ describe('ActiveWorkoutScreen', () => {
     unmount();
   });
 
-  it('Finish persists the summary, clears the store, and replaces the route with Home', async () => {
+  it('Finish persists the summary, clears the store, and replaces the route with the summary screen', async () => {
     const db = createTestDatabase();
     const container = createContainer(db);
     const started = await container.sessionService.startEmpty(START, 'Quick Start');
@@ -212,8 +212,14 @@ describe('ActiveWorkoutScreen', () => {
 
     await fireEvent.press(await findByTestId('workout-header-finish'));
 
+    // P9: `finish()` now replaces with `workout/summary/[sessionId]` (the
+    // route graph's `SUM --> HOME` edge), not Home directly - see
+    // `useFinishDiscardWorkout.ts`'s own doc comment.
     await waitFor(() => {
-      expect(router.replace).toHaveBeenCalledWith('/');
+      expect(router.replace).toHaveBeenCalledWith({
+        pathname: '/workout/summary/[sessionId]',
+        params: { sessionId: started.session.id },
+      });
     });
     expect(useActiveWorkoutStore.getState().session).toBeNull();
 

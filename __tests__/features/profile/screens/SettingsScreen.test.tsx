@@ -97,6 +97,31 @@ describe('SettingsScreen', () => {
     expect(router.push).toHaveBeenCalledWith('/profile/settings/progression');
   });
 
+  it('P9: renders the estimated-calories switch off (schema default) once settings resolve', async () => {
+    const { getByTestId } = await renderSettingsScreen();
+
+    await waitFor(() => {
+      expect(getByTestId('settings-estimated-calories-switch').props.value).toBe(false);
+    });
+  });
+
+  it('P9: toggling the estimated-calories switch persists the change', async () => {
+    const { container, getByTestId } = await renderSettingsScreen();
+
+    await waitFor(() => {
+      expect(getByTestId('settings-estimated-calories-switch').props.value).toBe(false);
+    });
+
+    await fireEvent(getByTestId('settings-estimated-calories-switch'), 'valueChange', true);
+
+    await waitFor(async () => {
+      expect(await container.settings.get('workout.showEstimatedCalories')).toBe(true);
+    });
+    await waitFor(() => {
+      expect(getByTestId('settings-estimated-calories-switch').props.value).toBe(true);
+    });
+  });
+
   it('P8: "Recalculate records" asks for confirmation, then rebuilds and toasts on success', async () => {
     const { container, findByTestId, findByText } = await renderSettingsScreen();
     const rebuildSpy = jest.spyOn(container.recordService, 'rebuild');

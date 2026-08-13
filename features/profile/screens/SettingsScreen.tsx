@@ -6,7 +6,11 @@ import { Column, Screen } from '@/components/layout';
 import { ListRow, Surface, Switch } from '@/components/ui';
 import { ConfirmDialog } from '@/components/feedback';
 import { useRebuildRecords } from '@/features/records';
-import { useHapticsSetting, useUnitsSettings } from '@/features/profile/hooks/useSettings';
+import {
+  useHapticsSetting,
+  useShowEstimatedCaloriesSetting,
+  useUnitsSettings,
+} from '@/features/profile/hooks/useSettings';
 import { t } from '@/i18n';
 import { routes } from '@/navigation/routes';
 import { useContainer } from '@/services/container';
@@ -18,6 +22,11 @@ export function SettingsScreen() {
   const { recordService } = useContainer();
   const { enabled: hapticsEnabled, isPending: hapticsPending, setEnabled } = useHapticsSetting();
   const { weightUnit, lengthUnit } = useUnitsSettings();
+  const {
+    enabled: estimatedCaloriesEnabled,
+    isPending: estimatedCaloriesPending,
+    setEnabled: setEstimatedCaloriesEnabled,
+  } = useShowEstimatedCaloriesSetting();
   const rebuildRecords = useRebuildRecords(recordService);
 
   const [confirmRebuildVisible, setConfirmRebuildVisible] = useState(false);
@@ -86,6 +95,19 @@ export function SettingsScreen() {
             onPress={() => router.push(routes.profileSettings.progression())}
             showChevron
             testID="settings-progression-row"
+          />
+          <ListRow
+            title={t('profileSettings.estimatedCaloriesRowTitle')}
+            subtitle={t('profileSettings.estimatedCaloriesRowSubtitle')}
+            trailing={
+              <Switch
+                value={estimatedCaloriesEnabled ?? false}
+                onValueChange={setEstimatedCaloriesEnabled}
+                disabled={estimatedCaloriesPending}
+                accessibilityLabel={t('profileSettings.estimatedCaloriesRowTitle')}
+                testID="settings-estimated-calories-switch"
+              />
+            }
           />
           <ListRow
             title={t('records.recalculate.rowTitle')}

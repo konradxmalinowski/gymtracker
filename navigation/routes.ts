@@ -41,10 +41,14 @@ export const routes = {
    * standalone list screen read differently enough that grouping this under
    * `profileSettings` would misname it) - `profile.records` is the first
    * member, sibling in spirit to `profileSettings` rather than nested under
-   * it.
+   * it. P9's `profile.history` follows the exact same precedent - see this
+   * plan's "Routing gap this plan resolves" for why the history list lives
+   * here rather than under a not-yet-built `HOME --> HIST`/`CAL --> HIST`
+   * entry point (P10/P12).
    */
   profile: {
     records: (): Href => '/profile/records',
+    history: (): Href => '/profile/history',
   },
 
   /**
@@ -103,10 +107,35 @@ export const routes = {
   /**
    * P6: the active-workout route, a root-level `Stack` outside `(tabs)`
    * (ADR-0007) - `fullScreenModal`, gestures disabled, Android back
-   * intercepted. A single entry, matching the route graph's `workout/active`
-   * node; `workout/summary/[sessionId]` is P9 and deliberately absent.
+   * intercepted. `workout.summary` is P9's addition: the celebratory,
+   * one-time-per-finish view `useFinishDiscardWorkout`'s `finish()` now
+   * navigates to instead of Home directly (see that hook's own doc comment)
+   * - reached only from finishing a workout, per the route graph's `SUM -->
+   * HOME` edge (nothing routes back into it); the persistent, revisitable
+   * view of a finished session is `history.detail`, not this one.
    */
   workout: {
     active: (): Href => '/workout/active',
+    summary: (sessionId: string): Href => ({
+      pathname: '/workout/summary/[sessionId]',
+      params: { sessionId },
+    }),
+  },
+
+  /**
+   * P9: the history detail route, root-level per the ARCHITECTURE.md folder
+   * tree (section 9) and its own top-level `history/[sessionId].tsx` entry -
+   * not nested under `workout/` (that stack is reserved for the in-progress
+   * workout "mode", ADR-0007) and not nested under `profile/` (a session can
+   * be reached from more than one place - the history list today, a future
+   * calendar/statistics surface later - so it isn't profile-scoped the way
+   * `profile.records`/`profile.history` are). Mirrors `plans.detail(planId)`'s
+   * exact single-param shape.
+   */
+  history: {
+    detail: (sessionId: string): Href => ({
+      pathname: '/history/[sessionId]',
+      params: { sessionId },
+    }),
   },
 } as const;
