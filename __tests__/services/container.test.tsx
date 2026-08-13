@@ -30,6 +30,9 @@ describe('createContainer', () => {
     expect(container.planService).toBeDefined();
     expect(container.sessionRepository).toBeDefined();
     expect(container.sessionService).toBeDefined();
+    expect(container.recordRepository).toBeDefined();
+    expect(container.recordService).toBeDefined();
+    expect(container.exerciseHistoryRepository).toBeDefined();
 
     expect(typeof container.clock.now()).toBe('number');
     expect(typeof container.idGenerator.generate()).toBe('string');
@@ -83,6 +86,33 @@ describe('createContainer', () => {
     const viaRepository = await container.sessionRepository.findInProgress();
     expect(viaRepository?.id).toBe(result.outcome === 'started' ? result.session.id : undefined);
     expect(viaRepository?.status).toBe('in_progress');
+  });
+
+  it('sessionRepository is wired to recordRepository - completing a set beats a record visible through recordRepository directly (P8, ADR-0015)', async () => {
+    const db = createTestDatabase();
+    const container = createContainer(db);
+    const now = Date.UTC(2026, 7, 6, 18);
+    await db.run(
+      `INSERT INTO exercise (id, source, name_en, name_search, tracking_type, created_at, updated_at)
+       VALUES ('ex-1', 'catalog', 'Bench Press', 'bench press', 'weight_reps', ?, ?)`,
+      [now, now],
+    );
+
+    const started = await container.sessionRepository.startEmpty(now);
+    const exercise = await container.sessionRepository.addExercise(started.id, 'ex-1', 90);
+    const set = await container.sessionRepository.appendSet(exercise.id, {
+      weightKg: 100,
+      reps: 5,
+    });
+
+    const result = await container.sessionRepository.completeSet(set.id, {});
+
+    expect(result.newPRs.length).toBeGreaterThan(0);
+    const viaRecordRepository = await container.recordRepository.listCurrent('ex-1');
+    expect(viaRecordRepository.length).toBe(result.newPRs.length);
+    expect(viaRecordRepository.map((r) => r.recordType).sort()).toEqual(
+      result.newPRs.map((r) => r.recordType).sort(),
+    );
   });
 
   it('sessionService reads workout.staleAfterHours through the container settings repository', async () => {

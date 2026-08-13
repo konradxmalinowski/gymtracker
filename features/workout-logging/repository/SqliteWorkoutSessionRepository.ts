@@ -4,6 +4,7 @@ import {
   BaseSqliteRepository,
   RepositoryNotFoundError,
   type AuditedRow,
+  type RepositoryDependencies,
 } from '@/repositories/base';
 import { boolFromSql, boolToSql, jsonFromSql } from '@/repositories/mapping';
 import {
@@ -12,6 +13,7 @@ import {
   type ExerciseListItem,
   type ExerciseTrackingType,
 } from '@/features/exercise-library';
+import { isRecordEligibleSetType, type PersonalRecordRepository } from '@/features/records';
 import { resolveRestSeconds } from '@/features/rest-timer';
 import { computeSessionTotals } from '../domain/SessionTotals';
 import type { SetType } from '../domain/setSemantics';
@@ -39,6 +41,22 @@ import type {
 
 /** Fallback title for a "Quick Start" workout. Exported so a presentation layer can substitute a localized string via `startEmpty`'s `title` parameter rather than this ever reaching a screen as hardcoded copy. */
 export const DEFAULT_QUICK_START_TITLE = 'Quick Start';
+
+/**
+ * `RepositoryDependencies` (`db`/`clock`/`idGenerator`) plus the one extra
+ * dependency this repository needs beyond what `BaseSqliteRepository`
+ * provides: `personalRecordRepository`, for `completeSet`'s PR evaluation
+ * (ADR-0015 Decision 3, ARCHITECTURE.md section 5.1 - "personal-record
+ * evaluation belongs in this transaction"). Added here, as a constructor
+ * dependency, rather than a global import of `SqlitePersonalRecordRepository`
+ * - the same dependency-injection discipline every other cross-repository
+ * composition in this codebase already follows (no repository ever
+ * `new`s another repository itself; `services/container.ts` wires the
+ * concrete instance in).
+ */
+export interface WorkoutSessionRepositoryDependencies extends RepositoryDependencies {
+  personalRecordRepository: PersonalRecordRepository;
+}
 
 interface WorkoutSessionRow extends AuditedRow {
   plan_id: string | null;
@@ -244,12 +262,24 @@ function isUniqueConstraintError(error: unknown): boolean {
  *    `SqlitePlanRepository` needed for `plan_day`/`plan_day_exercise` and for
  *    the same reason. Every table name reaching them is one of this file's own
  *    literals, never caller input.
+ *
+ * 4. **Takes `personalRecordRepository` as a fourth constructor dependency**
+ *    (`WorkoutSessionRepositoryDependencies`, above) beyond
+ *    `BaseSqliteRepository`'s usual `db`/`clock`/`idGenerator` three -
+ *    `completeSet` calls it, inside the same transaction, per ADR-0015
+ *    Decision 3 (P8).
  */
 export class SqliteWorkoutSessionRepository
   extends BaseSqliteRepository<ActiveSessionAggregate, WorkoutSessionRow>
   implements WorkoutSessionRepository
 {
   protected readonly table = 'workout_session';
+  private readonly personalRecordRepository: PersonalRecordRepository;
+
+  constructor(deps: WorkoutSessionRepositoryDependencies) {
+    super(deps);
+    this.personalRecordRepository = deps.personalRecordRepository;
+  }
 
   /**
    * Produces a shell: the session's own columns with no exercises and a
@@ -911,9 +941,33 @@ export class SqliteWorkoutSessionRepository
       );
       await this.touchActiveState(row.session_id, t);
 
-      // Personal-record evaluation belongs in this transaction (ARCHITECTURE.md
-      // section 5.1) and lands here in P8. Nothing is stubbed for it now.
-      return { set: await this.requireSet(setId, t), newPRs: [] };
+      const completedSet = await this.requireSet(setId, t);
+
+      // Personal-record evaluation happens in this same transaction
+      // (ARCHITECTURE.md section 5.1, ADR-0015 Decision 3): either the set
+      // completion and any PR it beats both commit, or neither does. Skipped
+      // entirely for a set type `evaluateCandidateRecords` can never award a
+      // record to (`warmup`/`drop`/`assisted`/`partial`) - a cheap guard that
+      // avoids the settings read and the current-records query on the
+      // majority of completions in a typical session (warm-ups especially).
+      const newPRs = isRecordEligibleSetType(completedSet.setType)
+        ? await this.personalRecordRepository.evaluateAndUpsert(
+            completedSet.exerciseId,
+            {
+              setType: completedSet.setType,
+              weightKg: completedSet.weightKg,
+              reps: completedSet.reps,
+              durationSeconds: completedSet.durationSeconds,
+              distanceM: completedSet.distanceM,
+              workoutSetId: completedSet.id,
+              sessionId: completedSet.sessionId,
+              achievedAt: completedSet.performedAt,
+            },
+            t,
+          )
+        : [];
+
+      return { set: completedSet, newPRs };
     };
     return tx ? runner(tx) : this.deps.db.transaction(runner);
   }

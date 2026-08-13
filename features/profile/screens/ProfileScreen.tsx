@@ -53,6 +53,12 @@ export function ProfileScreen() {
 
         <Surface level={1} radius="lg">
           <ListRow
+            title={t('records.list.title')}
+            onPress={() => router.push(routes.profile.records())}
+            showChevron
+            testID="profile-records-row"
+          />
+          <ListRow
             title={t('profile.settingsRowTitle')}
             subtitle={t('profile.settingsRowSubtitle')}
             onPress={() => router.push(routes.profileSettings.index())}

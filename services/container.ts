@@ -29,6 +29,11 @@ import type { PlanRepository } from '@/features/plans/repository/PlanRepository'
 import { WorkoutSessionService } from '@/features/workout-logging';
 import { SqliteWorkoutSessionRepository } from '@/features/workout-logging/repository/SqliteWorkoutSessionRepository';
 import type { WorkoutSessionRepository } from '@/features/workout-logging/repository/WorkoutSessionRepository';
+import { SqliteExerciseHistoryRepository } from '@/features/workout-logging/repository/SqliteExerciseHistoryRepository';
+import type { ExerciseHistoryRepository } from '@/features/workout-logging/repository/ExerciseHistoryRepository';
+import { PersonalRecordService } from '@/features/records';
+import { SqlitePersonalRecordRepository } from '@/features/records/repository/SqlitePersonalRecordRepository';
+import type { PersonalRecordRepository } from '@/features/records/repository/PersonalRecordRepository';
 import type { DatabaseContext } from '@/repositories/contracts/database';
 import { SqliteSettingsRepository, type SettingsRepository } from '@/repositories/settings';
 import { SystemClock, type Clock } from '@/services/clock';
@@ -59,6 +64,12 @@ export interface AppContainer {
   sessionRepository: WorkoutSessionRepository;
   /** ARCHITECTURE.md section 3.1 rule 3: the only door into `sessionRepository` for hooks/screens. */
   sessionService: WorkoutSessionService;
+  /** Feature repository, P8 (records) - the personal-record cache (ADR-0015 Decision 3). Not re-exported for presentation use - go through `recordService`. Also injected into `sessionRepository` so `completeSet` can evaluate records inside its own transaction. */
+  recordRepository: PersonalRecordRepository;
+  /** ARCHITECTURE.md section 3.1 rule 3: the only door into `recordRepository` for hooks/screens. */
+  recordService: PersonalRecordService;
+  /** Read model, P8 (workout-logging) - previous/best performance and recent session history for an exercise (ARCHITECTURE.md section 8.3). Read-only, so there is no accompanying service: it returns flat DTOs with nothing to validate, the same "no service layer" shape `StatisticsRepository` (a later phase) is expected to have. */
+  exerciseHistoryRepository: ExerciseHistoryRepository;
 }
 
 export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer>): AppContainer {
@@ -78,8 +89,21 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
   const planRepository =
     deps?.planRepository ?? new SqlitePlanRepository({ db, clock, idGenerator });
   const planService = deps?.planService ?? new PlanService({ repository: planRepository });
+  const recordRepository =
+    deps?.recordRepository ??
+    new SqlitePersonalRecordRepository({ db, clock, idGenerator, settings });
+  const recordService =
+    deps?.recordService ?? new PersonalRecordService({ repository: recordRepository });
+  const exerciseHistoryRepository =
+    deps?.exerciseHistoryRepository ?? new SqliteExerciseHistoryRepository({ db });
   const sessionRepository =
-    deps?.sessionRepository ?? new SqliteWorkoutSessionRepository({ db, clock, idGenerator });
+    deps?.sessionRepository ??
+    new SqliteWorkoutSessionRepository({
+      db,
+      clock,
+      idGenerator,
+      personalRecordRepository: recordRepository,
+    });
   const sessionService =
     deps?.sessionService ??
     new WorkoutSessionService({ repository: sessionRepository, settings, clock });
@@ -97,6 +121,9 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
     exerciseService,
     planRepository,
     planService,
+    recordRepository,
+    recordService,
+    exerciseHistoryRepository,
     sessionRepository,
     sessionService,
   };

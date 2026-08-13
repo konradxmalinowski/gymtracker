@@ -57,8 +57,7 @@ export function useUpdateSet() {
  * The NFR-01 hot path (ARCHITECTURE.md section 5.1): the store update and the
  * haptic fire synchronously, before the service call even starts - nothing
  * here is awaited by the caller (`SetRow`'s checkbox `onPress` calls this and
- * returns immediately). PR evaluation is still out of scope
- * (`CompletedSetResult.newPRs` is always `[]` until P8).
+ * returns immediately).
  *
  * P7: `maybeStartRestTimer` is fired alongside the (already fire-and-forget)
  * `sessionService.completeSet` call, not chained after it - the superset
@@ -73,6 +72,15 @@ export function useUpdateSet() {
  * reflects "completed" (routing a fast second tap to `useUncompleteSet`
  * instead, see `SetRow`'s `onValueChange`) well before a human can
  * physically tap again.
+ *
+ * P8: PR evaluation lands in the async `.then()` continuation, after the
+ * synchronous hot path (store patch, haptic, rest-timer start) has already
+ * run - `result.newPRs` is written to `activeWorkoutStore.latestPR` only
+ * when non-empty, so a set that beat nothing never overwrites whatever badge
+ * is already showing. This does not touch the hot path's timing: nothing
+ * here is awaited any differently than before, `result.newPRs` was already
+ * part of `result` this continuation was already reading to call
+ * `upsertSet`.
  */
 export function useCompleteSet() {
   const { sessionService } = useContainer();
@@ -86,7 +94,12 @@ export function useCompleteSet() {
       });
       haptics.setCompleted();
       void sessionService.completeSet(workoutSet.id, values).then(
-        (result) => useActiveWorkoutStore.getState().upsertSet(result.set),
+        (result) => {
+          useActiveWorkoutStore.getState().upsertSet(result.set);
+          if (result.newPRs.length > 0) {
+            useActiveWorkoutStore.getState().setLatestPR(result.set.id, result.newPRs);
+          }
+        },
         () => recoverFromWriteFailure(sessionService),
       );
       maybeStartRestTimer(workoutSet.sessionExerciseId);

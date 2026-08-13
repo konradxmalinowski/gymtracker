@@ -1,6 +1,7 @@
 import type { SqlExecutor } from '@/repositories/contracts/database';
 import type { EntityId } from '@/repositories/contracts/repository';
 import type { ExerciseListItem } from '@/features/exercise-library';
+import type { PersonalRecord } from '@/features/records';
 import type { SetType } from '../domain/setSemantics';
 
 /** `workout_session.status` CHECK constraint (`database/schema.sql` section 7.6). */
@@ -149,17 +150,14 @@ export interface CompleteSetValues {
 export interface CompletedSetResult {
   set: WorkoutSet;
   /**
-   * Always `[]` in P6. Personal-record evaluation is P8's scope
-   * (`PersonalRecordRepository` has a table and an index from P2 but no
-   * implementation yet), and this field exists so that adding it there is a
-   * widening of this element type plus a call inside `completeSet`'s existing
-   * transaction - not a change to this method's signature or to every call
-   * site. `readonly never[]` is what "the only valid value today is the empty
-   * array" looks like to the type checker: consumers can already `.map()` and
-   * read `.length`, and P8 has to widen it deliberately rather than by
-   * accident.
+   * Personal records this set just beat, evaluated inside the same
+   * transaction as the completion itself (ARCHITECTURE.md section 5.1,
+   * ADR-0015 Decision 3) - lands for real as of P8. Empty for a set type
+   * `evaluateCandidateRecords` never evaluates (`warmup`/`drop`/`assisted`/
+   * `partial`) and for any eligible set that simply didn't beat anything.
+   * This is what a PR badge on the workout screen renders.
    */
-  newPRs: readonly never[];
+  newPRs: readonly PersonalRecord[];
 }
 
 /**
@@ -347,9 +345,10 @@ export interface WorkoutSessionRepository {
   updateSet(setId: EntityId, patch: UpdateSetPatch, tx?: SqlExecutor): Promise<WorkoutSet>;
 
   /**
-   * Applies `values`, marks the set completed and re-anchors `performed_at`, and
+   * Applies `values`, marks the set completed and re-anchors `performed_at`,
+   * evaluates it against the exercise's current personal records, and
    * touches `active_session_state` - one transaction (ARCHITECTURE.md section
-   * 5.1). `newPRs` is always empty in this phase; see {@link CompletedSetResult}.
+   * 5.1, ADR-0015 Decision 3). See {@link CompletedSetResult.newPRs}.
    */
   completeSet(
     setId: EntityId,

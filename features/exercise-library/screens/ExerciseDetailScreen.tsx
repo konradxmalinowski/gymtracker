@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Linking } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 
@@ -44,8 +44,26 @@ import {
 
 const REST_SAVE_DEBOUNCE_MS = 500;
 
+export interface ExerciseDetailScreenProps {
+  /**
+   * Fills the "previous performance" section. `undefined` (the default for
+   * any caller that doesn't pass one) falls back to `PerformanceEmptySection`
+   * - P4's own "genuinely empty, not a stub" empty state - so `exercise-library`
+   * stays a dependency-free leaf (ARCHITECTURE.md section 9.1) while still
+   * rendering something correct with no slot content supplied. Only
+   * `app/(tabs)/exercises/[id].tsx` (not bound by the leaf rule) fills this,
+   * using `workout-logging`'s `usePreviousPerformance` hook.
+   */
+  previousPerformanceSlot?: ReactNode | undefined;
+  /** Same contract as {@link previousPerformanceSlot}, for the "personal records" section - filled by the host route using `records`' `useCurrentRecords` hook. */
+  personalRecordsSlot?: ReactNode | undefined;
+}
+
 /** `app/(tabs)/exercises/[id].tsx`'s screen body. */
-export function ExerciseDetailScreen() {
+export function ExerciseDetailScreen({
+  previousPerformanceSlot,
+  personalRecordsSlot,
+}: ExerciseDetailScreenProps = {}) {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: exercise, isPending, isError, refetch } = useExercise(id);
 
@@ -311,21 +329,25 @@ export function ExerciseDetailScreen() {
           />
         </Section>
 
-        <PerformanceEmptySection
-          sectionTitle={t('exerciseLibrary.detail.previousPerformanceTitle')}
-          emptyTitle={t('exerciseLibrary.detail.previousPerformanceEmptyTitle')}
-          message={t('exerciseLibrary.detail.previousPerformanceEmptyMessage')}
-          icon={<Ionicons name="time-outline" size={32} color={color.textTertiary} />}
-          testID="exercise-detail-previous-performance"
-        />
+        {previousPerformanceSlot ?? (
+          <PerformanceEmptySection
+            sectionTitle={t('exerciseLibrary.detail.previousPerformanceTitle')}
+            emptyTitle={t('exerciseLibrary.detail.previousPerformanceEmptyTitle')}
+            message={t('exerciseLibrary.detail.previousPerformanceEmptyMessage')}
+            icon={<Ionicons name="time-outline" size={32} color={color.textTertiary} />}
+            testID="exercise-detail-previous-performance"
+          />
+        )}
 
-        <PerformanceEmptySection
-          sectionTitle={t('exerciseLibrary.detail.personalRecordsTitle')}
-          emptyTitle={t('exerciseLibrary.detail.personalRecordsEmptyTitle')}
-          message={t('exerciseLibrary.detail.personalRecordsEmptyMessage')}
-          icon={<Ionicons name="trophy-outline" size={32} color={color.textTertiary} />}
-          testID="exercise-detail-personal-records"
-        />
+        {personalRecordsSlot ?? (
+          <PerformanceEmptySection
+            sectionTitle={t('exerciseLibrary.detail.personalRecordsTitle')}
+            emptyTitle={t('exerciseLibrary.detail.personalRecordsEmptyTitle')}
+            message={t('exerciseLibrary.detail.personalRecordsEmptyMessage')}
+            icon={<Ionicons name="trophy-outline" size={32} color={color.textTertiary} />}
+            testID="exercise-detail-personal-records"
+          />
+        )}
 
         <PerformanceEmptySection
           sectionTitle={t('exerciseLibrary.detail.progressChartTitle')}

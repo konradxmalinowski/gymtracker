@@ -9,21 +9,41 @@ import {
   SessionAlreadyInProgressError,
   SessionNotInProgressError,
 } from '@/features/workout-logging/repository/errors';
+import { SqlitePersonalRecordRepository } from '@/features/records/repository/SqlitePersonalRecordRepository';
 import { RepositoryNotFoundError } from '@/repositories/base';
 import type { DatabaseContext } from '@/repositories/contracts/database';
+import { SqliteSettingsRepository } from '@/repositories/settings';
 import { FixedClock } from '@/services/clock';
+import type { Clock } from '@/services/clock';
 import { Uuid7IdGenerator } from '@/services/id';
+import type { IdGenerator } from '@/services/id';
 
 const START = Date.UTC(2026, 7, 6, 18, 0, 0);
 const SCHEMA_PATH = join(__dirname, '..', '..', '..', '..', 'database', 'schema.sql');
 /** Matches `timer.defaultRestSeconds`'s own settings default - stands in for the value `WorkoutSessionService` would read and pass down in real usage. */
 const DEFAULT_REST_SECONDS = 90;
 
+/** Builds a `SqliteWorkoutSessionRepository` plus the `personalRecordRepository` it now requires, bound to the same `db` instance - needed in every construction site in this file, including the ones that reopen a fresh `DatabaseContext` around a simulated crash. */
+function makeRepo(
+  db: DatabaseContext,
+  clock: Clock,
+  idGenerator: IdGenerator,
+): SqliteWorkoutSessionRepository {
+  const settings = new SqliteSettingsRepository(db, clock);
+  const personalRecordRepository = new SqlitePersonalRecordRepository({
+    db,
+    clock,
+    idGenerator,
+    settings,
+  });
+  return new SqliteWorkoutSessionRepository({ db, clock, idGenerator, personalRecordRepository });
+}
+
 function setup() {
   const db = createTestDatabase();
   const clock = new FixedClock(START);
   const idGenerator = new Uuid7IdGenerator(clock);
-  const repo = new SqliteWorkoutSessionRepository({ db, clock, idGenerator });
+  const repo = makeRepo(db, clock, idGenerator);
   return { db, clock, idGenerator, repo };
 }
 
@@ -257,7 +277,7 @@ describe('SqliteWorkoutSessionRepository - crash recovery across a real connecti
     const idGenerator = new Uuid7IdGenerator(clock);
 
     const beforeCrash = openFileDatabase(true);
-    const repo = new SqliteWorkoutSessionRepository({ db: beforeCrash, clock, idGenerator });
+    const repo = makeRepo(beforeCrash, clock, idGenerator);
     await insertExercise(beforeCrash, 'ex-1', 'Bench Press');
     await insertExercise(beforeCrash, 'ex-2', 'Row');
     await insertExercise(beforeCrash, 'ex-3', 'Curl');
@@ -291,11 +311,7 @@ describe('SqliteWorkoutSessionRepository - crash recovery across a real connecti
     beforeCrash.close();
 
     const afterCrash = openFileDatabase(false);
-    const recovered = await new SqliteWorkoutSessionRepository({
-      db: afterCrash,
-      clock,
-      idGenerator,
-    }).findInProgress();
+    const recovered = await makeRepo(afterCrash, clock, idGenerator).findInProgress();
 
     expect(recovered).not.toBeNull();
     expect(recovered).toMatchObject({
@@ -351,7 +367,7 @@ describe('SqliteWorkoutSessionRepository - crash recovery across a real connecti
     const idGenerator = new Uuid7IdGenerator(clock);
 
     const beforeCrash = openFileDatabase(true);
-    const repo = new SqliteWorkoutSessionRepository({ db: beforeCrash, clock, idGenerator });
+    const repo = makeRepo(beforeCrash, clock, idGenerator);
     await insertExercise(beforeCrash, 'ex-1');
     const session = await repo.startEmpty(START);
     const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
@@ -361,7 +377,7 @@ describe('SqliteWorkoutSessionRepository - crash recovery across a real connecti
     beforeCrash.close();
 
     const afterCrash = openFileDatabase(false);
-    const recovering = new SqliteWorkoutSessionRepository({ db: afterCrash, clock, idGenerator });
+    const recovering = makeRepo(afterCrash, clock, idGenerator);
 
     expect(await recovering.findInProgress()).toBeNull();
     // The finished row and its denormalized totals survived the restart intact.

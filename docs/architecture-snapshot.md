@@ -1,5 +1,5 @@
 ---
-snapshot_commit: 4e59f18b037b74e226b41b3174d7d693bdf72aaa
+snapshot_commit: 5433b0e (merge of feat/p7-rest-timer, 21dd691, into feat/p8-progressive-overload)
 generated_from: CLAUDE.md, docs/ARCHITECTURE.md, docs/ROADMAP.md, docs/adr/*, docs/PRODUCT-BRIEF.md
 ---
 
@@ -9,26 +9,27 @@ Condensed synthesis for orchestration use. Full detail lives in docs/ARCHITECTUR
 (section numbers referenced below) and CLAUDE.md - re-read the source when a decision
 needs verification, this file is a pointer, not a replacement.
 
-Note on `snapshot_commit`: this points at the working-tree HEAD at the time this file
-was regenerated (the tip of `feat/p7-rest-timer` before that branch's own P7 commits,
-including this file's own update, land). It is therefore identical to the commit
-`main` was already at before P7 started - re-snapshot after the commit(s) that include
-this file's P7 update actually land, if the exact hash matters for a later diff. Same
-caveat this file already carried for `feat/p6-workout-logging` before its commit
-landed, and `feat/p5-workout-plans` before that.
+Note on `snapshot_commit`: `feat/p8-progressive-overload` was cut from `main` before
+`feat/p7-rest-timer`'s PR merged, a deliberate decision so the two phases could be
+reviewed independently (see `plans/2026-08-11-p8-progressive-overload.md`'s "Branch
+note"). This file is regenerated as part of resolving that merge, so the hash above
+identifies both sides rather than a single linear tip - re-snapshot after the merge
+commit itself lands, if the exact hash matters for a later diff. Same caveat this file
+already carried for `feat/p5-workout-plans` and `feat/p6-workout-logging` before each
+of those branches' own commits landed.
 
 ## Status
 
 P0 (project foundation), P1 (design system/UI primitives), P2 (persistence
 foundation), P3 (onboarding, profile and core settings), P4 (exercise library), P5
-(workout plans), P6 (workout logging), and P7 (rest timer) are complete and committed
-or ready to commit. `onboarding`, `profile`, `exercise-library`, `plans`,
-`workout-logging`, and `rest-timer` are the first six features with real
-implementations (`rest-timer` owns no database table and therefore no repository -
-see below); the other five (`records`, `statistics`, `body-metrics`, `calendar`,
-`data-transfer`) remain empty skeletons awaiting their phase. The app boots for real
-as of P3, and as of P4 also
-seeds the exercise catalog on every boot: `app/_layout.tsx` opens the database, runs
+(workout plans), P6 (workout logging), P7 (rest timer), and P8 (progressive overload
+and personal records) are complete. `onboarding`, `profile`, `exercise-library`,
+`plans`, `workout-logging`, `rest-timer`, and `records` are the seven features with
+real implementations (`rest-timer` owns no database table and therefore no
+repository; `records` does - see "Composition root" below); the remaining four
+(`statistics`, `body-metrics`, `calendar`, `data-transfer`) remain empty skeletons
+awaiting their phase. The app boots for real as of P3, and as of P4 also seeds the
+exercise catalog on every boot: `app/_layout.tsx` opens the database, runs
 migrations, runs `database/seed/runSeed()` (idempotent), builds the `AppContainer`,
 holds the splash screen until the profile query resolves, then gates to
 `/onboarding` or a 5-tab layout (Home, Plans, Exercises, Stats, Profile) - and, as of
@@ -39,7 +40,9 @@ rendering a real "not built yet" empty state; Exercises (P4) and Plans (P5) are 
 real nested Stack navigators (list -> detail -> create/edit, and list -> detail ->
 day editor, respectively); `workout-logging` (P6) is not a tab at all but a
 root-level `fullScreenModal` route (`app/workout/active.tsx`) outside `(tabs)`, per
-ADR-0007.
+ADR-0007. As of P7, that screen also mounts a sticky `RestTimerBar` directly under
+its header; as of P8, its `FlashList` cells also render a `PRBadge`/`ProgressionHint`
+per set.
 
 Exercise library (P4): instant, diacritic-folded FTS5 search ("lezac" matches
 "leżąc"), a multi-select filter sheet (muscle/equipment/body part/level/gym-home
@@ -47,19 +50,23 @@ context/favorites, OR within a category, AND across categories), favorites-first
 ordering, FlashList results (its first real usage - declared since P0, unused until
 now); detail screen with image gallery, instructions, tags, `formatExerciseName()`
 Polish rendering (FR-04), an empty videos section (0% catalog video coverage), a
-personal note, a per-exercise rest override, and three performance sections that are
-genuinely empty pending P8, not stubs; favorite toggle with haptics; custom
-exercise create/edit (React Hook Form + Zod); delete guarded by
-`listReferencingPlans`. Two P2 gaps were fixed as part of this phase: catalog seeding
-was built but never wired up until now, and `loadCatalogAsset.ts` now correctly maps
-the catalog's `primaryMuscles`/`secondaryMuscles` fields into `catalogSeeder.ts`'s
-expected shape (previously every seeded exercise had zero muscles). Verification:
-typecheck/lint/Jest (473 tests) clean, `npx expo export --platform ios` used as a
+personal note, a per-exercise rest override, and three performance sections that
+were genuinely empty pending later phases - two of the three (previous performance,
+personal records) gained real content in P8 via optional slots the host route fills;
+the third (a progress chart) stays empty pending a future statistics/charting phase.
+Favorite toggle with haptics; custom exercise create/edit (React Hook Form + Zod);
+delete guarded by `listReferencingPlans`. Two P2 gaps were fixed as part of this
+phase: catalog seeding was built but never wired up until now, and
+`loadCatalogAsset.ts` now correctly maps the catalog's
+`primaryMuscles`/`secondaryMuscles` fields into `catalogSeeder.ts`'s expected shape
+(previously every seeded exercise had zero muscles). Verification: typecheck/lint/
+Jest (473 tests) clean, `npx expo export --platform ios` used as a
 build-verification proxy (no simulator/emulator available), security review clean
-(`reports/security-2026-08-06-p4.md`), accessibility pass completed. Known follow-up:
-`expo-asset` is un-hoisted, breaking Jest resolution for `@expo/vector-icons` inside
-RNTL-rendered tests (worked around with a manual mock; confirmed production/runtime
-is unaffected via the `expo export` bundle) - pre-existing gap, not a P4 regression.
+(`reports/security-2026-08-06-p4.md`), accessibility pass completed. Known
+follow-up: `expo-asset` is un-hoisted, breaking Jest resolution for
+`@expo/vector-icons` inside RNTL-rendered tests (worked around with a manual mock;
+confirmed production/runtime is unaffected via the `expo export` bundle) -
+pre-existing gap, not a P4 regression.
 
 Workout plans (P5): `PlanRepository`/`SqlitePlanRepository` is the first
 aggregate-root feature repository (plan + days + day-exercises, one transaction),
@@ -103,16 +110,18 @@ exists, redirecting into a fresh in-progress session or prompting finish-or-disc
 a stale one - the mechanism only, not the polished Home "Resume" card, which stays P10
 scope. Set types are ADR-0006's 6-value enum; supersets carry over from the plan day
 as a read-only relation this phase (the repository/service fully support editing one,
-but no in-workout UI calls it); drop sets chain via `parent_set_id`. Deferred:
-rest timer (P7, `RestTimerBar` omitted, not stubbed), PR evaluation (P8,
-`CompletedSetResult.newPRs` always `[]`), and the summary screen (P9 - `finish()`
-navigates to Home instead). `stores/activeWorkoutStore.ts` is ADR-0008's one named
-exception to "Zustand is ephemeral only," mirroring the persisted session under five
-governing rules (hydrate on mount only, pair every edit with a dispatched write,
-reconcile from the database on failure, clear on finish/discard, consume only via
-selectors). Verification: typecheck/lint/Jest (86 suites, 782 tests, 1 pre-existing
-skip) clean, `expo export --platform ios` used again as the build-verification proxy,
-security review clean bar two low, non-blocking notes
+but no in-workout UI calls it until P8 wired PR evaluation onto the same `completeSet`
+path); drop sets chain via `parent_set_id`. Deferred at the time, both since closed:
+the rest timer (P7, `RestTimerBar` was omitted, not stubbed) and PR evaluation (P8,
+resolved below); the summary screen (P9) is still deferred - `finish()` navigates to
+Home instead. `stores/activeWorkoutStore.ts` is ADR-0008's one named exception to
+"Zustand is ephemeral only," mirroring the persisted session under five governing
+rules (hydrate on mount only, pair every edit with a dispatched write, reconcile from
+the database on failure, clear on finish/discard, consume only via selectors) - P7
+added a `runningTimerSessionExerciseId` field and P8 added `latestPR`, both to the
+same store under the same rules. Verification: typecheck/lint/Jest (86 suites,
+782 tests, 1 pre-existing skip) clean, `expo export --platform ios` used again as the
+build-verification proxy, security review clean bar two low, non-blocking notes
 (`reports/security-2026-08-07-p6.md`). No new npm dependency.
 
 Rest timer (P7): `RestTimerBar`'s slot, omitted from `ActiveWorkoutScreen` since P6,
@@ -153,6 +162,83 @@ scope: `timer.sound` is a working, persisted setting with no audio-playback back
 wired to it (no sound-library dependency exists in this project). No new npm
 dependency.
 
+Progressive overload and personal records (P8): `CompletedSetResult.newPRs`, typed
+`readonly never[]` and always `[]` since P6, is real as of this phase.
+`features/records/domain/{Estimated1RM,ProgressionAdvisor,evaluateCandidateRecords}.ts`
+implement ADR-0015's three decisions - Epley/Brzycki e1RM with documented guard rails
+(reps===1 returns the weight itself; above 12 reps returns `null` rather than a
+fabricated number; only `normal`/`failure` sets are eligible), double-progression
+suggestions, and per-record-type PR comparison.
+`features/records/repository/{PersonalRecordRepository,SqlitePersonalRecordRepository}.ts`
+(`listCurrent`, `listRecent`, `evaluateAndUpsert`, `listHistory`, `rebuild`) is a new
+feature repository that deliberately does not extend `BaseSqliteRepository`
+(`personal_record` has no `deleted_at` column by ADR-0015 design).
+`SqliteWorkoutSessionRepository.completeSet` calls `evaluateAndUpsert` inside its own
+existing transaction (the allowed `workout-logging -> records` dependency direction) -
+a throwing evaluation rolls back the whole `completeSet` call, verified by a real
+integration test, not just by inspection. This is the same `completeSet` transaction
+P7 extended with rest-timer bookkeeping; the two concerns coexist inside it without
+conflict, since P7's rest-timer state lives on `active_session_state` (persisted via
+`saveActiveState`, outside `completeSet` itself) while P8's PR evaluation writes to
+`personal_record` inside `completeSet`'s own transaction - no shared write target
+between the two.
+`features/workout-logging/repository/{ExerciseHistoryRepository,SqliteExerciseHistoryRepository}.ts`
+is a new read-only read model (previous/best performance, recent sessions) with no
+accompanying service, the same "flat DTOs, nothing to validate" shape a later
+`StatisticsRepository` is expected to have. UI: `PRBadge`/`ProgressionHint`
+(presentational, records barrel), rendered from `SetRow`/`SessionExerciseCard`
+alongside P7's `RestTimerBar` on the same screen; `ExerciseDetailScreen` gained two
+optional slot props filled by its host route rather than a new cross-feature import,
+keeping `exercise-library` a dependency-free leaf; a new "Personal records" screen and
+route (`/profile/records`) and a new "Progression" settings screen (`oneRm.formula`,
+`progression.upperIncrementKg`/`lowerIncrementKg`), added as a sibling row to P7's
+"Rest timer" settings row on the same `SettingsScreen`; Settings also gained a
+"Recalculate records" row (`recordService.rebuild()`, confirm dialog, undo-free). A
+real `barrel -> hook -> container -> barrel` import cycle surfaced while wiring
+presentation hooks and was fixed by having the new hooks take their
+service/repository as a parameter rather than calling `useContainer()` internally -
+the same pattern `useStartWorkout(sessionService)` already established.
+`services/container.ts` gained `recordRepository`/`recordService`/
+`exerciseHistoryRepository` - P7 added no container entry (`rest-timer` owns no
+repository), so these are the fifth and sixth feature-repository pairs overall,
+following P3/P4/P5/P6's four. Verification (on the P8 branch, before this merge):
+typecheck/lint/Jest (96 suites, 914 tests passing, 1 pre-existing skip) clean, `expo
+export --platform ios` used again as the build-verification proxy, no new npm
+dependency. Security review (`reports/security-2026-08-11-p8.md`) found zero
+critical/high/medium findings, one low (a `ConfirmDialog` double-tap gap shared by
+every confirm-then-mutate flow in the codebase, not P8-specific, non-corrupting given
+`rebuild()`'s idempotency and `ux_pr_current`), one informational. Accessibility
+review (`reports/accessibility-2026-08-11-p8.md`) caught one BLOCKING finding -
+`PRBadge` rendering inside `SetRow`'s pre-existing `SwipeableRow`-collapsed accessible
+node, confirmed via an RNTL prop-tree dump - fixed within the phase by rendering
+`PRBadge` as an independent sibling instead, the same "pull the non-interactive
+element out from under the collapse" shape P7's own `RestTimerBar` fix used, with a
+real regression test added and verified via revert-and-confirm; three further
+non-blocking findings (missing loading/empty announcements on the new records screen,
+a missing `busy` accessibility state on the "Recalculate records" row -
+`components/ui/ListRow.tsx` gained a reusable `busy` prop for this, mirroring
+`Button.tsx`'s existing `loading` prop - and a missing `accessible` pairing on
+`PRBadge`'s role) were fixed in the same pass. One correctness nuance flagged, not
+fixed: `ActiveWorkoutScreen`'s new `FlashList` `extraData` prop is real and correctly
+added, but is not currently the thing keeping `SessionExerciseCard` repaints correct,
+since its `renderItem` is an inline function recreated every render (which already
+forces every cell to repaint on its own) - see CLAUDE.md's "Known gaps" for the full
+framing.
+
+**Merge note:** `feat/p8-progressive-overload` was branched before `feat/p7-rest-timer`
+merged, so both touched `WorkoutSessionRepository.ts`/
+`SqliteWorkoutSessionRepository.ts`, `WorkoutSessionService.ts`, `ActiveWorkoutScreen.tsx`,
+`SettingsScreen.tsx`, `app/profile/settings/_layout.tsx`, `i18n/catalogs/en.ts`,
+`navigation/routes.ts`, this file, and `CLAUDE.md` - an expected, planned-for conflict
+(`plans/2026-08-11-p8-progressive-overload.md`'s "Branch note"), resolved by keeping
+both phases' functionality intact rather than one clobbering the other. `completeSet`
+now carries P8's PR evaluation inside the same transaction P7 already used for its own
+rest-timer-adjacent writes (see above); `ActiveWorkoutScreen` mounts both `RestTimerBar`
+(P7) and per-set `PRBadge`/`ProgressionHint` (P8); `SettingsScreen` carries both a
+"Rest timer" row and a "Progression"/"Recalculate records" pair; `services/container.ts`
+carries P8's `recordRepository`/`recordService`/`exerciseHistoryRepository` alongside
+P7's unchanged four-pair shape.
+
 ## Product
 
 Offline-only React Native/Expo workout logging app. No backend, no accounts, no cloud.
@@ -170,7 +256,7 @@ Native XL (Skia-based, wrapped in components/charts adapter per ADR-0010) + Reac
 Native SVG + `@expo/vector-icons` (Ionicons - the app's only icon system, chosen P3)
 + `expo-image-picker` (avatar/photo selection) + Expo Notifications + Expo Haptics +
 Expo FileSystem + NativeWind (tailwind.config.js imports theme/tokens.ts, never
-duplicates values).
+duplicates values). No new dependency through P8.
 
 ## Architecture (section 3)
 
@@ -181,20 +267,29 @@ ports the domain/feature declares). Four rules mechanically enforced by ESLint
 `domain/**`), the SQLite boundary (`expo-sqlite` only from `database/` or a feature's
 `repository/*.ts`), no direct repository access from presentation (go through a
 feature service via a hook), and cross-feature imports only through a feature's
-`index.ts` barrel. Import cycles are banned project-wide (`import/no-cycle`).
+`index.ts` barrel. Import cycles are banned project-wide (`import/no-cycle`) - P8's
+own hooks (`useRecords`, `useExerciseHistory`) had to route their
+service/repository as a call-site parameter rather than an internal
+`useContainer()` call specifically to keep this rule satisfied, a live example of
+the rule doing its job, not just theory.
 
 CQRS-lite: statistics/history go through dedicated read-model repositories returning
-flat SQL-aggregated DTOs, never load-all-then-sum-in-JS. Aggregate boundary: a workout
-session + its exercises + its sets is one repository, one transaction (crash safety +
-future sync conflict unit).
+flat SQL-aggregated DTOs, never load-all-then-sum-in-JS - P8's
+`ExerciseHistoryRepository` is the first such read model actually built. Aggregate
+boundary: a workout session + its exercises + its sets is one repository, one
+transaction (crash safety + future sync conflict unit); P8 extends that transaction
+to also cover personal-record evaluation rather than treating it as a second,
+independent write.
 
 ## Folder structure (section 9)
 
 Top level: `app/` (routing only, thin wrappers into `features/*/screens` - now
 includes `app/(tabs)/` for the 5-tab layout (`app/(tabs)/exercises/` is a nested
-Stack as of P4: list -> detail -> create/edit), `app/onboarding/`, and
-`app/profile/settings/`), `assets/` (fonts, images, bundled exercise WebP images,
-`exercises.catalog.json`/`exercises.pl.json`/`exercises.videos.json`, plus
+Stack as of P4: list -> detail -> create/edit), `app/onboarding/`, `app/profile/`
+(settings - `units.tsx`/`timers.tsx` (P7)/`progression.tsx` (P8)/`about.tsx` - plus,
+as of P8, `records.tsx`), and `app/(modals)/` - `exercise-picker.tsx` (P5) and
+`rest-timer-settings.tsx` (P7)), `assets/` (fonts, images, bundled exercise WebP
+images, `exercises.catalog.json`/`exercises.pl.json`/`exercises.videos.json`, plus
 `exercises/imageMap.ts` and `exercises/index.ts` added in P4 for filename ->
 `require()` resolution), `components/` (cross-feature, zero domain knowledge -
 `ui/`, `layout/`, `feedback/`, `charts/`, `gestures/`), `database/` (`client.ts`,
@@ -205,16 +300,21 @@ section 9 tree, not yet synced back into ARCHITECTURE.md), `features/` (one dir 
 feature: `onboarding`, `profile`, `exercise-library`, `plans`, `workout-logging`,
 `rest-timer`, `records`, `statistics`, `body-metrics`, `calendar`, `data-transfer` -
 each with components/hooks/screens/services/domain/repository/types/index.ts;
-`onboarding` and `profile` are populated as of P3, `exercise-library` as of P4,
-`plans` as of P5 (the app's first aggregate-root feature repository - see below),
-`workout-logging` as of P6 (its second, see below), `rest-timer` as of P7 (a leaf with
-no repository - see below), the rest are still empty), `hooks/` (its first occupant,
-`useAppState.ts`, landed in P7), `navigation/` (`routes.ts` - typed route helpers per
-section 10.2, added P3), `repositories/` (shared infra: `contracts/`, `base/`,
-`mapping/`, `query/`, plus the cross-cutting `settings/` sibling), `services/`
-(`container.ts` composition root, `files/`,
-`notifications/`, `haptics/`, `kv/`, `clock/`, `id/`, `logging/`), `stores/` (Zustand,
-ephemeral UI state only), `theme/`, `types/`, `utils/`, `__tests__/`, `.maestro/`.
+`onboarding` and `profile` populated as of P3, `exercise-library` as of P4, `plans`
+as of P5 (the app's first aggregate-root feature repository - see below),
+`workout-logging` as of P6 (its second, see below), `rest-timer` as of P7 (a leaf
+with no repository - see below), `records` as of P8 (the third, sharing
+`workout-logging`'s own `completeSet` transaction rather than owning a new one - see
+below); `statistics`/`body-metrics`/`calendar`/`data-transfer` are still empty),
+`hooks/` (its first occupant, `useAppState.ts`, landed in P7), `navigation/`
+(`routes.ts` - typed route helpers per section 10.2, added P3, gained
+`profileSettings.timers` in P7 and `profileSettings.progression`/`profile.records`
+in P8), `repositories/` (shared infra: `contracts/`, `base/`, `mapping/`, `query/`,
+plus the cross-cutting `settings/` sibling), `services/` (`container.ts` composition
+root, `files/`, `notifications/`, `haptics/`, `kv/`, `clock/`, `id/`, `logging/`),
+`stores/` (Zustand, ephemeral UI state only - plus the one named `activeWorkoutStore`
+exception, and P7's own second real-state store, `restTimerStore`), `theme/`,
+`types/`, `utils/`, `__tests__/`, `.maestro/`.
 
 Two load-bearing rules: `app/` never contains screen bodies, only wrappers;
 `components/` may never import from `features/`.
@@ -224,8 +324,11 @@ records). plans depends on exercise-library only. workout-logging is the hub
 (depends on exercise-library, plans, rest-timer, records); nothing depends on
 workout-logging except read-side features (statistics, calendar, home,
 data-transfer). rest-timer and records do not depend on workout-logging (they're
-called by it - inverting this creates a cycle). statistics depends only on read
-models. data-transfer depends on everything and is built last.
+called by it - inverting this creates a cycle); P8 exercises this for real for the
+first time, with `completeSet` calling into `recordRepository`, never the reverse -
+the same one-directional shape P7 already established for `resolveRestSeconds`/
+`RestTimerNotificationService`. statistics depends only on read models. data-transfer
+depends on everything and is built last.
 
 ## Data layer (sections 7-8)
 
@@ -240,39 +343,49 @@ data (`exercise` vs `exercise_user_data`) so a catalog update never destroys
 favorites/notes. WAL + `synchronous=FULL`. In-progress workout has no separate
 "draft" concept - it's a `workout_session` row with `status='in_progress'`, committed
 after every set; a partial unique index makes two simultaneous active sessions
-impossible at the DB level. Rest timer deadline is stored as an absolute timestamp in
-the DB, not a JS interval - survives process death/Doze.
+impossible at the DB level; a second, `ux_pr_current`, makes two simultaneous
+"current" personal records for the same exercise/record-type/rep-bucket impossible
+the same way - unchanged P2 schema, exercised for real by P8's write path. Rest
+timer deadline (P7) is stored as an absolute timestamp on `active_session_state`
+(`timer_deadline_at`/`timer_total_seconds`/`timer_notification_id`), not a JS
+interval - survives process death/Doze.
 
 Settings: `app_setting` key/value table plus a `SETTINGS_SCHEMA` Zod registry
-(`repositories/settings/settingsSchema.ts`) covering all 15 v1 keys (14 shipped in
-P2, plus `haptics.enabled` added in P3 - a global haptics toggle mirrored into MMKV
-for synchronous reads inside gesture/press handlers, per ADR-0008's mirroring
-pattern; SQLite stays authoritative). `user_profile` (nickname, optional avatar,
-birth date, sex) shipped its table in P2 and got its first repository
-(`SqliteProfileRepository`) and service (`ProfileService`) in P3 - no migration
-needed, the table already existed. `ProfileService` writes an avatar file to disk
-before committing the DB row that references it, per ADR-0012's write-then-commit
-ordering (defined there for progress photos, reused here for avatars) - avoids a
-dangling-path bug from persisting an absolute picker URI across app container UUID
-changes.
+(`repositories/settings/settingsSchema.ts`) - 14 keys shipped in P2, `haptics.enabled`
+added in P3 (mirrored into MMKV for synchronous reads inside gesture/press handlers,
+per ADR-0008), `timer.*` keys (default rest seconds, vibration, sound) added in P7,
+`oneRm.formula`/`progression.upperIncrementKg`/`progression.lowerIncrementKg` added
+in P8 (Zod-validated on both read and write, default-fallback on a corrupt stored
+value - `progression.lowerIncrementKg`'s default was found during P8 pass 1 to
+contradict ADR-0015's own spec, 1.25 vs. 5, and corrected in pass 2). `user_profile`
+(nickname, optional avatar, birth date, sex) shipped its table in P2 and got its
+first repository (`SqliteProfileRepository`) and service (`ProfileService`) in P3 -
+no migration needed, the table already existed. `ProfileService` writes an avatar
+file to disk before committing the DB row that references it, per ADR-0012's
+write-then-commit ordering (defined there for progress photos, reused here for
+avatars) - avoids a dangling-path bug from persisting an absolute picker URI across
+app container UUID changes.
 
 Set types: 6 values (Warm-up, Normal, Drop Set, Failure, Assisted, Partial) -
 **not** 7. Superset is modeled as a relation between exercises (`superset_group`),
 not a set-type value (approved deviation from the original brief, ADR-0006). Drop
 sets chain via `parent_set_id`. A normative semantics table governs what counts
 toward volume/PR/set-count; a test keeps the SQL view and the TS calculator from
-drifting apart. Assisted sets are excluded from volume/PR calculation in v1
-(decision D-02).
+drifting apart - P7's `supersetRestRule` and P8's `evaluateCandidateRecords` both
+read the same table rather than re-deriving eligibility on their own. Assisted sets
+are excluded from volume/PR calculation in v1 (decision D-02).
 
 Repository tests run in Node against real `schema.sql` via `NodeSqlExecutor`
 (`node:sqlite`, chosen over `better-sqlite3` to skip a native compile step - CI pins
-Node 24 for `node:sqlite` support), not mocks.
+Node 24 for `node:sqlite` support), not mocks - `SqlitePersonalRecordRepository`/
+`SqliteExerciseHistoryRepository` (P8) follow the same discipline.
 
 Sync-readiness: only what pays for itself today (UUIDs for idempotent import,
 `updated_at` for merge, soft delete for undo, aggregate transactions, a `rebuild()`
 for derived data, an optional `tx` param on repository methods). No `change_log`
 table, no `findChangedSince()`, no dead scaffolding for a sync layer that doesn't
-exist yet (ADR-0004).
+exist yet (ADR-0004). `PersonalRecordRepository.rebuild()` is P8's own instance of
+this "rebuild derived data from source of truth" primitive.
 
 ## Composition root (services/container.ts)
 
@@ -280,11 +393,17 @@ exist yet (ADR-0004).
 smaller than ARCHITECTURE.md section 8.4's full shape - `profileRepository`/
 `profileService` (P3), `exerciseRepository`/`exerciseService` (P4),
 `planRepository`/`planService` (P5), and `sessionRepository`/`sessionService` (P6)
-are the first four feature repository pairs to land; P7 (rest-timer) added none - it
-owns no database table and stays a dependency-free leaf, called by `workout-logging`
-rather than needing its own container entry - so this stays a four-pair container
-with the rest landing one at a time from P8 onward, each phase extending
-`AppContainer` rather than replacing it.
+were the first four feature repository pairs to land; P7 (rest-timer) added none -
+it owns no database table and stays a dependency-free leaf, called by
+`workout-logging` rather than needing its own container entry. P8 added
+`recordRepository`/`recordService`/`exerciseHistoryRepository` (the last one
+read-only with no matching service), the fifth and sixth pairs overall - `records`
+is injected into `sessionRepository` as a fourth constructor dependency
+(`personalRecordRepository`) so `completeSet` can evaluate records inside its own
+transaction, the same "no repository ever `new`s another repository itself"
+discipline every other cross-repository composition in this codebase follows. The
+rest (`statistics`, `body-metrics`, `calendar`, `data-transfer`) land one at a time
+as each phase merges, each extending `AppContainer` rather than replacing it.
 `SqliteExerciseRepository` is the first real consumer of `BaseSqliteRepository`
 beyond `SqliteProfileRepository`, and maintains the `exercise_fts` FTS5 index
 incrementally per single-row write (contentless-table `'delete'` special command
@@ -293,8 +412,15 @@ table). `SqlitePlanRepository` (P5) is the first aggregate-root repository - a p
 plus its days plus its day-exercises commits as one transaction, joining a
 caller-supplied `tx` when given; `SqliteWorkoutSessionRepository` (P6) is the
 second, same pattern, one session plus its exercises, sets and active-session-state
-row per transaction. `services/kv` is intentionally not a container member
-(ADR-0008: MMKV holds boot-critical flags read before the database opens).
+row per transaction, and (as of P8) `recordRepository`'s PR evaluation joins that
+same transaction too rather than opening its own.
+`SqlitePersonalRecordRepository`/`SqliteExerciseHistoryRepository` (P8) deliberately
+don't extend `BaseSqliteRepository` - `personal_record` has no `deleted_at` column
+by ADR-0015 design, and the history repository is read-only - but both still route
+every value through parameterized queries, so none of that base class's
+injection-safety guarantee is lost by opting out of it. `services/kv` is
+intentionally not a container member (ADR-0008: MMKV holds boot-critical flags read
+before the database opens).
 
 ## Resolved product/technical decisions (section 18, D-01..D-12)
 
@@ -321,13 +447,27 @@ All originally-open questions are closed and accepted:
 - Remaining D-08..D-12 are backlog-tier, non-blocking; see section 18 for detail
   if a later phase needs them.
 
+R-04 (P7, new that phase): the rest timer must stay correct across backgrounding,
+Doze and process death - solved by storing an absolute deadline (not a relative
+delay or `setInterval`) and always recomputing `remainingSeconds` from a subtraction
+on every tick rather than decrementing a counter ("recompute, never accumulate").
+
+ADR-0015 (P8, new that phase): Epley e1RM by default with Brzycki selectable, double
+progression for suggested next weight/reps (not linear, not RPE-autoregulated -
+rejected because `target_rep_min`/`target_rep_max` already exist on
+`plan_day_exercise` and RPE is optional so an RPE-based suggester degrades silently
+too often), and personal records as a `rebuild()`-able cache rather than a derived
+view, so a full recompute is always one call away if the evaluation logic ever
+changes.
+
 ## Icon system (resolved P3)
 
 No icon library existed through P0-P2 (every icon prop in `components/ui` was typed
 `ReactNode` with `Text`-glyph placeholders). P3 resolved this: `@expo/vector-icons`
 (Ionicons) is the app's icon system, first used in the tab bar. Existing placeholder
 glyphs in `components/ui` migrate to Ionicons opportunistically, not in a dedicated
-sweep - don't let a second icon system start alongside it.
+sweep - don't let a second icon system start alongside it. P8's new `PRBadge` uses a
+`trophy` Ionicon; `ProgressionHint` uses `trending-up-outline`.
 
 ## Roadmap (docs/ROADMAP.md)
 
@@ -338,7 +478,12 @@ profile/core settings, P4 exercise library, P5 workout plans, P6 workout logging
 core 2-3-second-set screen), P7 rest timer, P8 progressive overload and personal
 records, P9 workout summary and history, P10 home screen, P11 statistics and charts,
 P12 calendar, P13 body measurements and progress photos, P14 data export/import, P15
-performance hardening and polish, P16 release engineering.
+performance hardening and polish, P16 release engineering. P8 was implemented without
+P7 underneath it on its own branch (see the merge note under "Status") - a
+deliberate, flagged exception to the "never skip ahead" rule's usual reading, not a
+violation of it: P8 doesn't depend on P7's output, only on P6's, so the two were
+sequenced for independent review and merged back together afterward rather than
+strictly stacked in roadmap order.
 
 Ordering is dependency-driven: exercise-library is a leaf and ships before plans/
 workout-logging can consume it; rest-timer and records exist before workout-logging
@@ -359,24 +504,33 @@ defaults off, no DSN committed (D-05, see above).
 
 ## Testing strategy (section 14)
 
-Domain layer: property-based tests (fast-check) for calculators (1RM, volume, PR
-detection) - the highest-value tests in the app; `domain/Weight.ts`/`domain/Length.ts`
-have real round-trip property tests as of P3. Repository layer: integration tests
-against real `schema.sql` via `NodeSqlExecutor` (`node:sqlite`), not mocks. Component
-layer: React Native Testing Library for interaction-critical components (set row,
-quick-adjust chips). E2E: Maestro flows for the golden path (start workout -> log a
-set -> finish). `__tests__/database/benchmarks.perf.test.ts` is a CI
-performance-regression suite (ADR-0014); the exercise-search benchmark
+Domain layer: property-based tests (fast-check) for calculators (1RM, volume, rest
+duration, PR detection) - the highest-value tests in the app; `domain/Weight.ts`/
+`domain/Length.ts` have real round-trip property tests as of P3, P7's
+`resolveRestSeconds`/`supersetRestRule` and P8's e1RM/progression/PR-evaluation
+calculators follow the same discipline, including a property-based rebuild
+equivalence test verified non-tautological by deliberately breaking the SQL view's
+`ORDER BY` and confirming the test actually failed first. Repository layer:
+integration tests against real `schema.sql` via `NodeSqlExecutor` (`node:sqlite`),
+not mocks. Component layer: React Native Testing Library for interaction-critical
+components (set row, quick-adjust chips, P7's `RestTimerBar` mount test verifying
+its swipeable-region restructuring, and - as of P8 - the PR badge's
+accessibility-subtree placement, added as a real RNTL regression test verified with
+revert-and-confirm discipline both times). E2E: Maestro flows for the golden path
+(start workout -> log a set -> finish). `__tests__/database/benchmarks.perf.test.ts`
+is a CI performance-regression suite (ADR-0014); the exercise-search benchmark
 (~900-row fixture, sub-50ms, NFR-03), previously `test.skip`'d, is implemented and
 passing as of P4. One benchmark still stays `test.skip`'d with a comment naming its
 future phase (JSON export - P9 per the test file's own comment - note this P9 label
 predates and conflicts with this snapshot's P9 "workout summary and history" / P14
 "data export and import" naming from `docs/ROADMAP.md`; flagged as unresolved drift,
-not fixed here), not silently omitted. Testing this phase also surfaced a Jest-only
-gap: `@expo/vector-icons` fails to resolve inside RNTL-rendered tests because
+not fixed here), not silently omitted. Testing surfaced a Jest-only gap in P4:
+`@expo/vector-icons` fails to resolve inside RNTL-rendered tests because
 `expo-asset` isn't hoisted (worked around with a manual mock,
 `__tests__/__mocks__/vectorIconsMock.tsx`; confirmed production-unaffected via
-`expo export`).
+`expo export`). Suite size by phase: 782 tests at P6, 851 at P7, 914 at P8 (each on
+its own branch before this merge) - see the repo's own `jest` run for the current
+combined total after merging both branches together.
 
 ## What this snapshot deliberately omits
 

@@ -90,6 +90,58 @@ describe('useCompleteSet', () => {
     const reconciled = useActiveWorkoutStore.getState().session?.exercises[0]?.sets[0];
     expect(reconciled?.isCompleted).toBe(false);
   });
+
+  it('P8: writes newly-earned PRs to activeWorkoutStore.latestPR once the write settles', async () => {
+    const { container, workoutSet } = await setup();
+    const { result } = await renderHook(() => useCompleteSet(), { wrapper: wrapper(container) });
+
+    // A fresh exercise's first-ever completed set trivially beats every
+    // record type it's eligible for (ADR-0015 Decision 3) - the hot path
+    // itself never sets `latestPR` (it's not part of the synchronous patch),
+    // only the async continuation once `completeSet()` resolves.
+    expect(useActiveWorkoutStore.getState().latestPR).toBeNull();
+
+    result.current(workoutSet, { weightKg: 60, reps: 8 });
+
+    await waitFor(() => {
+      expect(useActiveWorkoutStore.getState().latestPR).not.toBeNull();
+    });
+
+    const latestPR = useActiveWorkoutStore.getState().latestPR;
+    expect(latestPR?.setId).toBe(workoutSet.id);
+    expect(latestPR?.records.length).toBeGreaterThan(0);
+  });
+
+  it('P8: does not touch latestPR when the completed set beats nothing new', async () => {
+    const { container, workoutSet } = await setup();
+    const completeSet = useCompleteSet;
+    const { result: first } = await renderHook(() => completeSet(), {
+      wrapper: wrapper(container),
+    });
+    first.current(workoutSet, { weightKg: 60, reps: 8 });
+    await waitFor(() => {
+      expect(useActiveWorkoutStore.getState().latestPR).not.toBeNull();
+    });
+    useActiveWorkoutStore.getState().clearLatestPR();
+
+    // A second, lighter set for the same exercise beats nothing.
+    const secondSet = await container.sessionService.appendSet(workoutSet.sessionExerciseId, {
+      weightKg: 40,
+      reps: 8,
+    });
+    const { result: second } = await renderHook(() => completeSet(), {
+      wrapper: wrapper(container),
+    });
+    second.current(secondSet, { weightKg: 40, reps: 8 });
+
+    await waitFor(async () => {
+      const persisted = await container.sessionRepository.findInProgress();
+      expect(persisted?.exercises[0]?.sets.find((s) => s.id === secondSet.id)?.isCompleted).toBe(
+        true,
+      );
+    });
+    expect(useActiveWorkoutStore.getState().latestPR).toBeNull();
+  });
 });
 
 describe('useUpdateSet', () => {

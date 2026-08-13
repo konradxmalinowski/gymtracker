@@ -24,6 +24,7 @@ export default function ProfileSettingsLayout() {
       <Stack.Screen name="index" options={{ title: t('profileSettings.title') }} />
       <Stack.Screen name="units" options={{ title: t('unitsSettings.title') }} />
       <Stack.Screen name="timers" options={{ title: t('restTimer.timerSettings.title') }} />
+      <Stack.Screen name="progression" options={{ title: t('progressionSettings.title') }} />
       <Stack.Screen name="about" options={{ title: t('about.title') }} />
     </Stack>
   );

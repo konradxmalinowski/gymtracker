@@ -7,20 +7,41 @@ import {
   SessionNotInProgressError,
   SupersetSpansMultipleSessionsError,
 } from '@/features/workout-logging/repository/errors';
+import { SqlitePersonalRecordRepository } from '@/features/records/repository/SqlitePersonalRecordRepository';
+import type { PersonalRecordRepository } from '@/features/records';
 import { RepositoryNotFoundError } from '@/repositories/base';
 import type { DatabaseContext } from '@/repositories/contracts/database';
+import { SqliteSettingsRepository } from '@/repositories/settings';
 import { FixedClock } from '@/services/clock';
+import type { Clock } from '@/services/clock';
 import { Uuid7IdGenerator } from '@/services/id';
+import type { IdGenerator } from '@/services/id';
 
 const START = Date.UTC(2026, 7, 6, 18, 0, 0);
 /** Matches `timer.defaultRestSeconds`'s own settings default - stands in for the value `WorkoutSessionService` would read and pass down in real usage. */
 const DEFAULT_REST_SECONDS = 90;
 
+/** Builds a `SqliteWorkoutSessionRepository` plus the `personalRecordRepository` it now requires, bound to the same `db` instance. */
+function makeRepo(
+  db: DatabaseContext,
+  clock: Clock,
+  idGenerator: IdGenerator,
+): SqliteWorkoutSessionRepository {
+  const settings = new SqliteSettingsRepository(db, clock);
+  const personalRecordRepository = new SqlitePersonalRecordRepository({
+    db,
+    clock,
+    idGenerator,
+    settings,
+  });
+  return new SqliteWorkoutSessionRepository({ db, clock, idGenerator, personalRecordRepository });
+}
+
 function setup() {
   const db = createTestDatabase();
   const clock = new FixedClock(START);
   const idGenerator = new Uuid7IdGenerator(clock);
-  const repo = new SqliteWorkoutSessionRepository({ db, clock, idGenerator });
+  const repo = makeRepo(db, clock, idGenerator);
   return { db, clock, idGenerator, repo };
 }
 
@@ -496,7 +517,7 @@ describe('SqliteWorkoutSessionRepository - drop sets (ADR-0006)', () => {
 });
 
 describe('SqliteWorkoutSessionRepository - completing sets', () => {
-  it('marks the set completed, re-anchors performed_at and returns an empty newPRs (P8 owns records)', async () => {
+  it('marks the set completed, re-anchors performed_at, and evaluates it for personal records in the same transaction (ADR-0015)', async () => {
     const { db, repo, clock } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
@@ -506,7 +527,14 @@ describe('SqliteWorkoutSessionRepository - completing sets', () => {
 
     const result = await repo.completeSet(set.id, { reps: 6, rpe: 9 });
 
-    expect(result.newPRs).toEqual([]);
+    // The exercise's first-ever eligible set trivially beats every record
+    // slot a 100kg x 6 normal set touches - 6 reps is not one of
+    // WEIGHT_AT_REPS_BUCKETS (1,2,3,5,8,10,12), so weight_at_reps is not
+    // among them here.
+    expect(result.newPRs.length).toBeGreaterThan(0);
+    expect(result.newPRs.map((r) => r.recordType).sort()).toEqual(
+      ['estimated_1rm', 'max_reps', 'max_set_volume', 'max_weight'].sort(),
+    );
     expect(result.set).toMatchObject({
       isCompleted: true,
       reps: 6,
@@ -515,6 +543,150 @@ describe('SqliteWorkoutSessionRepository - completing sets', () => {
       completedAt: START + 30_000,
       performedAt: START + 30_000,
     });
+  });
+
+  it('newPRs is empty for a set type evaluateCandidateRecords never awards a record to (warmup)', async () => {
+    const { db, repo } = setup();
+    await insertExercise(db, 'ex-1');
+    const session = await repo.startEmpty(START);
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const set = await repo.appendSet(exercise.id, { setType: 'warmup', weightKg: 100, reps: 5 });
+
+    const result = await repo.completeSet(set.id, {});
+
+    expect(result.newPRs).toEqual([]);
+    expect(await db.select('SELECT id FROM personal_record')).toEqual([]);
+  });
+
+  /**
+   * `warmup` above is the only ineligible set type the pre-P8-test-pass suite
+   * exercised end-to-end through `completeSet` - `evaluateCandidateRecords`
+   * itself is unit-tested against every ineligible type
+   * (`__tests__/features/records/domain/evaluateCandidateRecords.test.ts`),
+   * but that pure-function test can never prove `SqliteWorkoutSessionRepository`
+   * actually wires its own `isRecordEligibleSetType` guard (the cheap
+   * short-circuit `completeSet` takes before even calling
+   * `personalRecordRepository.evaluateAndUpsert`, see this file's own doc
+   * comment on that guard) for the *other* two set types that can reach it
+   * through a normal user flow: `assisted` and `partial` (`drop` is excluded
+   * here - a drop segment can only be created via `addDropSet`, which always
+   * requires a real, already-`normal`/`failure` parent set already appended,
+   * making it a materially different fixture; its own ineligibility is
+   * already covered at the pure-function level and by every drop-set test in
+   * this file never asserting a stray `personal_record` row). Each candidate
+   * here uses values (100kg x 5 reps) that would trivially become a
+   * first-ever record across every slot if eligibility weren't checked -
+   * this is what makes the assertion meaningful rather than vacuous.
+   */
+  it.each(['assisted', 'partial'] as const)(
+    'newPRs is empty for an ineligible %s set, even though its values would trivially beat everything if eligibility were not checked',
+    async (setType) => {
+      const { db, repo } = setup();
+      await insertExercise(db, 'ex-1');
+      const session = await repo.startEmpty(START);
+      const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+      const set = await repo.appendSet(exercise.id, { setType, weightKg: 100, reps: 5 });
+
+      const result = await repo.completeSet(set.id, {});
+
+      expect(result.newPRs).toEqual([]);
+      expect(await db.select('SELECT id FROM personal_record')).toEqual([]);
+    },
+  );
+
+  /**
+   * ADR-0015 Decision 3 / this file's own doc comment on
+   * `WorkoutSessionRepositoryDependencies`: PR evaluation runs inside
+   * `completeSet`'s own transaction, so either both writes commit or neither
+   * does. A throwing `personalRecordRepository.evaluateAndUpsert` is the
+   * cheapest way to prove that atomicity without depending on real SQLite
+   * failure injection: it exercises the exact same transaction-rollback path
+   * a genuine mid-transaction failure would (`NodeSqlExecutor.transaction`
+   * catches, rolls back, and rethrows - see its own implementation), and this
+   * repository's `completeSet` never wraps or swallows that error.
+   */
+  it('a throwing personalRecordRepository.evaluateAndUpsert rolls back the entire completeSet transaction - the set is never left half-completed', async () => {
+    const db = createTestDatabase();
+    const clock = new FixedClock(START);
+    const idGenerator = new Uuid7IdGenerator(clock);
+    const failingPersonalRecordRepository: PersonalRecordRepository = {
+      listCurrent: async () => [],
+      listRecent: async () => [],
+      listHistory: async () => [],
+      evaluateAndUpsert: async () => {
+        throw new Error('boom: simulated PR-evaluation failure');
+      },
+      rebuild: async () => {},
+    };
+    const repo = new SqliteWorkoutSessionRepository({
+      db,
+      clock,
+      idGenerator,
+      personalRecordRepository: failingPersonalRecordRepository,
+    });
+    await insertExercise(db, 'ex-1');
+    const session = await repo.startEmpty(START);
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const set = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
+
+    await expect(repo.completeSet(set.id, { reps: 6, rpe: 9 })).rejects.toThrow(
+      'boom: simulated PR-evaluation failure',
+    );
+
+    const row = await db.selectOne<{
+      is_completed: number;
+      completed_at: number | null;
+      reps: number | null;
+      rpe: number | null;
+    }>('SELECT is_completed, completed_at, reps, rpe FROM workout_set WHERE id = ?', [set.id]);
+    // The whole `UPDATE workout_set ... SET is_completed = 1, reps = 6, rpe = 9 ...`
+    // that ran earlier in the same transaction must have rolled back too, not
+    // just been skipped going forward - both `is_completed` and the patched
+    // `reps`/`rpe` values must be back to what `appendSet` originally wrote.
+    expect(row).toMatchObject({ is_completed: 0, completed_at: null, reps: 5, rpe: null });
+    expect(await db.select('SELECT id FROM personal_record')).toEqual([]);
+  });
+
+  it('newPRs is empty when the completed set does not beat anything already current', async () => {
+    const { db, repo, clock } = setup();
+    await insertExercise(db, 'ex-1');
+    const session = await repo.startEmpty(START);
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+
+    const first = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
+    const firstResult = await repo.completeSet(first.id, {});
+    expect(firstResult.newPRs.length).toBeGreaterThan(0);
+
+    clock.advance(30_000);
+    // Same rep count (bucket 5) as the first set, but strictly lighter -
+    // beats nothing across every slot (max_weight, max_reps, weight_at_reps
+    // bucket 5, max_set_volume, estimated_1rm all favor the first set).
+    const second = await repo.appendSet(exercise.id, { weightKg: 80, reps: 5 });
+    const secondResult = await repo.completeSet(second.id, {});
+
+    expect(secondResult.newPRs).toEqual([]);
+  });
+
+  it('a heavier second set on the same exercise supersedes the first: two committed transactions, one current max_weight row', async () => {
+    const { db, repo, clock } = setup();
+    await insertExercise(db, 'ex-1');
+    const session = await repo.startEmpty(START);
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+
+    const first = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
+    await repo.completeSet(first.id, {});
+
+    clock.advance(30_000);
+    const second = await repo.appendSet(exercise.id, { weightKg: 110, reps: 5 });
+    const secondResult = await repo.completeSet(second.id, {});
+
+    const maxWeight = secondResult.newPRs.find((r) => r.recordType === 'max_weight');
+    expect(maxWeight).toMatchObject({ value: 110, previousValue: 100, isCurrent: true });
+
+    const currentMaxWeightRows = await db.select(
+      `SELECT id FROM personal_record WHERE exercise_id = 'ex-1' AND record_type = 'max_weight' AND is_current = 1`,
+    );
+    expect(currentMaxWeightRows).toHaveLength(1);
   });
 
   it('completes a pre-filled row with no values at all (the two-tap path)', async () => {
@@ -991,11 +1163,7 @@ describe('SqliteWorkoutSessionRepository - crash recovery (FR-19 / ADR-0005)', (
 
     // The process dies here. Nothing is flushed, closed or serialized - every
     // write above was its own committed transaction (ADR-0005 mechanism 1).
-    const recovered = await new SqliteWorkoutSessionRepository({
-      db,
-      clock,
-      idGenerator,
-    }).findInProgress();
+    const recovered = await makeRepo(db, clock, idGenerator).findInProgress();
 
     expect(recovered).not.toBeNull();
     expect(recovered!.id).toBe(session.id);

@@ -15,6 +15,8 @@ export interface ListRowProps {
   showChevron?: boolean | undefined;
   destructive?: boolean | undefined;
   disabled?: boolean | undefined;
+  /** Mirrors `Button.tsx`'s `loading` prop's `accessibilityState.busy` wiring - set while a row-triggered async action (e.g. a mutation) is in flight, so a screen reader announces "busy" rather than leaving `disabled` as the only (unexplained) signal something changed. */
+  busy?: boolean | undefined;
   testID?: string | undefined;
 }
 
@@ -27,6 +29,7 @@ export function ListRow({
   showChevron = false,
   destructive = false,
   disabled = false,
+  busy = false,
   testID,
 }: ListRowProps) {
   const content = (
@@ -76,7 +79,7 @@ export function ListRow({
         disabled={disabled}
         accessibilityRole="button"
         accessibilityLabel={subtitle ? `${title}, ${subtitle}` : title}
-        accessibilityState={{ disabled }}
+        accessibilityState={{ disabled, busy }}
         testID={testID}
       >
         {content}
