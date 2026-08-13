@@ -38,6 +38,13 @@ const settingsSchemaDefinition = {
   'timer.autoStart': { schema: z.boolean(), default: true },
   'workout.staleAfterHours': { schema: z.number().int().min(1).max(72), default: 6 },
   'workout.confirmDiscard': { schema: z.boolean(), default: true },
+  // P9 addition (docs/ROADMAP.md, D-04): shows an estimated-calories figure
+  // on the workout summary screen when on. Off by default - the estimate is
+  // a flat kcal-per-minute constant with no bodyweight input
+  // (`features/workout-logging/domain/EstimatedCalories.ts`,
+  // `docs/adr/0018-estimated-calories-formula.md`), so it's opt-in rather
+  // than shown unconditionally.
+  'workout.showEstimatedCalories': { schema: z.boolean(), default: false },
   'oneRm.formula': { schema: z.enum(['epley', 'brzycki']), default: 'epley' },
   'progression.upperIncrementKg': { schema: z.number().positive(), default: 2.5 },
   // ADR-0015 Decision 2: 5 kg default for lower-body movements (a squat or

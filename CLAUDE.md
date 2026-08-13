@@ -8,8 +8,8 @@ reference, not a replacement. Section numbers below refer to `docs/ARCHITECTURE.
 
 P0 (project foundation), P1 (design system and UI primitives), P2 (persistence
 foundation), P3 (onboarding, profile and core settings), P4 (exercise library), P5
-(workout plans), P6 (workout logging), P7 (rest timer), and P8 (progressive overload
-and personal records) are complete. P8 (`feat/p8-progressive-overload`) was cut from
+(workout plans), P6 (workout logging), P7 (rest timer), P8 (progressive overload and
+personal records), and P9 (workout summary and history) are complete. P8 (`feat/p8-progressive-overload`) was cut from
 `main` before P7's PR merged - a documented decision made when P8 was kicked off so
 the two phases could be reviewed independently (see
 `plans/2026-08-11-p8-progressive-overload.md`'s "Branch note") - so the two branches'
@@ -581,6 +581,200 @@ its in-flight state is announced rather than only implied by `disabled` (MEDIUM)
 "Known gaps" below for `SetRow`'s deeper, structural collapse concern that this fix
 deliberately did not attempt to resolve.
 
+Finishing a workout no longer drops the user straight back to Home, and past sessions
+are no longer invisible - P9 closes both gaps. `useFinishDiscardWorkout`'s `finish()`
+now navigates to `routes.workout.summary(sessionId)` (`app/workout/summary/
+[sessionId].tsx`, inside the existing root-level `workout/` full-screen stack) instead
+of Home; `discard()` is unchanged and still replaces with Home. A second new route,
+`app/history/[sessionId].tsx` (root-level, per the folder tree - not nested under
+`workout/`, since that stack is reserved for the in-progress workout "mode" per
+ADR-0007, and not nested under `profile/`, since a session can be reached from more
+than one surface later), is the persistent, revisitable view of a finished session;
+`workout/summary/[sessionId]` is a one-time celebratory view by contrast, reached only
+from finishing a workout, with nothing routing back into it. A third new route,
+`app/profile/history.tsx` (`routes.profile.history()`), gives the history list an
+entry point today, reached via a new "Training history" row on `ProfileScreen` -
+mirroring P8's "Personal records" row precedent exactly (same `ListRow`, same
+non-tab, profile-scoped, non-nested shape). This fills a routing gap
+`docs/ARCHITECTURE.md` section 9/10 left implicit (both already showed
+`history/[sessionId].tsx`, the detail route, but neither showed a list-route entry
+point ahead of P10's `HOME --> HIST` edge or P12's `CAL --> HIST` edge, neither of
+which exist yet) - a deliberate, precedented judgment call, not an invented deviation,
+and folded back into `docs/ARCHITECTURE.md` as part of this update.
+
+`WorkoutSessionRepository`/`SqliteWorkoutSessionRepository` gain the three methods
+section 8.3 has named as this repository's contract since P6 but left deliberately
+absent through P6-P8 - `listHistory` (a fixed most-recently-started-first,
+offset-paginated read via `repositories/query`'s `buildLimitOffset`, never a filtered
+search), `getSession` (one `completed` session's full aggregate, read-only), and
+`updateHistoricalSession` (scoped to session-level `notes` only, the one field none of
+the granular mutation methods already cover) - plus a new `deleteSession` beyond the
+literal list, the same kind of addition `restoreExercise` already was in P6. Following
+`PlanRepository.purgePlan`'s exact precedent: hard delete (a real `DELETE FROM
+workout_session`, cascading via `ON DELETE CASCADE` to its `session_exercise`/
+`workout_set` rows), gated behind `ConfirmDialog`, no undo - then
+`personalRecordRepository.rebuild()` for every exercise the deleted session ever held
+(collected before the delete, since the cascade takes `session_exercise` with it).
+
+The historical-edit mechanism, rather than inventing one large `updateHistoricalSession`
+patch type that would duplicate the granular mutation methods this repository already
+had: eleven of those methods - `addExercise`, `removeExercise`, `restoreExercise`,
+`setExerciseNote`, `appendSet`, `addDropSet`, `updateSet`, `completeSet`,
+`uncompleteSet`, `deleteSet`, `restoreSet` - now go through a new private
+`requireInProgressOrCompletedSession` guard (`in_progress` or `completed`;
+`discarded`/nonexistent/soft-deleted still rejected) instead of the stricter
+`in_progress`-only `requireInProgressSession` `finish`/`discard` still use.
+A real, pre-existing gap surfaced while making this change, not introduced by it:
+six of those eleven (`addExercise`, `removeExercise`, `restoreExercise`, `appendSet`,
+`updateSet`, `completeSet`) already had the strict `in_progress`-only guard and were
+simply loosened, but the other five - `setExerciseNote`, `addDropSet`, `deleteSet`,
+`restoreSet`, `uncompleteSet` - had **no session-status guard at all** before this
+phase, meaning any of them could previously write silently through a `discarded`
+session with nothing to stop it. P9 both loosens the six existing guards and adds a
+real guard for the first time to the other five, closing that latent gap rather than
+purely "loosening" one, confirmed by security review (see below). `setExerciseRestOverride`
+is deliberately excluded from this list: a completed session has no active rest timer
+for an override to affect, and nothing in P9's UI edits one. Every one of the eleven
+extended methods, except `setExerciseNote` (a pure-text write with nothing to go
+stale), also calls a new private `syncCompletedSessionAfterEdit` - a no-op unless
+`session.status === 'completed'` - which re-derives the session's four denormalized
+totals via the same query `finish()` has always run (extracted into
+`computeTotalsForSession` so neither duplicates it) and calls
+`personalRecordRepository.rebuild()` for the exercise(s) the edit touched, rather than
+`completeSet`'s own live-workout `evaluateAndUpsert`: `evaluateAndUpsert`'s "beats
+whatever is currently current" comparison is not chronologically aware and can be
+wrong for an out-of-order historical edit, exactly the drift `rebuild()` exists to
+correct. `completeSet`'s own P9 branch (triggered when the session is `completed`)
+reflects this: it calls `syncCompletedSessionAfterEdit` and then re-reads
+`personal_record WHERE workout_set_id = ? AND is_current = 1` for its `newPRs`, rather
+than calling `evaluateAndUpsert` at all.
+
+`finish()` now writes `estimated_kcal` (only when `workout.showEstimatedCalories` is
+on - `null` otherwise, with no retroactive backfill for sessions finished before this
+phase or with the setting off, same as every other off-by-default setting in this
+codebase) via a new pure calculator, `features/workout-logging/domain/
+EstimatedCalories.ts` (`CALORIES_PER_MINUTE = 5`, `estimatedCalories(durationSeconds)`
+
+- see `docs/adr/0018-estimated-calories-formula.md`), and now returns `newPRs`: every
+  current personal record whose `session_id` is this session, read directly from
+  `personal_record` (`WHERE session_id = ? AND is_current = 1`) rather than accumulated
+  across the session's own `completeSet` calls. This re-derivation is safe specifically
+  because `finish()` only ever runs against an `in_progress` session, so every record it
+  sees was written by the ordinary real-time `evaluateAndUpsert` path in chronological
+  order - the guarantee that does not hold for a historical edit, which is why
+  `completeSet`'s own P9 branch (above) derives its `newPRs` differently.
+  `WorkoutSessionService.finish()` reads `workout.showEstimatedCalories` and passes it
+  down as a plain boolean, mirroring exactly how it already reads
+  `timer.defaultRestSeconds` for `startFromPlanDay` - the repository stays free of
+  settings-schema knowledge. `workout.showEstimatedCalories` (default `false`, per D-04)
+  is a new settings key, surfaced as a single `Switch` row on `SettingsScreen` rather
+  than a dedicated sub-screen, mirroring the existing `haptics.enabled` row's shape, not
+  P7/P8's multi-field sub-screens.
+
+The UI layer: `WorkoutSummaryScreen` (`app/workout/summary/[sessionId].tsx`) is the
+post-finish celebratory summary, with a share-as-image action via two new
+dependencies installed through `expo install` - `react-native-view-shot@5.1.0`
+(captures an off-screen `ShareableSummaryCard` built purely from the session's own
+already-displayed totals) and `expo-sharing@~57.0.11` (hands the resulting PNG to the
+native share sheet); `expo-sharing`'s auto-registered config plugin is a genuine
+no-op, confirmed by reading its source during the security pass, and is deliberately
+left unregistered in `app.config.ts` rather than added for nothing.
+`WorkoutHistoryListScreen` (`app/profile/history.tsx`) is a paginated, month-grouped
+`FlashList` - `useSessionHistoryList`'s `useInfiniteQuery` fetches `HISTORY_PAGE_SIZE
+= 50` rows per page (well inside `repositories/query`'s 100-row clamp) via
+`listHistory`, grouped client-side into month sections by `groupSessionHistoryByMonth`
+
+- scaled to a 2,500-session fixture per a new benchmark case in `__tests__/database/
+benchmarks.perf.test.ts` (0-1ms, well under the 50ms budget). `WorkoutHistoryDetailScreen`
+  (`app/history/[sessionId].tsx`) is read-only by default with an inline "Edit"/"Done
+  editing" toggle that swaps every exercise card between a flat `ReadOnlyExerciseCard`
+  and the full, already-existing `SessionExerciseCard` editing surface, plus a hard-delete
+  "Delete workout" action (`useDeleteSession`) gated behind `ConfirmDialog` with explicit
+  irreversibility copy ("This permanently deletes the workout and every set logged in
+  it, and recalculates any personal records it held. This cannot be undone.") and its
+  `Button`'s own `loading`/`disabled={mutations.isMutating}` props guarding it against
+  racing an in-flight edit.
+
+`useFinishDiscardWorkout.finish()` seeds the query cache at `sessionSummaryKeys.detail(sessionId)`
+(`features/workout-logging/hooks/useSessionHistory.ts`) with the real `SessionSummary`
+`sessionService.finish()` returns - including `newPRs`, which cannot be re-derived
+later, per that field's own doc comment - before navigating, so `WorkoutSummaryScreen`
+reads it back with no extra request the instant it mounts; a cold cache (e.g. the
+screen reached some other way) falls back to a fresh `getSession()` call with an empty
+`newPRs`, consistent with `workout/summary/[sessionId]` being a one-time celebratory
+view by design, `history/[sessionId]` being the persistent one.
+
+P9 verification: typecheck, lint, and the full Jest suite (112 suites, 1062 tests
+passing, 1 pre-existing skip) are clean; `npx expo export --platform ios` was used
+again as the build-verification proxy - no simulator/emulator/dev-client available in
+this environment, same constraint as every phase since P4, confirmed explicitly with
+the user in this phase's own Step 0 rather than silently assumed. A security review
+(`reports/security-2026-08-13-p9.md`, security-agent-sonnet, routine scope) found zero
+critical/high/medium findings, one low, one informational. The low: `ConfirmDialog`'s
+Confirm button still has no in-flight guard of its own (the same gap already flagged
+in P8's report, shared by every `ConfirmDialog`-gated mutation in this codebase), worth
+re-flagging because `deleteSession` is the first call site gating a genuinely
+irreversible, no-undo hard delete rather than an idempotent operation like P8's
+`rebuild()` - still non-corrupting, since `ExpoSqlExecutor.transaction()`'s single-
+connection serialization means a double-tap's second call just hits zero affected rows
+and surfaces a spurious error toast, not a double delete. The informational note
+confirmed full parameterization across every new query and that the loosened guard is
+not a privilege-escalation concern in an offline, single-local-user app with no
+cross-user authorization boundary to fail.
+
+An accessibility review (`reports/accessibility-2026-08-13-p9.md`, general-purpose
+agent standing in for the accessibility-agent role, the same substitution P7/P8 used)
+found no BLOCKING finding - explicitly checked, not assumed, that the `SwipeableRow`-
+collapse bug class that blocked P7 and P8 does not recur: `SetRow.tsx`/
+`SessionExerciseCard.tsx`, the two components carrying that pre-existing, still-tracked
+structural gap, are byte-identical to `main` in this diff (confirmed via `git diff
+main --stat`), and no new P9 file imports or renders `SwipeableRow` at all (confirmed
+via a full-diff grep). Three non-blocking findings, all fixed within the phase, the
+same "fix non-blocking findings same-phase" precedent P8's write-up already
+established: the off-screen `ShareableSummaryCard` capture target was fully exposed to
+assistive tech (an RNTL prop-tree dump proved zero `accessibilityElementsHidden`/
+`importantForAccessibility` anywhere in its ancestor chain, unlike this codebase's
+seven other "exists but must not be perceived" sites) - fixed by adding both props to
+its wrapper `View`, verified with the same revert-and-confirm discipline P7/P8's own
+regression tests used; `WorkoutSummaryScreen` and `WorkoutHistoryDetailScreen` never
+announced their loading-skeleton state while `WorkoutHistoryListScreen` - the third
+new P9 screen in the very same diff - already had the correct `AccessibilityInfo.
+announceForAccessibility(t('common.loading'))` pattern (the same violation class
+A11Y-P8-003 already named and fixed once, recurring as an in-phase inconsistency
+rather than a fresh gap) - both screens now carry it; and toggling "Edit"/"Done
+editing" on `WorkoutHistoryDetailScreen` restructured every exercise card with no
+announcement beyond the toggle button's own label change - now announces the mode
+transition explicitly. `SetRow`'s pre-existing, already-tracked `SwipeableRow`-collapse
+gap (see "Known gaps") is now reachable from a second screen (this screen's edit mode,
+which reuses `SessionExerciseCard` unchanged) in addition to `ActiveWorkoutScreen` -
+noted for awareness, not a new finding, since P9 neither created nor worsened it.
+
+A `/code-review high` pass against `main` found 10 findings, 8 real and fixed before
+commit: a query hook missing an `enabled` guard for an undefined `sessionId`; the
+delete button's `isMutating` flag existed but was never wired to actually gate the
+button, which could otherwise let a hard delete race an in-flight edit's own
+transaction; `addDropSet` had been missed entirely from the status-guard-and-resync
+sweep described above and was brought in line with its sibling methods (2 new tests);
+a real concurrency bug in multi-select "add exercise," where N unawaited transactions
+raced on `sort_order` - fixed by making the adds sequential `await`s instead; dead,
+duplicate invalidation logic removed now that the real invalidation function is shared
+via `invalidation.ts`; one hardcoded, untranslated string routed through `t()`; and two
+cases of drifted duplicated logic extracted into shared helpers - `ExerciseThumbnail.tsx`
+(a single `EXERCISE_THUMBNAIL_SIZE = 44` replacing two independently-hardcoded
+constants, 44 and 40, that had already drifted apart between `ExerciseHeader.tsx` and
+the new `ReadOnlyExerciseCard`) and duration formatting now delegating to the existing
+`formatElapsedSeconds` instead of reimplementing it.
+
+**A known gap, decided with the user rather than silently deferred**: deleting the
+last remaining set from an exercise during a historical edit leaves that exercise as
+an empty card rather than auto-removing it - found by test-agent's coverage pass and
+demonstrated with a real test documenting the current behavior (not a fix). A true
+fix needs to interact with the existing per-set undo toast (a combined undo restoring
+both the set and the exercise together, not just the set alone) - real new mechanism
+work, not a call-site change. Asked directly, the user chose to document this as a
+known gap and defer the fix to a future pass rather than rush a fix risking a subtle
+undo-interaction bug; see "Known gaps" below.
+
 **Documentation-only addition (2026-08-11):** `daily-goals` is a new, twelfth feature
 added to the roadmap as `P17 - Daily goals and reminders` (`docs/ROADMAP.md`),
 architecture-planned in `docs/ARCHITECTURE.md` section 2.1 (FR-27..FR-30), section
@@ -912,6 +1106,26 @@ ActiveWorkoutScreen.tsx`) is an inline arrow function defined inside the
   bundle: production/runtime is unaffected. Worked around in P4's own new tests with
   a manual mock module, `__tests__/__mocks__/vectorIconsMock.tsx`; not fixed at the
   dependency level.
+
+- **Deleting an exercise's last remaining set during a historical edit
+  (`WorkoutHistoryDetailScreen`'s edit mode) leaves that exercise as an empty
+  card instead of auto-removing it.** `deleteSet` correctly soft-deletes the
+  set and `syncCompletedSessionAfterEdit` correctly re-derives totals/PRs, but
+  nothing calls `removeExercise` for the now-empty `session_exercise` - the
+  card just renders with zero sets underneath it. Found by test-agent's P9
+  coverage pass, which added a test documenting this exact behavior rather
+  than a fix. Not fixed within the phase because a true fix is real, new
+  mechanism work, not a call-site change: the existing per-set undo toast
+  (`deleteSet` -> `restoreSet`) would need to become a combined undo that
+  restores both the set and the auto-removed exercise together, since
+  restoring only the set into an already-removed exercise card would be a
+  worse, confusing half-state. Asked directly, the user chose to document
+  this as a known gap and defer the fix to a future pass rather than risk a
+  subtly wrong undo interaction shipped under phase-completion time pressure.
+  Source: `plans/2026-08-13-p9-workout-summary-history-state.md`'s
+  gap-fill entry, `reports/security-2026-08-13-p9.md`/
+  `reports/accessibility-2026-08-13-p9.md` do not cover this (it is a
+  correctness/UX gap, not a security or accessibility one).
 
 **Resolved**: the icon library gap tracked here through P0-P2 is closed as of P3 -
 `@expo/vector-icons` (Ionicons) is the app's icon system, first used in the

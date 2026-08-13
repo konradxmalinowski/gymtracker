@@ -134,6 +134,39 @@ export function useOneRmFormulaSetting() {
 }
 
 /**
+ * P9's `workout.showEstimatedCalories` boolean (default `false`, D-04) -
+ * shape mirrors {@link useHapticsSetting} exactly, minus the MMKV mirror:
+ * `haptics.enabled` needs a synchronous read for gesture handlers (ADR-0008),
+ * this setting doesn't - `finish()`'s own read of it already goes through
+ * `WorkoutSessionService`, not this hook, and the only UI consumer
+ * (`SettingsScreen`'s `Switch` row) is already a React Query subscriber.
+ */
+export function useShowEstimatedCaloriesSetting() {
+  const { settings } = useContainer();
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ['settings', 'workout.showEstimatedCalories'],
+    queryFn: () => settings.get('workout.showEstimatedCalories'),
+  });
+
+  const mutation = useMutation({
+    scope: { id: 'settings:workout.showEstimatedCalories' },
+    mutationFn: (value: boolean) => settings.set('workout.showEstimatedCalories', value),
+    onSuccess: (_data, value) => {
+      queryClient.setQueryData(['settings', 'workout.showEstimatedCalories'], value);
+    },
+  });
+
+  return {
+    enabled: query.data,
+    isPending: query.isPending,
+    isError: query.isError,
+    setEnabled: mutation.mutate,
+  };
+}
+
+/**
  * ADR-0015 Decision 2's per-movement progression increments
  * (`progression.upperIncrementKg`/`progression.lowerIncrementKg`). Read/write
  * together, same reasoning `useUnitsSettings` gives for its own pair - the

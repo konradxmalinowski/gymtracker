@@ -13,7 +13,10 @@ import type {
   ActiveStatePatch,
   CompleteSetValues,
   CompletedSetResult,
+  SessionAggregate,
   SessionExercise,
+  SessionHistoryQuery,
+  SessionListItem,
   SessionSummary,
   SetSeed,
   UpdateSetPatch,
@@ -280,9 +283,20 @@ export class WorkoutSessionService {
     return this.deps.repository.saveActiveState(patch);
   }
 
-  /** @throws {SessionNotInProgressError} when the session is already completed or discarded. */
-  finish(sessionId: EntityId, finishedAt?: number): Promise<SessionSummary> {
-    return this.deps.repository.finish(sessionId, finishedAt ?? this.deps.clock.now());
+  /**
+   * Reads `workout.showEstimatedCalories` and passes it down, mirroring
+   * exactly how {@link startFromPlanDay} already reads `timer.defaultRestSeconds`
+   * - the repository stays free of settings-schema knowledge.
+   *
+   * @throws {SessionNotInProgressError} when the session is already completed or discarded.
+   */
+  async finish(sessionId: EntityId, finishedAt?: number): Promise<SessionSummary> {
+    const showEstimatedCalories = await this.deps.settings.get('workout.showEstimatedCalories');
+    return this.deps.repository.finish(
+      sessionId,
+      finishedAt ?? this.deps.clock.now(),
+      showEstimatedCalories,
+    );
   }
 
   /**
@@ -301,6 +315,46 @@ export class WorkoutSessionService {
   /** Reads `workout.confirmDiscard` so the caller can decide whether to show the confirmation dialog before calling {@link discard}. */
   shouldConfirmDiscard(): Promise<boolean> {
     return this.deps.settings.get('workout.confirmDiscard');
+  }
+
+  // --- history (P9) ---------------------------------------------------------
+
+  /** P9's paginated history list - see the repository method's own doc comment. `query` defaults to the first page at `buildLimitOffset`'s own default size. */
+  listHistory(query: SessionHistoryQuery = {}): Promise<SessionListItem[]> {
+    return this.deps.repository.listHistory(query);
+  }
+
+  /** Full detail for one `completed` session, or `null` - see the repository method's own doc comment on why it is restricted to `completed`. */
+  getSession(sessionId: EntityId): Promise<SessionAggregate | null> {
+    return this.deps.repository.getSession(sessionId);
+  }
+
+  /**
+   * The one historical-edit field {@link WorkoutSessionRepository.updateHistoricalSession}
+   * covers that no granular mutation method already does - session-level
+   * `notes`. `null` clears it. Every other historical edit (adding/removing
+   * an exercise, editing/completing/deleting a set, an exercise note) goes
+   * through the same granular methods already exposed above
+   * (`addExercise`/`removeExercise`/`appendSet`/`updateSet`/`completeSet`/
+   * `uncompleteSet`/`deleteSet`/`restoreSet`/`setExerciseNote`), which now
+   * also accept a `completed` session.
+   *
+   * @throws {WorkoutValidationError} when the note exceeds {@link WORKOUT_NOTE_MAX_LENGTH}.
+   * @throws {RepositoryNotFoundError} when the session does not exist or is soft-deleted.
+   */
+  async updateHistoricalSession(sessionId: EntityId, notes: string | null): Promise<void> {
+    check(nullableNoteSchema, notes);
+    return this.deps.repository.updateHistoricalSession(sessionId, { notes });
+  }
+
+  /**
+   * Hard delete, no undo - see the repository method's own doc comment for
+   * the `PlanRepository.purgePlan` precedent this follows.
+   *
+   * @throws {RepositoryNotFoundError} when the session does not exist.
+   */
+  deleteSession(sessionId: EntityId): Promise<void> {
+    return this.deps.repository.deleteSession(sessionId);
   }
 
   private async start(run: () => Promise<ActiveSessionAggregate>): Promise<StartSessionResult> {

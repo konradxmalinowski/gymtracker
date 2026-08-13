@@ -163,8 +163,36 @@ stops being a scaffold placeholder.
   session under five governing rules (mount-only hydration, paired
   synchronous update plus dispatched write, database-wins reconciliation on
   write failure, clear on finish/discard, selector-only consumption) (P6)
+- `WorkoutSummaryScreen` (`app/workout/summary/[sessionId].tsx`), the
+  post-finish celebratory summary, reached from `useFinishDiscardWorkout`'s
+  `finish()` instead of Home; share-as-image action via `react-native-view-shot`
+  and `expo-sharing` (P9)
+- `WorkoutHistoryListScreen`/`WorkoutHistoryDetailScreen`
+  (`app/profile/history.tsx`, `app/history/[sessionId].tsx`): a paginated,
+  month-grouped history list and a read-only session detail with an inline
+  edit mode (add/remove exercises, edit/complete/delete sets) and a hard,
+  no-undo "Delete workout" action (P9)
+- `WorkoutSessionRepository`/`SqliteWorkoutSessionRepository` gain
+  `listHistory`, `getSession`, `updateHistoricalSession`, and `deleteSession`;
+  eleven granular mutation methods now also accept a `completed` session
+  (previously `in_progress`-only, or in five cases with no session-status
+  guard at all), each resyncing the session's denormalized totals and
+  rebuilding affected personal records on a historical edit (P9)
+- `features/workout-logging/domain/EstimatedCalories.ts`, a flat
+  kcal-per-minute calculator backing a new `workout.showEstimatedCalories`
+  settings key (default off, D-04) - see `docs/adr/0018-estimated-calories-formula.md` (P9)
+- "Training history" row on `ProfileScreen` and an "Estimated calories"
+  `Switch` row on `SettingsScreen` (P9)
+- New dependencies: `react-native-view-shot`, `expo-sharing` (P9)
 
 ### Fixed
+
+- Five `SqliteWorkoutSessionRepository` methods (`setExerciseNote`,
+  `addDropSet`, `deleteSet`, `restoreSet`, `uncompleteSet`) had no
+  session-status guard at all, meaning any of them could previously write
+  silently through a `discarded` session; closed alongside P9's own
+  in-progress-or-completed guard extension on the six methods that already
+  had one (P9)
 
 - Exercise catalog seeding wired into the boot sequence (`app/_layout.tsx` now calls
   `database/seed/runSeed()` after migrations, before `createContainer()`) - the
@@ -198,3 +226,7 @@ stops being a scaffold placeholder.
   schema at the service layer, not exploitable since every field it writes
   is an id or a bound numeric column) (`reports/security-2026-08-07-p6.md`)
   (P6)
+- Routine security review found zero critical/high/medium issues, one low
+  (the pre-existing `ConfirmDialog` double-tap gap, now behind the first
+  genuinely irreversible hard delete it has ever gated, still non-corrupting),
+  one informational note (`reports/security-2026-08-13-p9.md`) (P9)

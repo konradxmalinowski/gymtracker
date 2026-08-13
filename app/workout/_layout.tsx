@@ -5,8 +5,11 @@ import { color } from '@/theme/tokens';
 /**
  * ADR-0007's root-level workout stack: `fullScreenModal`, gestures disabled,
  * sliding up from the bottom - "the workout is a mode the user entered, not
- * a page they browsed to." A single screen (`active.tsx`) today;
- * `workout/summary/[sessionId]` is P9 and deliberately not added here.
+ * a page they browsed to." Two screens as of P9: `active.tsx` (the
+ * in-progress workout) and `summary/[sessionId].tsx` (the post-finish
+ * celebratory view `useFinishDiscardWorkout`'s `finish()` navigates to -
+ * reached only from finishing a workout, nothing routes back into it; see
+ * `navigation/routes.ts`'s `workout.summary` doc comment).
  *
  * The Android hardware-back interception ADR-0007 rule 1 also calls for
  * lives in `ActiveWorkoutScreen` itself (via `BackHandler`), not here -

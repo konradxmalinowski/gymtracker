@@ -389,4 +389,92 @@ describe('WorkoutSessionService - finishing', () => {
     await settings.set('workout.confirmDiscard', false);
     expect(await service.shouldConfirmDiscard()).toBe(false);
   });
+
+  it('reads workout.showEstimatedCalories from settings and passes it through to the repository (off by default)', async () => {
+    const { db, service, settings } = setup();
+    await insertExercise(db);
+    expect(await settings.get('workout.showEstimatedCalories')).toBe(false);
+    const started = await service.startEmpty(START);
+    if (started.outcome !== 'started') {
+      throw new Error('unreachable');
+    }
+
+    const summaryOff = await service.finish(started.session.id, START + 600_000);
+
+    expect(summaryOff.estimatedKcal).toBeNull();
+  });
+
+  it('writes a real estimate once workout.showEstimatedCalories is on', async () => {
+    const { db, service, settings } = setup();
+    await insertExercise(db);
+    await settings.set('workout.showEstimatedCalories', true);
+    const started = await service.startEmpty(START);
+    if (started.outcome !== 'started') {
+      throw new Error('unreachable');
+    }
+
+    const summary = await service.finish(started.session.id, START + 600_000);
+
+    expect(summary.estimatedKcal).not.toBeNull();
+    expect(summary.estimatedKcal).toBeGreaterThan(0);
+  });
+});
+
+describe('WorkoutSessionService - history (P9)', () => {
+  async function withCompletedSession() {
+    const context = setup();
+    await insertExercise(context.db);
+    const started = await context.service.startEmpty(START);
+    if (started.outcome !== 'started') {
+      throw new Error('unreachable');
+    }
+    const exercise = await context.service.addExercise(started.session.id, 'ex-1');
+    const set = await context.service.appendSet(exercise.id, { weightKg: 100, reps: 5 });
+    await context.service.completeSet(set.id);
+    context.clock.set(START + 60_000);
+    await context.service.finish(started.session.id);
+    return { ...context, sessionId: started.session.id, exercise, set };
+  }
+
+  it('listHistory delegates to the repository', async () => {
+    const { service, sessionId } = await withCompletedSession();
+
+    const page = await service.listHistory();
+
+    expect(page.map((item) => item.id)).toEqual([sessionId]);
+  });
+
+  it('getSession delegates to the repository', async () => {
+    const { service, sessionId } = await withCompletedSession();
+
+    const detail = await service.getSession(sessionId);
+
+    expect(detail).not.toBeNull();
+    expect(detail!.id).toBe(sessionId);
+  });
+
+  it('updateHistoricalSession validates the note and writes it through setSessionNotes', async () => {
+    const { db, service, sessionId } = await withCompletedSession();
+
+    await service.updateHistoricalSession(sessionId, 'Edited after the fact');
+    const row = await db.selectOne<{ notes: string | null }>(
+      'SELECT notes FROM workout_session WHERE id = ?',
+      [sessionId],
+    );
+    expect(row!.notes).toBe('Edited after the fact');
+
+    await expect(
+      service.updateHistoricalSession(sessionId, 'x'.repeat(WORKOUT_NOTE_MAX_LENGTH + 1)),
+    ).rejects.toBeInstanceOf(WorkoutValidationError);
+  });
+
+  it('deleteSession delegates to the repository', async () => {
+    const { db, service, sessionId } = await withCompletedSession();
+
+    await service.deleteSession(sessionId);
+
+    expect(
+      await db.selectOne('SELECT id FROM workout_session WHERE id = ?', [sessionId]),
+    ).toBeNull();
+  });
 });

@@ -195,6 +195,93 @@ export interface SessionSummary {
   totalVolumeKg: number;
   totalSets: number;
   totalReps: number;
+  /** `null` unless `workout.showEstimatedCalories` was on when `finish()` ran - see that method's own doc comment for why the setting is a plain parameter rather than a repository-side settings read. */
+  estimatedKcal: number | null;
+  /**
+   * Every current personal record whose `session_id` is this session -
+   * i.e. every PR this workout earned that a later edit hasn't since
+   * superseded. Derived by `finish()` directly from `personal_record`
+   * (`WHERE session_id = ? AND is_current = 1`) rather than accumulated from
+   * each `completeSet` call's own `CompletedSetResult.newPRs` during the
+   * session: the incremental per-set result is exactly right for driving a
+   * PR badge the instant a set completes, but re-deriving from the table
+   * once at `finish()` time is simpler, needs no running collector threaded
+   * through every set-completion call site, and can never drift from what
+   * `personal_record` actually holds. Safe specifically because `finish()`
+   * only ever runs against an `in_progress` session, so every record it sees
+   * here was written by the ordinary real-time `evaluateAndUpsert` path in
+   * chronological order - the same guarantee that does NOT hold for a
+   * historical edit, which is why `completeSet`'s own P9 branch (see its
+   * implementation) derives its `newPRs` differently.
+   */
+  newPRs: readonly PersonalRecord[];
+}
+
+/**
+ * Query for {@link WorkoutSessionRepository.listHistory} - deliberately
+ * minimal. This is a fixed-order (most recently started first),
+ * offset-paginated read, not a filterable search - the P9 history screen has
+ * no filter UI of its own, unlike `exercise-library`'s `ExerciseQuery`.
+ * `limit`/`offset` are clamped by `buildLimitOffset`
+ * (`repositories/query`), never trusted raw.
+ */
+export interface SessionHistoryQuery {
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * One row of the P9 history list - a flat read model over `workout_session`
+ * alone (no joins: every field here is already denormalized onto that one
+ * row by `finish()`), returned only for `status = 'completed'` sessions.
+ * Every numeric total is non-nullable: the schema's own
+ * `CHECK (status <> 'completed' OR finished_at IS NOT NULL)` plus `finish()`
+ * always writing all four totals atomically together guarantee a
+ * `completed` row never has a partially-written total.
+ */
+export interface SessionListItem {
+  id: EntityId;
+  title: string;
+  localDate: string;
+  startedAt: number;
+  finishedAt: number;
+  durationSeconds: number;
+  totalVolumeKg: number;
+  totalSets: number;
+  totalReps: number;
+  estimatedKcal: number | null;
+  planNameSnapshot: string | null;
+  planDayNameSnapshot: string | null;
+}
+
+/**
+ * A `completed` session plus its exercises and sets - the read model behind
+ * the P9 history detail screen and its inline edit mode. Shaped like
+ * `ActiveSessionAggregate` (the same `SessionExercise[]`, itself carrying
+ * `WorkoutSet[]`) but carries the denormalized totals `finish()` writes
+ * instead of `activeState`, which exists only while a workout is in
+ * progress.
+ */
+export interface SessionAggregate {
+  id: EntityId;
+  planId: EntityId | null;
+  planDayId: EntityId | null;
+  planNameSnapshot: string | null;
+  planDayNameSnapshot: string | null;
+  title: string;
+  startedAt: number;
+  finishedAt: number;
+  localDate: string;
+  tzOffsetMinutes: number;
+  durationSeconds: number;
+  totalVolumeKg: number;
+  totalSets: number;
+  totalReps: number;
+  estimatedKcal: number | null;
+  notes: string | null;
+  createdAt: number;
+  updatedAt: number;
+  exercises: SessionExercise[];
 }
 
 /**
@@ -211,12 +298,39 @@ export interface SessionSummary {
  * optional trailing `tx` so a caller composing a larger transaction can join it,
  * the same composition pattern `PlanRepository` uses.
  *
- * **Scope note.** Section 8.3 lists three further methods on this interface -
- * `listHistory`, `getSession` and `updateHistoricalSession` - which are P9's
- * (workout summary and history) scope, not P6's, and are deliberately absent
- * rather than stubbed. `restoreExercise` is present beyond the literal list, as
- * the undo-toast counterpart to `removeExercise`, exactly as P5 added
- * `restoreDay`/`restoreDayExercise` to `PlanRepository`.
+ * **Scope note.** Section 8.3 names three further methods on this interface -
+ * `listHistory`, `getSession` and `updateHistoricalSession` - which were P9's
+ * (workout summary and history) scope, deliberately absent through P6-P8
+ * rather than stubbed; they land for real in this pass, alongside a new
+ * `deleteSession` beyond the literal list (the same kind of addition
+ * `restoreExercise` already was, as the undo-toast counterpart to
+ * `removeExercise` - see `PlanRepository`'s `restoreDay`/`restoreDayExercise`
+ * for the P5 precedent).
+ *
+ * **P9's historical-edit mechanism** (`plans/2026-08-13-p9-workout-summary-history.md`'s
+ * "Historical edit mechanism"): rather than a large `updateHistoricalSession`
+ * patch type duplicating every granular mutation method below,
+ * `updateHistoricalSession` stays scoped to session-level `notes` only (the
+ * one field none of the granular methods cover), and the granular methods
+ * themselves are reused directly against a `completed` session. Their guard
+ * changed shape for this: `addExercise` and `setExerciseNote` previously used
+ * (or, for `setExerciseNote`, had no status guard at all) `in_progress`-only
+ * checking; both, plus `removeExercise`/`restoreExercise`/`appendSet`/
+ * `updateSet`/`completeSet`/`uncompleteSet`/`deleteSet`/`restoreSet`, now go
+ * through a shared `requireInProgressOrCompletedSession` private helper
+ * (`in_progress` or `completed`, `discarded`/nonexistent/soft-deleted still
+ * rejected) - see each method's own doc comment for specifics. Every one of
+ * those except `setExerciseNote` (a pure-text write with no set data to go
+ * stale) also re-derives the session's denormalized totals and rebuilds
+ * personal records for the exercise(s) it touched when - and only when - the
+ * session is `completed`; see the implementation's `syncCompletedSessionAfterEdit`
+ * for why this must be a full `rebuild()` rather than `completeSet`'s own
+ * live-workout `evaluateAndUpsert` path. `setExerciseRestOverride` is
+ * deliberately NOT extended this way: a completed session has no active rest
+ * timer for an override to affect, and nothing in this phase's UI plan edits
+ * one. `setSessionNotes` already needed no change - it was already
+ * unrestricted by session status (see its own implementation comment, which
+ * anticipated this exact phase).
  */
 export interface WorkoutSessionRepository {
   /**
@@ -265,7 +379,13 @@ export interface WorkoutSessionRepository {
    * no note are the same state, and the column is nullable rather than
    * `NOT NULL DEFAULT ''`.
    *
+   * P9: now guarded by `requireInProgressOrCompletedSession` (previously no
+   * session-status guard at all) so it also works against a `completed`
+   * session but still rejects a `discarded` one. No totals/PR resync - a note
+   * has no bearing on either.
+   *
    * @throws {RepositoryNotFoundError} when the `session_exercise` does not exist or is soft-deleted.
+   * @throws {SessionNotInProgressError} when the owning session is `discarded`.
    */
   setExerciseNote(
     sessionExerciseId: EntityId,
@@ -298,6 +418,15 @@ export interface WorkoutSessionRepository {
    * `globalDefaultRestSeconds`. See {@link startFromPlanDay}'s doc comment for
    * why the global default is a plain parameter rather than a settings read
    * inside this repository.
+   *
+   * P9: now guarded by `requireInProgressOrCompletedSession` (previously
+   * `in_progress`-only) so it also works against a `completed` session - a
+   * historical "I forgot to log this exercise" edit. A freshly added
+   * `session_exercise` has no sets yet, so this never triggers a totals/PR
+   * resync itself.
+   *
+   * @throws {RepositoryNotFoundError} when `exerciseId` does not exist.
+   * @throws {SessionNotInProgressError} when the session is `discarded` or does not exist.
    */
   addExercise(
     sessionId: EntityId,
@@ -307,10 +436,23 @@ export interface WorkoutSessionRepository {
     tx?: SqlExecutor,
   ): Promise<SessionExercise>;
 
-  /** Soft delete - feeds the undo toast. Leaves its sets' own `deleted_at` untouched, so restoring brings back exactly the sets that were there. */
+  /**
+   * Soft delete - feeds the undo toast. Leaves its sets' own `deleted_at`
+   * untouched, so restoring brings back exactly the sets that were there.
+   *
+   * P9: also works against a `completed` session - removing a whole exercise
+   * from history correctly re-derives totals and rebuilds (or clears) that
+   * exercise's personal records.
+   */
   removeExercise(sessionExerciseId: EntityId, tx?: SqlExecutor): Promise<void>;
 
-  /** Undoes `removeExercise`. Does not resurrect sets deleted individually before or after. */
+  /**
+   * Undoes `removeExercise`. Does not resurrect sets deleted individually
+   * before or after.
+   *
+   * P9: also works against a `completed` session, symmetrically with
+   * `removeExercise`.
+   */
   restoreExercise(sessionExerciseId: EntityId, tx?: SqlExecutor): Promise<void>;
 
   reorderExercises(
@@ -338,10 +480,18 @@ export interface WorkoutSessionRepository {
    * previous set in this session if there is one, otherwise from its last
    * completed working set in a previous completed session, otherwise empty.
    * Anything set on `seed` overrides the pre-fill.
+   *
+   * P9: also works against a `completed` session (a historical "I forgot to
+   * log a set" edit) - see the interface doc comment's "P9's historical-edit
+   * mechanism".
    */
   appendSet(sessionExerciseId: EntityId, seed: SetSeed, tx?: SqlExecutor): Promise<WorkoutSet>;
 
-  /** @throws {DropSegmentSetTypeError} when the patch would change a drop segment's `setType` away from `'drop'`. */
+  /**
+   * P9: also works against a `completed` session.
+   *
+   * @throws {DropSegmentSetTypeError} when the patch would change a drop segment's `setType` away from `'drop'`.
+   */
   updateSet(setId: EntityId, patch: UpdateSetPatch, tx?: SqlExecutor): Promise<WorkoutSet>;
 
   /**
@@ -349,6 +499,15 @@ export interface WorkoutSessionRepository {
    * evaluates it against the exercise's current personal records, and
    * touches `active_session_state` - one transaction (ARCHITECTURE.md section
    * 5.1, ADR-0015 Decision 3). See {@link CompletedSetResult.newPRs}.
+   *
+   * P9: also works against a `completed` session (retroactively finishing a
+   * set that was left incomplete, or correcting one that already was). The
+   * live-workout `evaluateAndUpsert` comparison ("beats whatever is
+   * currently current") is not chronologically aware, so completing a set
+   * inside a *past* session takes a different path internally - a full
+   * `personalRecordRepository.rebuild()` for the exercise, then a fresh read
+   * of what that replay actually attributed to this exact set - rather than
+   * `evaluateAndUpsert`. See the implementation's own comment on this branch.
    */
   completeSet(
     setId: EntityId,
@@ -356,7 +515,14 @@ export interface WorkoutSessionRepository {
     tx?: SqlExecutor,
   ): Promise<CompletedSetResult>;
 
-  /** Clears `is_completed`/`completed_at`. Values entered are kept - un-completing is not a reset. */
+  /**
+   * Clears `is_completed`/`completed_at`. Values entered are kept -
+   * un-completing is not a reset.
+   *
+   * P9: also works against a `completed` session - un-completing a set that
+   * held a personal record correctly demotes or clears it via the same
+   * rebuild-on-edit path {@link completeSet} uses.
+   */
   uncompleteSet(setId: EntityId, tx?: SqlExecutor): Promise<WorkoutSet>;
 
   /**
@@ -364,6 +530,9 @@ export interface WorkoutSessionRepository {
    * `parent_set_id` set, `set_type = 'drop'` and the parent's `set_index`
    * (never incremented, per ADR-0006). Pre-filled from the last existing
    * segment of the chain, else from the parent.
+   *
+   * P9: also works against a `completed` session, same as its sibling
+   * granular mutation methods.
    *
    * @throws {DropSetParentInvalidError} when the parent is itself a drop segment.
    */
@@ -374,10 +543,18 @@ export interface WorkoutSessionRepository {
    * with its original id (a P6 acceptance criterion). Deleting a parent set
    * also soft-deletes its drop segments in the same transaction; `restoreSet`
    * brings back exactly the ones that went with it.
+   *
+   * P9: also works against a `completed` session - deleting a set that held
+   * the only record for an exercise correctly promotes the next-best one (or
+   * clears it) via the same rebuild-on-edit path {@link completeSet} uses.
    */
   deleteSet(setId: EntityId, tx?: SqlExecutor): Promise<void>;
 
-  /** Undoes `deleteSet`, id and all. */
+  /**
+   * Undoes `deleteSet`, id and all.
+   *
+   * P9: also works against a `completed` session.
+   */
   restoreSet(setId: EntityId, tx?: SqlExecutor): Promise<void>;
 
   /**
@@ -397,12 +574,28 @@ export interface WorkoutSessionRepository {
   /**
    * Computes `SessionTotals` over the session's sets and writes
    * `status = 'completed'`, `finished_at` and the four denormalized totals, then
-   * drops the `active_session_state` row - one transaction. Does not evaluate
-   * personal records (P8).
+   * drops the `active_session_state` row - one transaction. Does not itself
+   * evaluate personal records (each `completeSet` call already did that in
+   * real time, per ADR-0015 Decision 3, P8) - it only reads back whichever of
+   * those are still current for this session for {@link SessionSummary.newPRs}.
+   *
+   * `showEstimatedCalories` is a plain parameter rather than a settings read
+   * inside this repository, mirroring `startFromPlanDay`'s
+   * `globalDefaultRestSeconds`: the caller (`WorkoutSessionService`) reads
+   * `workout.showEstimatedCalories` and passes it down. When `true`,
+   * `estimated_kcal` is written via `estimatedCalories(totalDurationSeconds)`
+   * (`features/workout-logging/domain/EstimatedCalories.ts`); when `false`, it
+   * is written `null` - P9's plan explicitly rules out a retroactive backfill
+   * for a session finished with the setting off.
    *
    * @throws {SessionNotInProgressError} when the session is already completed or discarded.
    */
-  finish(sessionId: EntityId, finishedAt: number, tx?: SqlExecutor): Promise<SessionSummary>;
+  finish(
+    sessionId: EntityId,
+    finishedAt: number,
+    showEstimatedCalories: boolean,
+    tx?: SqlExecutor,
+  ): Promise<SessionSummary>;
 
   /**
    * Sets `status = 'discarded'` and drops the `active_session_state` row. The
@@ -412,4 +605,63 @@ export interface WorkoutSessionRepository {
    * @throws {SessionNotInProgressError} when the session is not in progress.
    */
   discard(sessionId: EntityId, tx?: SqlExecutor): Promise<void>;
+
+  // --- history (P9) ---------------------------------------------------------
+
+  /**
+   * P9's paginated history read model - ARCHITECTURE.md section 8.3,
+   * deliberately absent through P6-P8 (see this interface's own top doc
+   * comment). Only `status = 'completed'` sessions, most recently started
+   * first, bounded by `query.limit`/`query.offset`
+   * (`repositories/query/buildLimitOffset`'s own clamp) - never an unbounded
+   * `SELECT *`, so a 2,500-session history stays a cheap indexed range scan
+   * regardless of scroll depth.
+   */
+  listHistory(query: SessionHistoryQuery, tx?: SqlExecutor): Promise<SessionListItem[]>;
+
+  /**
+   * Full detail for one `completed` session - exercises, sets, denormalized
+   * totals - or `null` for anything else (missing, soft-deleted, still
+   * `in_progress`, or `discarded`). Restricted to `completed` deliberately: an
+   * `in_progress` session is read through {@link findInProgress} instead (it
+   * has no totals yet to show), and nothing in this phase's scope needs to
+   * review a `discarded` one.
+   */
+  getSession(id: EntityId, tx?: SqlExecutor): Promise<SessionAggregate | null>;
+
+  /**
+   * The literal ARCHITECTURE.md section 8.3 signature, deliberately narrow:
+   * session-level `notes` only - `null` clears it, `undefined` (an empty
+   * `patch`) leaves it untouched. Every other historical edit (adding or
+   * removing an exercise, editing or deleting a set, an exercise note) reuses
+   * the granular mutation methods above directly, now able to accept a
+   * `completed` session too - see this interface's top doc comment. This
+   * method exists only for the one field none of them cover, and delegates to
+   * {@link setSessionNotes} internally, which already had no stricter guard
+   * than this one needs.
+   *
+   * @throws {RepositoryNotFoundError} when the session does not exist or is soft-deleted.
+   */
+  updateHistoricalSession(
+    id: EntityId,
+    patch: { notes?: string | null },
+    tx?: SqlExecutor,
+  ): Promise<void>;
+
+  /**
+   * Hard delete - the aggregate-root precedent `PlanRepository.purgePlan`
+   * already set (confirm dialog, no undo, a real `DELETE` that fans out
+   * through the schema's own `ON DELETE CASCADE` to `session_exercise`/
+   * `workout_set`), not the soft-delete-plus-undo-toast pair every child-row
+   * delete in this codebase otherwise gets - see
+   * `plans/2026-08-13-p9-workout-summary-history.md`'s "Delete semantics" for
+   * the full reasoning. Not restricted to any particular `status`: whatever
+   * session the caller names is gone. Every exercise the session ever held
+   * (including one later removed from it - see the implementation) has its
+   * personal records rebuilt afterward in the same transaction, so a deleted
+   * session's PR contribution never lingers.
+   *
+   * @throws {RepositoryNotFoundError} when the session does not exist.
+   */
+  deleteSession(id: EntityId, tx?: SqlExecutor): Promise<void>;
 }

@@ -1,20 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Image, View } from 'react-native';
+import { View } from 'react-native';
 
-// No `@/assets/*` tsconfig path alias exists yet - see the exercise-library
-// feature's own components for the identical note.
-import { getExerciseImageSource } from '../../../assets/exercises';
 import { Column, Row } from '@/components/layout';
 import { IconButton, Text, TextField } from '@/components/ui';
 import { formatExerciseName } from '@/features/exercise-library';
 import type { SessionExercise } from '@/features/workout-logging';
 import { t } from '@/i18n';
-import { color, radius, space } from '@/theme/tokens';
+import { color, space } from '@/theme/tokens';
 
+import { ExerciseThumbnail } from './ExerciseThumbnail';
 import { useDebouncedFieldCommit } from '../hooks/useDebouncedFieldCommit';
-
-const THUMBNAIL_SIZE = 44;
 
 export interface ExerciseHeaderProps {
   exercise: SessionExercise;
@@ -64,33 +60,12 @@ export function ExerciseHeader({
     namePl: exercise.exercise.namePl,
     displayNameOverride: exercise.exercise.displayNameOverride,
   });
-  const imageSource = getExerciseImageSource(exercise.exercise.primaryImage ?? undefined);
   const hasNote = exercise.note !== null && exercise.note.trim() !== '';
 
   return (
     <View testID={testID}>
       <Row gap={3} align="center">
-        <View
-          style={{
-            width: THUMBNAIL_SIZE,
-            height: THUMBNAIL_SIZE,
-            borderRadius: radius.md,
-            overflow: 'hidden',
-            backgroundColor: color.surface,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          {imageSource ? (
-            <Image
-              source={imageSource}
-              style={{ width: THUMBNAIL_SIZE, height: THUMBNAIL_SIZE }}
-              accessibilityIgnoresInvertColors
-            />
-          ) : (
-            <Ionicons name="barbell-outline" size={20} color={color.textTertiary} />
-          )}
-        </View>
+        <ExerciseThumbnail primaryImage={exercise.exercise.primaryImage} />
 
         <Column gap={1} style={{ flex: 1 }}>
           <Text variant="bodyMedium" color="primary" numberOfLines={1}>
