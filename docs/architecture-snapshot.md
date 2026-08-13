@@ -1,5 +1,5 @@
 ---
-snapshot_commit: 5433b0e (merge of feat/p7-rest-timer, 21dd691, into feat/p8-progressive-overload)
+snapshot_commit: "TBD-at-commit-time (P9 / feat/p9-workout-summary-history, cut from main at 5e004cf, not yet committed as of this snapshot update)"
 generated_from: CLAUDE.md, docs/ARCHITECTURE.md, docs/ROADMAP.md, docs/adr/*, docs/PRODUCT-BRIEF.md
 ---
 
@@ -9,21 +9,18 @@ Condensed synthesis for orchestration use. Full detail lives in docs/ARCHITECTUR
 (section numbers referenced below) and CLAUDE.md - re-read the source when a decision
 needs verification, this file is a pointer, not a replacement.
 
-Note on `snapshot_commit`: `feat/p8-progressive-overload` was cut from `main` before
-`feat/p7-rest-timer`'s PR merged, a deliberate decision so the two phases could be
-reviewed independently (see `plans/2026-08-11-p8-progressive-overload.md`'s "Branch
-note"). This file is regenerated as part of resolving that merge, so the hash above
-identifies both sides rather than a single linear tip - re-snapshot after the merge
-commit itself lands, if the exact hash matters for a later diff. Same caveat this file
-already carried for `feat/p5-workout-plans` and `feat/p6-workout-logging` before each
-of those branches' own commits landed.
+Note on `snapshot_commit`: the P7/P8 branch-note caveat this file previously carried
+is resolved - PR #12 merged `feat/p8-progressive-overload` (already carrying the P7
+merge inside it) into `main` at `5e004cf`, so the hash above is now a single linear
+tip, not a two-sided identifier. The "Merge note" subsection below is kept as
+historical record of how that merge was resolved, not as an open caveat.
 
 ## Status
 
 P0 (project foundation), P1 (design system/UI primitives), P2 (persistence
 foundation), P3 (onboarding, profile and core settings), P4 (exercise library), P5
-(workout plans), P6 (workout logging), P7 (rest timer), and P8 (progressive overload
-and personal records) are complete. `onboarding`, `profile`, `exercise-library`,
+(workout plans), P6 (workout logging), P7 (rest timer), P8 (progressive overload
+and personal records), and P9 (workout summary and history) are complete. `onboarding`, `profile`, `exercise-library`,
 `plans`, `workout-logging`, `rest-timer`, and `records` are the seven features with
 real implementations (`rest-timer` owns no database table and therefore no
 repository; `records` does - see "Composition root" below); the remaining four
@@ -225,6 +222,69 @@ since its `renderItem` is an inline function recreated every render (which alrea
 forces every cell to repaint on its own) - see CLAUDE.md's "Known gaps" for the full
 framing.
 
+Workout summary and history (P9): finishing a workout no longer drops straight back to
+Home, and past sessions are no longer invisible. `useFinishDiscardWorkout.finish()` now
+navigates to `routes.workout.summary(sessionId)` (new `app/workout/summary/
+[sessionId].tsx`, inside the existing root-level `workout/` stack) instead of Home;
+`discard()` is unchanged. `WorkoutSessionRepository`/`SqliteWorkoutSessionRepository`
+gain the three methods section 8.3 has named since P6 but left deliberately absent -
+`listHistory` (offset-paginated, `repositories/query`'s `buildLimitOffset`),
+`getSession`, `updateHistoricalSession` (session-level `notes` only) - plus a new
+`deleteSession` beyond the literal list, following `PlanRepository.purgePlan`'s exact
+precedent (hard delete, `ConfirmDialog`, no undo, `ON DELETE CASCADE`, then
+`personalRecordRepository.rebuild()` for every exercise the deleted session held).
+Rather than a new patch type duplicating existing granular mutation methods, eleven of
+them (`addExercise`/`removeExercise`/`restoreExercise`/`setExerciseNote`/`appendSet`/
+`addDropSet`/`updateSet`/`completeSet`/`uncompleteSet`/`deleteSet`/`restoreSet`) now
+go through a new `requireInProgressOrCompletedSession` guard instead of the stricter
+`in_progress`-only one `finish`/`discard` keep; a real pre-existing gap surfaced doing
+this, not introduced by it - five of those eleven (`setExerciseNote`, `addDropSet`,
+`deleteSet`, `restoreSet`, `uncompleteSet`) had **no status guard at all** before P9,
+able to write silently through a `discarded` session. Every one but `setExerciseNote`
+also calls a new `syncCompletedSessionAfterEdit` (no-op unless `completed`) that
+re-derives the session's four denormalized totals and calls
+`personalRecordRepository.rebuild()` for the touched exercise(s) - a full rebuild
+rather than `completeSet`'s live-workout `evaluateAndUpsert`, since that comparison is
+not chronologically aware and can be wrong for an out-of-order historical edit.
+`finish()` now writes `estimated_kcal` (only when the new `workout.showEstimatedCalories`
+setting, default off/D-04, is on) via a new pure calculator,
+`features/workout-logging/domain/EstimatedCalories.ts` (`CALORIES_PER_MINUTE = 5`,
+see `docs/adr/0018-estimated-calories-formula.md`), and returns `newPRs`, re-read
+directly from `personal_record` rather than accumulated across the session's own
+`completeSet` calls. UI: `WorkoutSummaryScreen` (share-as-image via two new
+dependencies, `react-native-view-shot`/`expo-sharing`), `WorkoutHistoryListScreen`
+(`app/profile/history.tsx`, month-grouped `FlashList`, `useInfiniteQuery`, benchmarked
+against a 2,500-session fixture), `WorkoutHistoryDetailScreen`
+(`app/history/[sessionId].tsx`, read-only with an inline edit-mode toggle and a
+hard-delete "Delete workout" action). A new "Training history" row on `ProfileScreen`
+mirrors P8's "Personal records" row precedent exactly, filling a routing gap
+ARCHITECTURE.md sections 9/10 left implicit (both already showed the detail route but
+not a list entry point ahead of P10/P12's not-yet-built edges). No new container
+entries - `sessionRepository`/`sessionService` already existed; this phase only adds
+methods. Verification: typecheck/lint/Jest (112 suites, 1062 tests, 1 pre-existing
+skip) clean, `expo export --platform ios` used again as the build-verification proxy
+(confirmed explicitly with the user this phase, not silently assumed), security review
+clean bar one low (the pre-existing `ConfirmDialog` double-tap gap, now behind its
+first genuinely irreversible hard delete) and one informational note
+(`reports/security-2026-08-13-p9.md`). Accessibility review
+(`reports/accessibility-2026-08-13-p9.md`) found no BLOCKING finding - explicitly
+confirmed the P7/P8 `SwipeableRow`-collapse bug class does not recur, since `SetRow.tsx`/
+`SessionExerciseCard.tsx` are byte-identical to `main` in this diff - and fixed three
+non-blocking findings within the phase: an off-screen share-capture card exposed to
+assistive tech (now hidden via `accessibilityElementsHidden`/
+`importantForAccessibility`), two of the three new screens missing the loading
+announcement the third already had, and a silent edit-mode toggle (now announces). A
+`/code-review high` pass found 10 findings, 8 real and fixed: a missing query `enabled`
+guard, an unwired `isMutating` delete-vs-edit race guard, `addDropSet` missed from the
+status-guard sweep, a sequential-await fix for a multi-select add-exercise race, dead
+duplicate invalidation logic, one untranslated string, and two drifted-duplicate
+extractions (`ExerciseThumbnail`, delegating to the existing `formatElapsedSeconds`).
+New dependencies: `react-native-view-shot@5.1.0`, `expo-sharing@~57.0.11`. Known gap,
+decided with the user rather than silently deferred: deleting an exercise's last
+remaining set during a historical edit leaves an empty card instead of auto-removing
+it - a true fix needs a combined set+exercise undo, real new mechanism work, deferred
+to a future pass (see CLAUDE.md's "Known gaps").
+
 **Merge note:** `feat/p8-progressive-overload` was branched before `feat/p7-rest-timer`
 merged, so both touched `WorkoutSessionRepository.ts`/
 `SqliteWorkoutSessionRepository.ts`, `WorkoutSessionService.ts`, `ActiveWorkoutScreen.tsx`,
@@ -256,7 +316,8 @@ Native XL (Skia-based, wrapped in components/charts adapter per ADR-0010) + Reac
 Native SVG + `@expo/vector-icons` (Ionicons - the app's only icon system, chosen P3)
 + `expo-image-picker` (avatar/photo selection) + Expo Notifications + Expo Haptics +
 Expo FileSystem + NativeWind (tailwind.config.js imports theme/tokens.ts, never
-duplicates values). No new dependency through P8.
+duplicates values). No new dependency through P8; P9 adds `react-native-view-shot`
+and `expo-sharing` (workout-summary share-as-image).
 
 ## Architecture (section 3)
 
@@ -357,7 +418,8 @@ per ADR-0008), `timer.*` keys (default rest seconds, vibration, sound) added in 
 `oneRm.formula`/`progression.upperIncrementKg`/`progression.lowerIncrementKg` added
 in P8 (Zod-validated on both read and write, default-fallback on a corrupt stored
 value - `progression.lowerIncrementKg`'s default was found during P8 pass 1 to
-contradict ADR-0015's own spec, 1.25 vs. 5, and corrected in pass 2). `user_profile`
+contradict ADR-0015's own spec, 1.25 vs. 5, and corrected in pass 2),
+`workout.showEstimatedCalories` added in P9 (default `false`, D-04). `user_profile`
 (nickname, optional avatar, birth date, sex) shipped its table in P2 and got its
 first repository (`SqliteProfileRepository`) and service (`ProfileService`) in P3 -
 no migration needed, the table already existed. `ProfileService` writes an avatar
@@ -401,7 +463,9 @@ read-only with no matching service), the fifth and sixth pairs overall - `record
 is injected into `sessionRepository` as a fourth constructor dependency
 (`personalRecordRepository`) so `completeSet` can evaluate records inside its own
 transaction, the same "no repository ever `new`s another repository itself"
-discipline every other cross-repository composition in this codebase follows. The
+discipline every other cross-repository composition in this codebase follows. P9
+added no container entries - `sessionRepository`/`sessionService` already existed
+from P6, and this phase only adds methods to them. The
 rest (`statistics`, `body-metrics`, `calendar`, `data-transfer`) land one at a time
 as each phase merges, each extending `AppContainer` rather than replacing it.
 `SqliteExerciseRepository` is the first real consumer of `BaseSqliteRepository`
@@ -529,8 +593,8 @@ not fixed here), not silently omitted. Testing surfaced a Jest-only gap in P4:
 `expo-asset` isn't hoisted (worked around with a manual mock,
 `__tests__/__mocks__/vectorIconsMock.tsx`; confirmed production-unaffected via
 `expo export`). Suite size by phase: 782 tests at P6, 851 at P7, 914 at P8 (each on
-its own branch before this merge) - see the repo's own `jest` run for the current
-combined total after merging both branches together.
+its own branch before this merge), 1062 tests (112 suites, 1 pre-existing skip) at P9
+- see the repo's own `jest` run for the current total.
 
 ## What this snapshot deliberately omits
 

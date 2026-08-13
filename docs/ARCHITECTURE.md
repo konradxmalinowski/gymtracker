@@ -1192,7 +1192,8 @@ finish(sessionId, finishedAt): Promise<SessionSummary>      // computes + denorm
 discard(sessionId): Promise<void>
 listHistory(query): Promise<SessionListItem[]>
 getSession(id): Promise<SessionAggregate | null>
-updateHistoricalSession(id, patch): Promise<void>           // triggers a PR rebuild for affected exercises
+updateHistoricalSession(id, patch): Promise<void>           // session-level notes only; every other historical edit reuses the granular methods above against a completed session
+deleteSession(id): Promise<void>                            // P9 addition beyond the original 20-method list; hard delete, no undo, mirrors PlanRepository's purgePlan; fires ON DELETE CASCADE and rebuilds PRs for every exercise the session held
 ```
 
 **`ExerciseHistoryRepository`** (read model, feature: `workout-logging`)
@@ -1315,6 +1316,15 @@ GymTracker/
 │   │           ├── timers.tsx
 │   │           ├── data.tsx
 │   │           └── about.tsx
+│   ├── profile/                          root-level, non-tab routes reached from
+│   │   │                                 (tabs)/profile/index via a ListRow - profile-
+│   │   │                                 scoped but deliberately not nested under
+│   │   │                                 (tabs)/profile/ or profile/settings/ (a list
+│   │   │                                 screen, not a settings field)
+│   │   ├── records.tsx                   personal records list (P8)
+│   │   └── history.tsx                   training history list (P9) - fills the gap
+│   │                                     left implicit until P10/P12 build a HOME/CAL
+│   │                                     entry point into history/[sessionId] directly
 │   ├── workout/
 │   │   ├── _layout.tsx                   full-screen stack, swipe-to-dismiss disabled
 │   │   ├── active.tsx
@@ -1523,6 +1533,9 @@ graph TD
     PR --> MEAS[profile/measurements/index]
     MEAS --> MEASD["profile/measurements/[metric]"]
     PR --> PHOTOS[profile/photos/index]
+    PR --> RECORDS[profile/records]
+    PR --> HISTLIST[profile/history]
+    HISTLIST --> HIST
     PR --> SET[profile/settings/index]
     SET --> SETU[settings/units]
     SET --> SETT[settings/timers]
@@ -2100,7 +2113,7 @@ same numbering, so earlier references remain traceable.
 | D-01 | Exercise imagery: bundle all ~1,600 images for true offline use, or bundle thumbnails and lazy-download the gallery? | **Bundle everything** - all thumbnails and gallery images, downscaled to 512 px WebP (~30-55 MB). No network-dependent gallery path exists or will be added. | P2 | ADR-0011 |
 | D-02 | Assisted sets: subtract assistance from bodyweight to derive a real load, or exclude from volume and PR? | **Exclude from volume and PR** in v1. Assisted sets still save and count toward the set count. The roadmap is explicitly **not** reordered to pull body metrics earlier; bodyweight-relative volume stays post-1.0 and is a read-time change when it comes. | P6 | ADR-0006 |
 | D-03 | Supersets: display grouping only, or does it change rest-timer behavior? | **Grouping plus timer behavior**: completing a set of a non-terminal member starts no timer; completing a set of the last member in the group does. | P7 | ADR-0006 |
-| D-04 | Estimated calories in the workout summary at all? | **Include**, labeled "estimate", **off by default** in settings. | P9 | - |
+| D-04 | Estimated calories in the workout summary at all? | **Include**, labeled "estimate", **off by default** in settings. | P9 | ADR-0018 |
 | D-05 | Crash reporting: opt-in Sentry, or strictly zero third-party services? | **Opt-in, default off.** No external service is initialized unless the user enables it, so the shipped default is zero external services. PII scrubbed when enabled. | P16 (declarations), wired at P0 | ADR-0014 |
 | D-06 | Progress photos in JSON export: exclude, or base64-embed? | **Exclude in v1**, with an explicit warning on the export screen and a separate "Share progress photos" action. A streaming zip export is post-1.0. | P14 | ADR-0012, ADR-0013 |
 | D-07 | CSV import: own format only, or best-effort Strong/Hevy import? | **Own format only in v1.** Third-party dialects are a post-1.0 feature over the same pipeline. | P14 | ADR-0013 |
@@ -2143,5 +2156,6 @@ exactly the refactor this decision is designed to avoid. The Definition of Done 
 | `docs/adr/0015-progressive-overload-algorithm.md` | e1RM formula and progression rules |
 | `docs/adr/0016-shared-notification-scheduler.md` | Why P17 finally implements `services/notifications/NotificationScheduler`, and why rest-timer's own P7 wrapper is left as-is |
 | `docs/adr/0017-daily-goal-reminder-scheduling.md` | Weekday bitmask, derived completion state, today-only interval reminder re-arming |
+| `docs/adr/0018-estimated-calories-formula.md` | Flat kcal/min constant vs. MET x bodyweight for the workout summary's calorie estimate |
 | `docs/ROADMAP.md` | MVP scope, phased build order, backlog |
 
