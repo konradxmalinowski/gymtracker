@@ -1,5 +1,6 @@
 import { createTestDatabase } from '@/database/node/createTestDatabase';
 import { SqliteWorkoutSessionRepository } from '@/features/workout-logging/repository/SqliteWorkoutSessionRepository';
+import { estimatedCalories } from '@/features/workout-logging/domain/EstimatedCalories';
 import {
   DropSegmentSetTypeError,
   DropSetParentInvalidError,
@@ -189,7 +190,7 @@ describe('SqliteWorkoutSessionRepository - starting a workout (ADR-0005)', () =>
     expect(await repo.findInProgress()).toBeNull();
 
     const session = await repo.startEmpty(START);
-    await repo.finish(session.id, START + 60_000);
+    await repo.finish(session.id, START + 60_000, false);
 
     expect(await repo.findInProgress()).toBeNull();
   });
@@ -213,7 +214,7 @@ describe('SqliteWorkoutSessionRepository - exercises', () => {
     expect(reloaded!.exercises.map((e) => e.sortOrder)).toEqual([0, 1, 2]);
   });
 
-  it('addExercise throws for an unknown exercise and for a session that is not in progress', async () => {
+  it('addExercise throws for an unknown exercise, and for a discarded session', async () => {
     const { db, repo } = setup();
     await insertExercise(db, 'ex-1');
     const session = await repo.startEmpty(START);
@@ -222,10 +223,33 @@ describe('SqliteWorkoutSessionRepository - exercises', () => {
       repo.addExercise(session.id, 'missing', DEFAULT_REST_SECONDS),
     ).rejects.toBeInstanceOf(RepositoryNotFoundError);
 
-    await repo.finish(session.id, START + 1000);
+    await repo.discard(session.id);
     await expect(repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS)).rejects.toBeInstanceOf(
       SessionNotInProgressError,
     );
+  });
+
+  /**
+   * P9: `addExercise`'s guard loosened from `in_progress`-only to
+   * `requireInProgressOrCompletedSession` - the granular-mutation-methods
+   * side of the P9 historical-edit mechanism (see the interface's own top
+   * doc comment). A freshly added `session_exercise` has no sets yet, so this
+   * does not touch the session's denormalized totals.
+   */
+  it('addExercise also works against a completed session (P9 historical edit)', async () => {
+    const { db, repo } = setup();
+    await insertExercise(db, 'ex-1');
+    const session = await repo.startEmpty(START);
+    await repo.finish(session.id, START + 1000, false);
+
+    const added = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+
+    expect(added.exerciseId).toBe('ex-1');
+    const row = await db.selectOne<{ status: string; total_volume_kg: number }>(
+      'SELECT status, total_volume_kg FROM workout_session WHERE id = ?',
+      [session.id],
+    );
+    expect(row).toMatchObject({ status: 'completed', total_volume_kg: 0 });
   });
 
   it('reorderExercises rewrites sort_order in the given order', async () => {
@@ -258,7 +282,7 @@ describe('SqliteWorkoutSessionRepository - exercises', () => {
     reloaded = await repo.findInProgress();
     expect(reloaded!.exercises.map((e) => e.supersetGroup)).toEqual([null, 1]);
 
-    await repo.finish(first.id, START + 1000);
+    await repo.finish(first.id, START + 1000, false);
     const second = await repo.startEmpty(START + 2000);
     const c = await repo.addExercise(second.id, 'ex-1', DEFAULT_REST_SECONDS);
 
@@ -396,7 +420,7 @@ describe('SqliteWorkoutSessionRepository - appendSet pre-fill (FR-11)', () => {
     });
     await repo.completeSet(warmup.id, {});
     await repo.completeSet(working.id, {});
-    await repo.finish(previous.id, START + 3_600_000);
+    await repo.finish(previous.id, START + 3_600_000, false);
 
     const today = await repo.startEmpty(START + 86_400_000);
     const todayExercise = await repo.addExercise(today.id, 'ex-1', DEFAULT_REST_SECONDS);
@@ -897,7 +921,7 @@ describe('SqliteWorkoutSessionRepository - notes (FR-16)', () => {
   it('setSessionNotes is allowed after the session is finished or discarded', async () => {
     const { db, repo } = setup();
     const finished = await repo.startEmpty(START);
-    await repo.finish(finished.id, START + 1000);
+    await repo.finish(finished.id, START + 1000, false);
 
     await repo.setSessionNotes(finished.id, 'Written on the summary screen');
     expect(await readSessionNotes(db, finished.id)).toBe('Written on the summary screen');
@@ -1033,7 +1057,7 @@ describe('SqliteWorkoutSessionRepository - finishing and discarding', () => {
     await repo.completeSet(dropSet.id, {});
     void unfinished;
 
-    const summary = await repo.finish(session.id, START + 45 * 60_000);
+    const summary = await repo.finish(session.id, START + 45 * 60_000, false);
 
     expect(summary).toMatchObject({
       sessionId: session.id,
@@ -1067,7 +1091,7 @@ describe('SqliteWorkoutSessionRepository - finishing and discarding', () => {
     ]);
     expect(state).toBeNull();
 
-    await expect(repo.finish(session.id, START + 50 * 60_000)).rejects.toBeInstanceOf(
+    await expect(repo.finish(session.id, START + 50 * 60_000, false)).rejects.toBeInstanceOf(
       SessionNotInProgressError,
     );
   });
@@ -1087,7 +1111,7 @@ describe('SqliteWorkoutSessionRepository - finishing and discarding', () => {
       await repo.completeSet(set.id, {});
     }
 
-    const summary = await repo.finish(session.id, START + 60_000);
+    const summary = await repo.finish(session.id, START + 60_000, false);
     const view = await db.selectOne<{ total_volume_kg: number; total_reps: number }>(
       'SELECT total_volume_kg, total_reps FROM v_session_summary WHERE id = ?',
       [session.id],
@@ -1111,7 +1135,7 @@ describe('SqliteWorkoutSessionRepository - finishing and discarding', () => {
     clock.advance(1000);
     await repo.removeExercise(removed.id);
 
-    const summary = await repo.finish(session.id, START + 60_000);
+    const summary = await repo.finish(session.id, START + 60_000, false);
 
     expect(summary.totalVolumeKg).toBe(500);
     expect(summary.totalSets).toBe(1);
@@ -1181,5 +1205,406 @@ describe('SqliteWorkoutSessionRepository - crash recovery (FR-19 / ADR-0005)', (
     expect(recoveredSets.map((s) => s.setIndex)).toEqual([1, 2, 3]);
     expect(recovered!.exercises[1]!.sets.map((s) => s.id)).toContain(rowSet.id);
     expect(recovered!.activeState.focusedSessionExerciseId).toBe(row!.id);
+  });
+});
+
+describe('SqliteWorkoutSessionRepository - finish() writes estimated_kcal and newPRs (P9)', () => {
+  it('writes estimated_kcal only when showEstimatedCalories is true', async () => {
+    const { repo: repoOff } = setup();
+    const sessionOff = await repoOff.startEmpty(START);
+    const summaryOff = await repoOff.finish(sessionOff.id, START + 600_000, false);
+    expect(summaryOff.estimatedKcal).toBeNull();
+
+    const { db, repo } = setup();
+    const session = await repo.startEmpty(START);
+    const summary = await repo.finish(session.id, START + 600_000, true);
+
+    expect(summary.estimatedKcal).toBe(estimatedCalories(600));
+    const row = await db.selectOne<{ estimated_kcal: number | null }>(
+      'SELECT estimated_kcal FROM workout_session WHERE id = ?',
+      [session.id],
+    );
+    expect(row!.estimated_kcal).toBe(estimatedCalories(600));
+  });
+});
+
+describe('SqliteWorkoutSessionRepository - history (P9)', () => {
+  it("finish's newPRs reflects records this session earned that are still current", async () => {
+    const { db, repo } = setup();
+    await insertExercise(db, 'ex-1');
+    const session = await repo.startEmpty(START);
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const set = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
+    await repo.completeSet(set.id, {});
+
+    const summary = await repo.finish(session.id, START + 60_000, false);
+
+    expect(summary.newPRs.length).toBeGreaterThan(0);
+    expect(summary.newPRs.every((r) => r.sessionId === session.id && r.isCurrent)).toBe(true);
+  });
+
+  it('listHistory returns only completed sessions, most recently started first, and respects limit/offset', async () => {
+    const { db, repo, clock } = setup();
+    await insertExercise(db, 'ex-1');
+
+    const first = await repo.startEmpty(START);
+    await repo.finish(first.id, START + 1000, true);
+
+    clock.advance(10_000);
+    const discarded = await repo.startEmpty(START + 10_000);
+    await repo.discard(discarded.id);
+
+    clock.advance(10_000);
+    const second = await repo.startEmpty(START + 20_000);
+    await repo.finish(second.id, START + 21_000, false);
+
+    clock.advance(10_000);
+    // Left in_progress deliberately - listHistory must never return it.
+    await repo.startEmpty(START + 30_000);
+
+    const all = await repo.listHistory({});
+    expect(all.map((s) => s.id)).toEqual([second.id, first.id]);
+
+    const page1 = await repo.listHistory({ limit: 1, offset: 0 });
+    expect(page1.map((s) => s.id)).toEqual([second.id]);
+    const page2 = await repo.listHistory({ limit: 1, offset: 1 });
+    expect(page2.map((s) => s.id)).toEqual([first.id]);
+    const page3 = await repo.listHistory({ limit: 1, offset: 2 });
+    expect(page3).toEqual([]);
+
+    expect(all[1]).toMatchObject({
+      id: first.id,
+      title: 'Quick Start',
+      durationSeconds: 1,
+      totalVolumeKg: 0,
+      totalSets: 0,
+      totalReps: 0,
+      estimatedKcal: estimatedCalories(1),
+      planNameSnapshot: null,
+      planDayNameSnapshot: null,
+    });
+  });
+
+  it('getSession returns full detail for a completed session, and null for missing/in-progress/discarded ones', async () => {
+    const { db, repo } = setup();
+    await insertExercise(db, 'ex-1', 'Bench Press');
+    const started = await repo.startEmpty(START);
+    const exercise = await repo.addExercise(started.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const set = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
+    await repo.completeSet(set.id, {});
+    await repo.setSessionNotes(started.id, 'Felt good');
+    await repo.finish(started.id, START + 60_000, true);
+
+    const detail = await repo.getSession(started.id);
+
+    expect(detail).not.toBeNull();
+    expect(detail).toMatchObject({
+      id: started.id,
+      notes: 'Felt good',
+      totalVolumeKg: 500,
+      totalSets: 1,
+      totalReps: 5,
+      durationSeconds: 60,
+      estimatedKcal: estimatedCalories(60),
+    });
+    expect('activeState' in detail!).toBe(false);
+    expect(detail!.exercises).toHaveLength(1);
+    expect(detail!.exercises[0]!.sets.map((s) => s.id)).toEqual([set.id]);
+
+    expect(await repo.getSession('nope')).toBeNull();
+
+    const inProgress = await repo.startEmpty(START + 100_000);
+    expect(await repo.getSession(inProgress.id)).toBeNull();
+    await repo.discard(inProgress.id);
+    expect(await repo.getSession(inProgress.id)).toBeNull();
+  });
+
+  it('updateHistoricalSession writes notes through the same path as setSessionNotes, leaves them untouched on an empty patch, and throws for an unknown session', async () => {
+    const { db, repo } = setup();
+    const session = await repo.startEmpty(START);
+    await repo.finish(session.id, START + 1000, false);
+
+    await repo.updateHistoricalSession(session.id, { notes: 'Edited after the fact' });
+    let row = await db.selectOne<{ notes: string | null }>(
+      'SELECT notes FROM workout_session WHERE id = ?',
+      [session.id],
+    );
+    expect(row!.notes).toBe('Edited after the fact');
+
+    await repo.updateHistoricalSession(session.id, {});
+    row = await db.selectOne<{ notes: string | null }>(
+      'SELECT notes FROM workout_session WHERE id = ?',
+      [session.id],
+    );
+    expect(row!.notes).toBe('Edited after the fact');
+
+    await repo.updateHistoricalSession(session.id, { notes: null });
+    row = await db.selectOne<{ notes: string | null }>(
+      'SELECT notes FROM workout_session WHERE id = ?',
+      [session.id],
+    );
+    expect(row!.notes).toBeNull();
+
+    await expect(repo.updateHistoricalSession('nope', { notes: 'x' })).rejects.toBeInstanceOf(
+      RepositoryNotFoundError,
+    );
+    await expect(repo.updateHistoricalSession('nope', {})).rejects.toBeInstanceOf(
+      RepositoryNotFoundError,
+    );
+  });
+
+  it('a completed-session edit recomputes duration/volume/sets/reps on workout_session, not just the returned value', async () => {
+    const { db, repo } = setup();
+    await insertExercise(db, 'ex-1');
+    const session = await repo.startEmpty(START);
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const set = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
+    await repo.completeSet(set.id, {});
+    await repo.finish(session.id, START + 60_000, false);
+
+    const before = await db.selectOne<{
+      total_volume_kg: number;
+      total_sets: number;
+      total_reps: number;
+    }>('SELECT total_volume_kg, total_sets, total_reps FROM workout_session WHERE id = ?', [
+      session.id,
+    ]);
+    expect(before).toMatchObject({ total_volume_kg: 500, total_sets: 1, total_reps: 5 });
+
+    // Historical "I forgot to log this set" edit: appendSet + completeSet
+    // against the now-completed session.
+    const secondSet = await repo.appendSet(exercise.id, { weightKg: 50, reps: 10 });
+    const completedSecond = await repo.completeSet(secondSet.id, {});
+    expect(completedSecond.set.isCompleted).toBe(true);
+
+    const after = await db.selectOne<{
+      status: string;
+      total_volume_kg: number;
+      total_sets: number;
+      total_reps: number;
+      duration_seconds: number;
+    }>(
+      'SELECT status, total_volume_kg, total_sets, total_reps, duration_seconds FROM workout_session WHERE id = ?',
+      [session.id],
+    );
+    // duration_seconds is unchanged - a set-level edit never touches
+    // started_at/finished_at/paused_ms (see syncCompletedSessionAfterEdit's
+    // own doc comment).
+    expect(after).toMatchObject({
+      status: 'completed',
+      total_volume_kg: 1000,
+      total_sets: 2,
+      total_reps: 15,
+      duration_seconds: 60,
+    });
+  });
+
+  it("addDropSet also works against a completed session, resyncing totals through to the drop segment's own completion (code review fix, addDropSet had no status guard)", async () => {
+    const { db, repo } = setup();
+    await insertExercise(db, 'ex-1');
+    const session = await repo.startEmpty(START);
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const parentSet = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
+    await repo.completeSet(parentSet.id, {});
+    await repo.finish(session.id, START + 60_000, false);
+
+    const beforeAdd = await db.selectOne<{ total_volume_kg: number; total_sets: number }>(
+      'SELECT total_volume_kg, total_sets FROM workout_session WHERE id = ?',
+      [session.id],
+    );
+    expect(beforeAdd).toMatchObject({ total_volume_kg: 500, total_sets: 1 });
+
+    // Historical "I forgot to log the drop set" edit against the completed
+    // session - previously reachable with zero status check at all.
+    const dropSet = await repo.addDropSet(parentSet.id, { weightKg: 80, reps: 6 });
+
+    const afterAdd = await db.selectOne<{ total_volume_kg: number; total_sets: number }>(
+      'SELECT total_volume_kg, total_sets FROM workout_session WHERE id = ?',
+      [session.id],
+    );
+    // The new segment starts incomplete, so it cannot itself move the
+    // totals yet - this confirms the resync ran and reproduced the same
+    // numbers rather than leaving them stale or corrupting them.
+    expect(afterAdd).toMatchObject({ total_volume_kg: 500, total_sets: 1 });
+
+    await repo.completeSet(dropSet.id, {});
+
+    const afterComplete = await db.selectOne<{ total_volume_kg: number; total_sets: number }>(
+      'SELECT total_volume_kg, total_sets FROM workout_session WHERE id = ?',
+      [session.id],
+    );
+    // A drop segment counts toward volume but not toward total_sets (ADR-0006).
+    expect(afterComplete).toMatchObject({ total_volume_kg: 980, total_sets: 1 });
+  });
+
+  it('addDropSet rejects a discarded session', async () => {
+    const { db, repo } = setup();
+    await insertExercise(db, 'ex-1');
+    const session = await repo.startEmpty(START);
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const parentSet = await repo.appendSet(exercise.id, { weightKg: 40, reps: 10 });
+    await repo.discard(session.id);
+
+    await expect(repo.addDropSet(parentSet.id, {})).rejects.toBeInstanceOf(
+      SessionNotInProgressError,
+    );
+  });
+
+  it('deleting a completed session set that held the current record promotes the next-best one', async () => {
+    const { db, repo, clock } = setup();
+    await insertExercise(db, 'ex-1');
+
+    const sessionA = await repo.startEmpty(START);
+    const exerciseA = await repo.addExercise(sessionA.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const setA = await repo.appendSet(exerciseA.id, { weightKg: 100, reps: 5 });
+    await repo.completeSet(setA.id, {});
+    await repo.finish(sessionA.id, START + 1000, false);
+
+    clock.advance(60_000);
+    const sessionB = await repo.startEmpty(START + 60_000);
+    const exerciseB = await repo.addExercise(sessionB.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const setB = await repo.appendSet(exerciseB.id, { weightKg: 120, reps: 5 });
+    const resultB = await repo.completeSet(setB.id, {});
+    expect(resultB.newPRs.find((r) => r.recordType === 'max_weight')).toMatchObject({
+      value: 120,
+      previousValue: 100,
+    });
+    await repo.finish(sessionB.id, START + 61_000, false);
+
+    const currentBefore = await db.selectOne<{ value: number }>(
+      "SELECT value FROM personal_record WHERE exercise_id = 'ex-1' AND record_type = 'max_weight' AND is_current = 1",
+    );
+    expect(currentBefore!.value).toBe(120);
+
+    // Historical edit: session B's set turns out to have been a data-entry
+    // mistake and is deleted.
+    await repo.deleteSet(setB.id);
+
+    const currentAfter = await db.selectOne<{ value: number; previous_value: number | null }>(
+      "SELECT value, previous_value FROM personal_record WHERE exercise_id = 'ex-1' AND record_type = 'max_weight' AND is_current = 1",
+    );
+    expect(currentAfter!.value).toBe(100);
+    // rebuild() regenerates from scratch - this is a first-ever record again,
+    // not a "superseded" chain entry pointing at the deleted 120kg set.
+    expect(currentAfter!.previous_value).toBeNull();
+  });
+
+  /**
+   * KNOWN IMPLEMENTATION GAP, not fixed here (test-agent's constraints
+   * forbid touching repository code) - see this session's own report for the
+   * decision this needs. The plan's "Edge cases" section says a historical
+   * edit that empties an exercise of every set should soft-remove the
+   * exercise too (reuse `removeExercise`), "not left as an empty card." No
+   * code path does that today: `deleteSet` deletes the set, resyncs totals,
+   * and rebuilds affected records, but never checks whether that was the
+   * exercise's last remaining set. This test documents the CURRENT behavior
+   * (the exercise lingers, zero sets) rather than the desired one - if a
+   * future change implements the soft-remove, this test's expectations (and
+   * its name) should flip to match, not be deleted outright.
+   */
+  it('documents a known gap: deleting the last remaining set of an exercise leaves it as an empty card instead of soft-removing it', async () => {
+    const { db, repo } = setup();
+    await insertExercise(db, 'ex-1');
+    const session = await repo.startEmpty(START);
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const set = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
+    await repo.completeSet(set.id, {});
+    await repo.finish(session.id, START + 1000, false);
+
+    await repo.deleteSet(set.id);
+
+    const detail = await repo.getSession(session.id);
+    expect(detail!.exercises).toHaveLength(1);
+    expect(detail!.exercises[0]!.sets).toHaveLength(0);
+  });
+
+  it('deleteSession hard-deletes the session, cascades to its exercises/sets, and rebuilds records for every exercise it touched', async () => {
+    const { db, repo } = setup();
+    await insertExercise(db, 'ex-1');
+    await insertExercise(db, 'ex-2', 'Row');
+
+    // Baseline record from an earlier session, so deleting `target` demotes
+    // ex-1's record rather than clearing it outright.
+    const baseline = await repo.startEmpty(START);
+    const baselineExercise = await repo.addExercise(baseline.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const baselineSet = await repo.appendSet(baselineExercise.id, { weightKg: 80, reps: 5 });
+    await repo.completeSet(baselineSet.id, {});
+    await repo.finish(baseline.id, START + 1000, false);
+
+    const target = await repo.startEmpty(START + 60_000);
+    const targetEx1 = await repo.addExercise(target.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const targetEx2 = await repo.addExercise(target.id, 'ex-2', DEFAULT_REST_SECONDS);
+    const set1 = await repo.appendSet(targetEx1.id, { weightKg: 120, reps: 5 });
+    await repo.completeSet(set1.id, {});
+    const set2 = await repo.appendSet(targetEx2.id, { weightKg: 60, reps: 8 });
+    await repo.completeSet(set2.id, {});
+    await repo.finish(target.id, START + 61_000, false);
+
+    await repo.deleteSession(target.id);
+
+    expect(
+      await db.selectOne('SELECT id FROM workout_session WHERE id = ?', [target.id]),
+    ).toBeNull();
+    expect(
+      await db.select('SELECT id FROM session_exercise WHERE session_id = ?', [target.id]),
+    ).toEqual([]);
+    expect(await db.select('SELECT id FROM workout_set WHERE session_id = ?', [target.id])).toEqual(
+      [],
+    );
+
+    const ex1Current = await db.selectOne<{ value: number }>(
+      "SELECT value FROM personal_record WHERE exercise_id = 'ex-1' AND record_type = 'max_weight' AND is_current = 1",
+    );
+    expect(ex1Current!.value).toBe(80);
+
+    const ex2Current = await db.select(
+      "SELECT id FROM personal_record WHERE exercise_id = 'ex-2' AND is_current = 1",
+    );
+    expect(ex2Current).toEqual([]);
+
+    await expect(repo.deleteSession('nope')).rejects.toBeInstanceOf(RepositoryNotFoundError);
+  });
+
+  it('setExerciseNote also works against a completed session, but the granular mutation methods still reject a discarded one', async () => {
+    const { db, repo } = setup();
+    await insertExercise(db, 'ex-1');
+    const session = await repo.startEmpty(START);
+    const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
+    const set = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
+    await repo.finish(session.id, START + 1000, false);
+
+    await repo.setExerciseNote(exercise.id, 'Felt heavy');
+    const row = await db.selectOne<{ note: string | null }>(
+      'SELECT note FROM session_exercise WHERE id = ?',
+      [exercise.id],
+    );
+    expect(row!.note).toBe('Felt heavy');
+
+    const discardedSession = await repo.startEmpty(START + 10_000);
+    const discardedExercise = await repo.addExercise(
+      discardedSession.id,
+      'ex-1',
+      DEFAULT_REST_SECONDS,
+    );
+    const discardedSet = await repo.appendSet(discardedExercise.id, { weightKg: 40, reps: 10 });
+    await repo.discard(discardedSession.id);
+
+    await expect(repo.setExerciseNote(discardedExercise.id, 'x')).rejects.toBeInstanceOf(
+      SessionNotInProgressError,
+    );
+    await expect(repo.appendSet(discardedExercise.id, {})).rejects.toBeInstanceOf(
+      SessionNotInProgressError,
+    );
+    await expect(repo.updateSet(discardedSet.id, { weightKg: 45 })).rejects.toBeInstanceOf(
+      SessionNotInProgressError,
+    );
+    await expect(repo.completeSet(discardedSet.id, {})).rejects.toBeInstanceOf(
+      SessionNotInProgressError,
+    );
+    await expect(repo.deleteSet(discardedSet.id)).rejects.toBeInstanceOf(SessionNotInProgressError);
+    await expect(repo.removeExercise(discardedExercise.id)).rejects.toBeInstanceOf(
+      SessionNotInProgressError,
+    );
+    void set;
   });
 });

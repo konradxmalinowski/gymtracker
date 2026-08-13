@@ -132,6 +132,55 @@ describe('CI performance regression guard (ADR-0014)', () => {
     });
   });
 
+  describe('history list pagination (P9)', () => {
+    /**
+     * `WorkoutSessionRepository.listHistory`'s own SQL
+     * (`SqliteWorkoutSessionRepository.ts`), reproduced here verbatim as raw
+     * SQL against `db` directly rather than through the repository - this
+     * suite measures SQL cost, not repository-call overhead (see this file's
+     * own top doc comment). `ix_session_started` backs the `ORDER BY
+     * started_at DESC`, and every fixture session is `status = 'completed'`
+     * with `deleted_at IS NULL`, so this exercises the exact index-backed
+     * range scan `WorkoutHistoryListScreen`'s first page runs against a real
+     * 2,500-session history. `50` matches `useSessionHistoryList`'s own
+     * `HISTORY_PAGE_SIZE`, not `buildLimitOffset`'s default of 20.
+     */
+    it('loads the first history-list page under budget for 2,500 completed sessions', async () => {
+      const pageSize = 50;
+
+      const startedAt = Date.now();
+      const rows = await db.select<{ id: string; started_at: number }>(
+        `SELECT * FROM workout_session
+         WHERE status = 'completed' AND deleted_at IS NULL
+         ORDER BY started_at DESC
+         LIMIT ? OFFSET ?`,
+        [pageSize, 0],
+      );
+      const elapsedMs = Date.now() - startedAt;
+
+      console.log(`History list pagination (first page of ${pageSize}): ${elapsedMs}ms`);
+      expect(rows.length).toBe(pageSize);
+      expect(elapsedMs).toBeLessThan(50);
+    });
+
+    it('loads a deep page (offset 2,400) under the same budget - no linear degradation with offset', async () => {
+      const pageSize = 50;
+
+      const startedAt = Date.now();
+      const rows = await db.select<{ id: string; started_at: number }>(
+        `SELECT * FROM workout_session
+         WHERE status = 'completed' AND deleted_at IS NULL
+         ORDER BY started_at DESC
+         LIMIT ? OFFSET ?`,
+        [pageSize, 2400],
+      );
+      const elapsedMs = Date.now() - startedAt;
+
+      console.log(`History list pagination (offset 2400): ${elapsedMs}ms (${rows.length} rows)`);
+      expect(elapsedMs).toBeLessThan(50);
+    });
+  });
+
   describe('exercise search', () => {
     /** ~900 rows, matching NFR-03's stated budget scope - via `seedCatalog()` (the real seeder path), not hand-rolled raw SQL. */
     function buildSyntheticCatalog(count: number): CatalogFile {

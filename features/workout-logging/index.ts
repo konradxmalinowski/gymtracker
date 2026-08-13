@@ -41,7 +41,10 @@ export type {
   ActiveStatePatch,
   CompleteSetValues,
   CompletedSetResult,
+  SessionAggregate,
   SessionExercise,
+  SessionHistoryQuery,
+  SessionListItem,
   SessionStatus,
   SessionSummary,
   SetSeed,
@@ -72,6 +75,7 @@ export {
   type SessionTotals,
   type SessionTotalsSetInput,
 } from './domain/SessionTotals';
+export { CALORIES_PER_MINUTE, estimatedCalories } from './domain/EstimatedCalories';
 export {
   assignSetDisplayNumbers,
   orderSetsForDisplay,

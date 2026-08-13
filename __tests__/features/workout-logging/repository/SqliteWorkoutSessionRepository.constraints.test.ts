@@ -170,7 +170,7 @@ describe('SqliteWorkoutSessionRepository - constraint violations and rollback pa
   it('reorderExercises refuses an id belonging to another session, and one that is soft-deleted', async () => {
     const { repo, clock, session, first, second } = await withTwoExercises();
 
-    await repo.finish(session.id, START + 1000);
+    await repo.finish(session.id, START + 1000, false);
     const other = await repo.startEmpty(START + 2000);
     const foreign = await repo.addExercise(other.id, 'ex-1', DEFAULT_REST_SECONDS);
 
@@ -240,7 +240,7 @@ describe('SqliteWorkoutSessionRepository - constraint violations and rollback pa
   it('finish and discard reject a session id that does not exist', async () => {
     const { repo } = await withTwoExercises();
 
-    await expect(repo.finish('ghost', START + 1000)).rejects.toBeInstanceOf(
+    await expect(repo.finish('ghost', START + 1000, false)).rejects.toBeInstanceOf(
       RepositoryNotFoundError,
     );
     await expect(repo.discard('ghost')).rejects.toBeInstanceOf(RepositoryNotFoundError);
@@ -250,7 +250,7 @@ describe('SqliteWorkoutSessionRepository - constraint violations and rollback pa
     const { db, repo, session } = await withTwoExercises();
     await db.run('UPDATE workout_session SET deleted_at = ? WHERE id = ?', [START + 1, session.id]);
 
-    await expect(repo.finish(session.id, START + 1000)).rejects.toBeInstanceOf(
+    await expect(repo.finish(session.id, START + 1000, false)).rejects.toBeInstanceOf(
       RepositoryNotFoundError,
     );
     await expect(repo.discard(session.id)).rejects.toBeInstanceOf(RepositoryNotFoundError);
@@ -274,7 +274,7 @@ describe('SqliteWorkoutSessionRepository - constraint violations and rollback pa
 
   it('setSupersetGroup still refuses ids spanning two sessions after one of them finished', async () => {
     const { repo, session, first } = await withTwoExercises();
-    await repo.finish(session.id, START + 1000);
+    await repo.finish(session.id, START + 1000, false);
     const other = await repo.startEmpty(START + 2000);
     const foreign = await repo.addExercise(other.id, 'ex-1', DEFAULT_REST_SECONDS);
 
@@ -358,7 +358,7 @@ describe('SqliteWorkoutSessionRepository - transaction composition', () => {
 
     await expect(
       db.transaction(async (tx) => {
-        await repo.finish(session.id, START + 60_000, tx);
+        await repo.finish(session.id, START + 60_000, false, tx);
         throw new Error('force rollback');
       }),
     ).rejects.toThrow('force rollback');

@@ -232,7 +232,7 @@ describe('SqliteWorkoutSessionRepository - mutations arriving after the row is g
     const { repo, session } = await withSet();
     await repo.discard(session.id);
 
-    await expect(repo.finish(session.id, START + 60_000)).rejects.toBeInstanceOf(
+    await expect(repo.finish(session.id, START + 60_000, false)).rejects.toBeInstanceOf(
       SessionNotInProgressError,
     );
     await expect(repo.discard(session.id)).rejects.toBeInstanceOf(SessionNotInProgressError);
@@ -373,7 +373,7 @@ describe('SqliteWorkoutSessionRepository - crash recovery across a real connecti
     const exercise = await repo.addExercise(session.id, 'ex-1', DEFAULT_REST_SECONDS);
     const set = await repo.appendSet(exercise.id, { weightKg: 100, reps: 5 });
     await repo.completeSet(set.id, {});
-    await repo.finish(session.id, START + 60_000);
+    await repo.finish(session.id, START + 60_000, false);
     beforeCrash.close();
 
     const afterCrash = openFileDatabase(false);
