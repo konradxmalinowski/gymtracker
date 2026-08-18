@@ -1,5 +1,5 @@
 ---
-snapshot_commit: "TBD-at-commit-time (P10 / feat/p10-home-dashboard, cut from main at 5e43904, not yet committed as of this snapshot update)"
+snapshot_commit: 'TBD-at-commit-time (P11 / feat/p11-statistics-and-charts, cut from main at 5834de9 [PR #15, P10 home dashboard merge], not yet committed as of this snapshot update)'
 generated_from: CLAUDE.md, docs/ARCHITECTURE.md, docs/ROADMAP.md, docs/adr/*, docs/PRODUCT-BRIEF.md
 ---
 
@@ -13,20 +13,25 @@ Note on `snapshot_commit`: the P7/P8 branch-note caveat this file previously car
 is resolved - PR #12 merged `feat/p8-progressive-overload` (already carrying the P7
 merge inside it) into `main` at `5e004cf`, so the hash above is now a single linear
 tip, not a two-sided identifier. The "Merge note" subsection below is kept as
-historical record of how that merge was resolved, not as an open caveat.
+historical record of how that merge was resolved, not as an open caveat. P10's own
+`TBD-at-commit-time` placeholder was never filled in with its real merge hash before
+P11 started (PR #15 merged `feat/p10-home-dashboard` into `main` at `5834de9`) -
+recorded here retroactively rather than silently left stale.
 
 ## Status
 
 P0 (project foundation), P1 (design system/UI primitives), P2 (persistence
 foundation), P3 (onboarding, profile and core settings), P4 (exercise library), P5
 (workout plans), P6 (workout logging), P7 (rest timer), P8 (progressive overload
-and personal records), P9 (workout summary and history), and P10 (home dashboard) are
-complete - `docs/ROADMAP.md`'s MVP line is now closed. `onboarding`, `profile`, `exercise-library`,
-`plans`, `workout-logging`, `rest-timer`, `records`, and `home` are the eight features
-with real implementations (`rest-timer` owns no database table and therefore no
-repository; `records` and `home` both have one, `home` with no accompanying service -
-see "Composition root" below); the remaining four (`statistics`, `body-metrics`,
-`calendar`, `data-transfer`) remain empty skeletons awaiting their phase. The app boots
+and personal records), P9 (workout summary and history), P10 (home dashboard), and P11
+(statistics and charts) are complete - `docs/ROADMAP.md`'s MVP line closed at P10, and
+P11 is the first phase past it. `onboarding`, `profile`, `exercise-library`,
+`plans`, `workout-logging`, `rest-timer`, `records`, `home`, and `statistics` are the
+nine features with real implementations (`rest-timer` owns no database table and
+therefore no repository; `records`, `home`, and `statistics` each have one, `home` and
+`statistics` with no accompanying service - see "Composition root" below); the
+remaining three (`body-metrics`, `calendar`, `data-transfer`) remain empty skeletons
+awaiting their phase. The app boots
 for real as of P3, and as of P4 also seeds the
 exercise catalog on every boot: `app/_layout.tsx` opens the database, runs
 migrations, runs `database/seed/runSeed()` (idempotent), builds the `AppContainer`,
@@ -34,15 +39,17 @@ holds the splash screen until the profile query resolves, then gates to
 `/onboarding` or a 5-tab layout (Home, Plans, Exercises, Stats, Profile) - and, as of
 P6, also checks the MMKV `session.active` flag once a profile exists, redirecting
 straight into `workout/active` for a fresh in-progress session or showing a
-finish-or-discard dialog for a stale one (ADR-0005). Stats is the only tab still
-rendering a real "not built yet" empty state; Exercises (P4) and Plans (P5) are both
-real nested Stack navigators (list -> detail -> create/edit, and list -> detail ->
-day editor, respectively); `workout-logging` (P6) is not a tab at all but a
+finish-or-discard dialog for a stale one (ADR-0005). Every tab now renders real
+content, none a "not built yet" placeholder - Exercises (P4), Plans (P5), and Stats
+(P11) are all real nested Stack navigators (list -> detail -> create/edit; list ->
+detail -> day editor; dashboard -> per-exercise progression, respectively);
+`workout-logging` (P6) is not a tab at all but a
 root-level `fullScreenModal` route (`app/workout/active.tsx`) outside `(tabs)`, per
 ADR-0007. As of P7, that screen also mounts a sticky `RestTimerBar` directly under
 its header; as of P8, its `FlashList` cells also render a `PRBadge`/`ProgressionHint`
 per set; as of P10, Home is a real, composed dashboard rather than P6's
-wordmark-plus-Quick-Start placeholder (see the P10 paragraph below).
+wordmark-plus-Quick-Start placeholder (see the P10 paragraph below); as of P11, the
+Stats tab is likewise real (see the P11 paragraph below).
 
 Exercise library (P4): instant, diacritic-folded FTS5 search ("lezac" matches
 "leżąc"), a multi-select filter sheet (muscle/equipment/body part/level/gym-home
@@ -83,18 +90,19 @@ form/update a group but allows exactly 1 to clear back to standalone. Presentati
 P0-P4 "not built yet" stub with a nested Stack navigator mirroring P4's Exercises-tab
 restructure. `app/(modals)/` is the app's first modal route group, holding the new
 `ExercisePickerScreen` (a multi-select sibling of the P4 library screen); its result
+
 - an unbounded exercise-id list - returns via a new root-level Zustand store
-(`stores/exercisePickerStore.ts`) rather than route params, since Expo Router has no
-push-and-await primitive and the result has no bounded size to serialize into a URL.
-`components/gestures/DraggableList.tsx`'s tracked gesture-only-reorder gap was closed
-this phase in two rounds (a first pass whose fix didn't reach a native accessibility
-node through the real row components, caught by a follow-up review and corrected
-with a regression test - full detail in CLAUDE.md's "Known gaps"). Verification:
-typecheck/lint/Jest (70 suites, 616 tests, 1 pre-existing skip) clean, `expo export
+  (`stores/exercisePickerStore.ts`) rather than route params, since Expo Router has no
+  push-and-await primitive and the result has no bounded size to serialize into a URL.
+  `components/gestures/DraggableList.tsx`'s tracked gesture-only-reorder gap was closed
+  this phase in two rounds (a first pass whose fix didn't reach a native accessibility
+  node through the real row components, caught by a follow-up review and corrected
+  with a regression test - full detail in CLAUDE.md's "Known gaps"). Verification:
+  typecheck/lint/Jest (70 suites, 616 tests, 1 pre-existing skip) clean, `expo export
 --platform ios` used again as the build-verification proxy, security review clean
-bar one low/informational note (`reports/security-2026-08-06-p5.md`), accessibility
-review (`reports/accessibility-2026-08-06-p5.md`) blocked on the DraggableList
-first-pass gap and cleared after the second-pass fix. No new npm dependency.
+  bar one low/informational note (`reports/security-2026-08-06-p5.md`), accessibility
+  review (`reports/accessibility-2026-08-06-p5.md`) blocked on the DraggableList
+  first-pass gap and cleared after the second-pass fix. No new npm dependency.
 
 Workout logging (P6): `WorkoutSessionRepository`/`SqliteWorkoutSessionRepository` is
 the app's second aggregate-root repository (session + exercises + sets + active
@@ -335,6 +343,60 @@ named), and a day-row `onPress`-nulling pattern that silently discarded its own
 `accessibilityRole`/label/`busy` state while a start was in flight, fixed by
 gating on `disabled` alone instead (matching `Button.tsx`'s `loading` pattern).
 
+Statistics and charts (P11): `features/statistics/` fills the P2-era empty skeleton -
+the first phase past the v1.0 MVP line, and the ninth real feature. Six of section
+8.3's originally-planned eight `StatisticsRepository` methods ship
+(`volumeByPeriod`/`sessionFrequency`/`durationTrend`/`muscleGroupVolume`/
+`exerciseProgression`/`yearlyHeatmap`, no accompanying service); `weeklySummary()`/
+`streak()` are deliberately never built at all - `docs/adr/
+0019-home-dashboard-read-model.md`'s "P11 resolution" settles its own open migration
+note permanently: Home keeps `HomeDashboardRepository` forever, since neither method
+is actually needed by anything this phase built. Pure domain calculators
+(`statRange.ts`, `dateRangeBuckets.ts`, `exerciseProgressionReducer.ts`,
+`yearlyHeatmapBinning.ts`, `localDate.ts` - the last deliberately duplicating `home`'s
+`StreakCalculator.ts` primitives rather than importing them, since the dependency
+graph forbids `statistics -> home`) resolve the 4-option range selector into concrete
+date bounds + bucket granularity, gap-fill/re-bucket already-day-level SQL aggregates
+in JS (never a second hand-written SQL bucket expression), and quantile-bin a full
+year's trained days into heatmap levels 1-4. `exerciseProgression`'s `e1rm` metric
+resolves `oneRm.formula` from settings internally, reusing
+`SqlitePersonalRecordRepository.resolveFormula`'s exact pattern - a new, documented
+`statistics -> records` dependency edge (pure domain-calculator reuse, not a
+write-service call). `components/charts/` (ADR-0010's Victory Native XL adapter,
+an empty `.gitkeep` since P0) is real: `ChartCard`, `LineChartView`, `BarChartView`,
+`StackedBarChartView` (custom `View`-drawn, not Victory's own `StackedBar` - its
+stacked keys are a static generic parameter that doesn't fit a runtime-variable
+category list), `HeatmapView` (custom `react-native-svg`), `ChartTooltip`,
+`ChartLegend`. Chart interactivity trimmed to static rendering this pass (no
+drag-to-inspect gesture). Seven feature components (`VolumeChartCard`/
+`FrequencyChartCard`/`DurationTrendCard`/`MuscleVolumeCard`/`YearlyHeatmapCard`/
+`ExerciseProgressionCard`/`StatRangeSelector` - the middle two beyond section 10's
+original list); `useStatisticsDashboard` composes five reads into one `useQuery`
+under `['stats','dashboard',range]`. `app/(tabs)/stats/` restructured into a real
+nested Stack (dashboard -> `stats/exercise/[exerciseId]`), the last of the five tabs
+to leave its P6 placeholder behind; `ExerciseDetailScreen`'s third slot
+(`progressChartSlot`, empty since P4) is filled. `statisticsRepository` is the eighth
+feature-repository pair in `AppContainer`. Verification: typecheck/lint/Jest (135
+suites, 1228 passed, 1 pre-existing skip, +12 suites) clean, `expo export --platform
+ios` used again as the build-verification proxy, no new npm dependency
+(`victory-native`/`@shopify/react-native-skia` were already installed since before
+this phase). A new project-owned Jest mock (`__tests__/__mocks__/victoryNativeMock.tsx`)
+stands in for `victory-native` repo-wide rather than the library's own official
+CanvasKit-WASM Jest setup, judged disproportionate since `components/charts` is the
+only place the library is ever imported. Security review
+(`reports/security-2026-08-18-p11.md`) found zero critical/high/medium/low findings,
+four informational notes (one, a stale doc comment on `SqliteStatisticsRepository`,
+fixed). Accessibility review (`reports/accessibility-2026-08-18-p11.md`) found no
+BLOCKING finding - the `SwipeableRow`-collapse class confirmed absent - and fixed two
+non-blocking findings within the phase: four of five dashboard cards were completely
+silent for VoiceOver/TalkBack since Skia canvas content exposes nothing to the
+accessibility tree (A11Y-P11-001, HIGH; fixed with an opt-in
+`contentAccessibilityLabel` on `ChartCard` plus a new `summarizeSeries()` helper
+producing real translated data summaries), and `HeatmapView`'s `accessibilityLabel`
+was hardcoded untranslated English describing the chart type rather than its data
+(A11Y-P11-002, MEDIUM; fixed by making the prop required with a real computed
+summary).
+
 **Merge note:** `feat/p8-progressive-overload` was branched before `feat/p7-rest-timer`
 merged, so both touched `WorkoutSessionRepository.ts`/
 `SqliteWorkoutSessionRepository.ts`, `WorkoutSessionService.ts`, `ActiveWorkoutScreen.tsx`,
@@ -364,10 +426,11 @@ schema resolvers) + Zod + MMKV + FlashList (declared since P0, first real usage 
 P4's exercise library results list) + Reanimated + Gesture Handler + Victory
 Native XL (Skia-based, wrapped in components/charts adapter per ADR-0010) + React
 Native SVG + `@expo/vector-icons` (Ionicons - the app's only icon system, chosen P3)
-+ `expo-image-picker` (avatar/photo selection) + Expo Notifications + Expo Haptics +
-Expo FileSystem + NativeWind (tailwind.config.js imports theme/tokens.ts, never
-duplicates values). No new dependency through P8; P9 adds `react-native-view-shot`
-and `expo-sharing` (workout-summary share-as-image). No new dependency at P10.
+
+- `expo-image-picker` (avatar/photo selection) + Expo Notifications + Expo Haptics +
+  Expo FileSystem + NativeWind (tailwind.config.js imports theme/tokens.ts, never
+  duplicates values). No new dependency through P8; P9 adds `react-native-view-shot`
+  and `expo-sharing` (workout-summary share-as-image). No new dependency at P10.
 
 ## Architecture (section 3)
 
@@ -519,8 +582,10 @@ discipline every other cross-repository composition in this codebase follows. P9
 added no container entries - `sessionRepository`/`sessionService` already existed
 from P6, and this phase only adds methods to them. P10 added
 `homeDashboardRepository` (read-only, no matching service, same shape as P8's
-`exerciseHistoryRepository`), the seventh pair overall. The
-rest (`statistics`, `body-metrics`, `calendar`, `data-transfer`) land one at a time
+`exerciseHistoryRepository`), the seventh pair overall. P11 added
+`statisticsRepository` (read-only, no matching service, same shape), the eighth pair
+overall. The
+rest (`body-metrics`, `calendar`, `data-transfer`) land one at a time
 as each phase merges, each extending `AppContainer` rather than replacing it.
 `SqliteExerciseRepository` is the first real consumer of `BaseSqliteRepository`
 beyond `SqliteProfileRepository`, and maintains the `exercise_fts` FTS5 index
@@ -543,6 +608,7 @@ before the database opens).
 ## Resolved product/technical decisions (section 18, D-01..D-12)
 
 All originally-open questions are closed and accepted:
+
 - D-11: English UI in v1, i18n wired from P1 (every string through `t()` from the
   start - not deferred, since retrofitting after 8 features is the exact refactor
   this avoids). Polish exists only as exercise-name translations, not full UI.

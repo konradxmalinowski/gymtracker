@@ -57,12 +57,20 @@ export interface ExerciseDetailScreenProps {
   previousPerformanceSlot?: ReactNode | undefined;
   /** Same contract as {@link previousPerformanceSlot}, for the "personal records" section - filled by the host route using `records`' `useCurrentRecords` hook. */
   personalRecordsSlot?: ReactNode | undefined;
+  /**
+   * Same contract as {@link previousPerformanceSlot}, for the "progress
+   * chart" section - genuinely empty since P4, pending "a future statistics/
+   * charting phase" (this file's own P4-era comment); filled by the host
+   * route as of P11, using `statistics`'s `ExerciseProgressionCard`.
+   */
+  progressChartSlot?: ReactNode | undefined;
 }
 
 /** `app/(tabs)/exercises/[id].tsx`'s screen body. */
 export function ExerciseDetailScreen({
   previousPerformanceSlot,
   personalRecordsSlot,
+  progressChartSlot,
 }: ExerciseDetailScreenProps = {}) {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: exercise, isPending, isError, refetch } = useExercise(id);
@@ -349,13 +357,15 @@ export function ExerciseDetailScreen({
           />
         )}
 
-        <PerformanceEmptySection
-          sectionTitle={t('exerciseLibrary.detail.progressChartTitle')}
-          emptyTitle={t('exerciseLibrary.detail.progressChartEmptyTitle')}
-          message={t('exerciseLibrary.detail.progressChartEmptyMessage')}
-          icon={<Ionicons name="stats-chart-outline" size={32} color={color.textTertiary} />}
-          testID="exercise-detail-progress-chart"
-        />
+        {progressChartSlot ?? (
+          <PerformanceEmptySection
+            sectionTitle={t('exerciseLibrary.detail.progressChartTitle')}
+            emptyTitle={t('exerciseLibrary.detail.progressChartEmptyTitle')}
+            message={t('exerciseLibrary.detail.progressChartEmptyMessage')}
+            icon={<Ionicons name="stats-chart-outline" size={32} color={color.textTertiary} />}
+            testID="exercise-detail-progress-chart"
+          />
+        )}
 
         {isCustom ? (
           <Row gap={3}>

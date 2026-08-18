@@ -124,3 +124,42 @@ paths rather than silently doing nothing:
 
 Either choice is acceptable; not choosing - leaving both repositories answering the
 same question with no cross-reference - is the outcome this note exists to prevent.
+
+## P11 resolution (2026-08-18)
+
+**Path 1, chosen: `home` keeps its own read model permanently.**
+`StatisticsRepository` (`features/statistics/repository/StatisticsRepository.ts`)
+ships with six methods - `volumeByPeriod`, `sessionFrequency`, `durationTrend`,
+`muscleGroupVolume`, `exerciseProgression`, `yearlyHeatmap` - and deliberately does
+**not** implement `streak()`/`weeklySummary()` at all, on either signature. Reasoning:
+
+- Neither `docs/ROADMAP.md`'s P11 scope list nor its acceptance criteria call for a
+  streak or weekly-summary surface on the Statistics tab itself - the roadmap names
+  "volume over time, workout frequency, duration trend, muscle-group volume breakdown,
+  yearly activity heatmap; per-exercise progression screen; the exercise detail
+  progress chart," nothing else.
+- Path 2 (migrate `useHomeDashboard.ts` onto `StatisticsRepository`) would touch
+  already-shipped, already-tested P10 code (`HomeScreen.tsx`, `useHomeDashboard.ts`,
+  `StreakCard.tsx`, `WeeklySummaryCard.tsx`, their test suites) for zero user-visible
+  benefit - the dashboard renders identically either way. That is real regression risk
+  taken on for a purely internal refactor, which this ADR's own "negative consequence"
+  section already named as a real but non-blocking risk, not an emergency to resolve
+  the moment P11 starts.
+- The duplication risk this ADR flagged does not materialize: since
+  `StatisticsRepository` never defines its own `streak()`/`weeklySummary()`, there are
+  not two independently-evolving definitions of "the current streak" - there remains
+  exactly one, `StreakCalculator.calculateStreak` via `HomeDashboardRepository`.
+
+This closes this ADR's own open migration note. `docs/ARCHITECTURE.md` section 8.3's
+`StatisticsRepository` entry is updated in the same pass to list the six shipped
+methods only, with `streak()`/`weeklySummary()` removed from its signature list and a
+note pointing here rather than left dangling as aspirational, unbuilt methods. Section
+9.1's `HOME --> STAT` diagram edge is confirmed to remain unexercised in code, same as
+this ADR always anticipated - `home` depends on `workout-logging`, `plans`, and
+`records` only, never `statistics`.
+
+A real, separate `statistics -> records` edge was added instead, unrelated to this
+ADR's own subject: `exerciseProgression`'s `e1rm` metric reuses
+`estimated1RM`/`isRecordEligibleSetType` from `records`' domain layer (a pure
+calculator reuse, not a write-service dependency - see `docs/ARCHITECTURE.md` section
+9.1's own updated note on this edge).

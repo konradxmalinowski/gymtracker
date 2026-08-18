@@ -75,11 +75,6 @@ export const en = {
     stats: 'Stats',
     profile: 'Profile',
   },
-  comingSoon: {
-    statsTitle: 'Stats are coming soon',
-    statsMessage:
-      'Track volume, personal records, and progress over time. Not built yet - it lands in a later phase.',
-  },
   onboarding: {
     title: 'Welcome to GymTracker',
     subtitle: 'Set a nickname to get started. Everything stays on this device.',
@@ -614,6 +609,80 @@ export const en = {
       notFoundMessage: 'This plan could not be found.',
       emptyTitle: 'No days yet',
       emptyMessage: 'This plan has no days to start.',
+    },
+  },
+  statistics: {
+    screenTitle: 'Statistics',
+    loadErrorMessage: 'Could not load your statistics.',
+    range: {
+      fourWeeks: '4 weeks',
+      threeMonths: '3 months',
+      oneYear: '1 year',
+      allTime: 'All time',
+    },
+    volume: {
+      title: 'Volume',
+      subtitle: 'Total working-set volume lifted',
+      emptyTitle: 'No volume yet',
+      emptyMessage: 'Finish a workout to see your volume trend here.',
+      unitSuffix: 'kg',
+      accessibilityLabelTemplate:
+        'Volume chart, {{count}} periods, ranging from {{min}} to {{max}} kg',
+    },
+    frequency: {
+      title: 'Workout frequency',
+      subtitle: 'Completed workouts',
+      emptyTitle: 'No workouts yet',
+      emptyMessage: 'Finish a workout to see how often you train.',
+      accessibilityLabelTemplate:
+        'Workout frequency chart, {{count}} periods, ranging from {{min}} to {{max}} workouts',
+    },
+    duration: {
+      title: 'Session duration',
+      subtitle: 'Average time per workout',
+      emptyTitle: 'No sessions yet',
+      emptyMessage: 'Finish a workout to see your average session length.',
+      accessibilityLabelTemplate:
+        'Session duration chart, {{count}} periods, ranging from {{min}} to {{max}} minutes',
+    },
+    muscleVolume: {
+      title: 'Muscle group volume',
+      subtitle: 'Share of volume by primary muscle group',
+      emptyTitle: 'No volume yet',
+      emptyMessage: 'Finish a workout to see volume by muscle group.',
+    },
+    heatmap: {
+      titleTemplate: '{{year}} activity',
+      emptyTitle: 'No training yet',
+      emptyMessage: 'Your training days this year will appear here.',
+      accessibilityLabel: {
+        one: '{{year}} training activity heatmap, {{count}} training day',
+        other: '{{year}} training activity heatmap, {{count}} training days',
+      },
+    },
+    bodyPart: {
+      upper: 'Upper body',
+      lower: 'Lower body',
+      core: 'Core',
+      arms: 'Arms',
+      back: 'Back',
+      shoulders: 'Shoulders',
+      legs: 'Legs',
+      other: 'Other',
+    },
+    exerciseProgression: {
+      screenTitle: 'Progression',
+      loadErrorMessage: 'Could not load this exercise’s progression.',
+      emptyTitle: 'No data yet',
+      emptyMessage: 'Log a working set for this exercise to see its progression.',
+      viewFullButtonLabel: 'View full progression',
+      accessibilityLabelTemplate:
+        '{{metric}} progression chart, {{count}} periods, ranging from {{min}} to {{max}} kg',
+      metric: {
+        topSet: 'Top set',
+        e1rm: 'Est. 1RM',
+        volume: 'Volume',
+      },
     },
   },
 } as const;

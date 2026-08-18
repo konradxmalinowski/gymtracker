@@ -149,4 +149,18 @@ export const routes = {
       params: { sessionId },
     }),
   },
+
+  /**
+   * P11: the statistics feature's own stack, nested under the Stats tab
+   * (`app/(tabs)/stats/_layout.tsx`) - same restructure `exercises`/`plans`
+   * went through in P4/P5. `dashboard` mirrors `exercises.library`/
+   * `plans.library`'s alias naming for the tab-root route.
+   */
+  stats: {
+    dashboard: (): Href => '/stats',
+    exercise: (exerciseId: string): Href => ({
+      pathname: '/stats/exercise/[exerciseId]',
+      params: { exerciseId },
+    }),
+  },
 } as const;

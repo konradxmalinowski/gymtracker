@@ -16,19 +16,22 @@ export async function insertExercise(
     nameEn: string;
     now: number;
     deletedAt: number | null;
+    /** `exercise.body_part` - `null`/omitted matches a real custom exercise with no muscle selected (P11's `SqliteStatisticsRepository.muscleGroupVolume` COALESCEs this to `'other'`). */
+    bodyPart: string | null;
   }> = {},
 ): Promise<string> {
   const id = overrides.id ?? nextId();
   const now = overrides.now ?? Date.now();
   const nameEn = overrides.nameEn ?? `Exercise ${id.slice(0, 8)}`;
   await db.run(
-    `INSERT INTO exercise (id, source, name_en, name_search, created_at, updated_at, deleted_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO exercise (id, source, name_en, name_search, body_part, created_at, updated_at, deleted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       overrides.source ?? 'custom',
       nameEn,
       nameEn.toLowerCase(),
+      overrides.bodyPart ?? null,
       now,
       now,
       overrides.deletedAt ?? null,
@@ -169,6 +172,8 @@ export async function insertWorkoutSet(
     completedAt: number | null;
     performedAt: number;
     now: number;
+    /** Soft-delete marker (P11's `SqliteStatisticsRepository` - `v_working_set` filters `ws.deleted_at IS NULL`). `null`/omitted matches every other fixture's "not deleted" default. */
+    deletedAt: number | null;
   }> = {},
 ): Promise<string> {
   const id = overrides.id ?? nextId();
@@ -181,8 +186,8 @@ export async function insertWorkoutSet(
   await db.run(
     `INSERT INTO workout_set (
        id, session_exercise_id, session_id, exercise_id, set_index, set_type, parent_set_id,
-       weight_kg, reps, is_completed, completed_at, performed_at, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       weight_kg, reps, is_completed, completed_at, performed_at, created_at, updated_at, deleted_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       sessionExerciseId,
@@ -198,6 +203,7 @@ export async function insertWorkoutSet(
       performedAt,
       now,
       now,
+      overrides.deletedAt ?? null,
     ],
   );
   return id;

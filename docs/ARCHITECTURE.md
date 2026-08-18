@@ -45,54 +45,54 @@ and the data model.
 
 ### 2.1 Functional requirements
 
-| ID | Requirement | Priority |
-|----|-------------|----------|
-| FR-01 | First launch collects a nickname and optional avatar, stored locally. No auth. | MVP |
-| FR-02 | Unlimited workout plans, each with unlimited workout days, reorderable, duplicable, renamable, deletable. | MVP |
-| FR-03 | Exercise catalog seeded from Free Exercise DB with images, instructions, muscles, equipment, level. | MVP |
-| FR-04 | Optional Polish display name rendered as `English Name (Polska nazwa)` when a translation exists. | MVP |
-| FR-05 | Curated YouTube technique video links per exercise (URLs only, never downloaded or embedded offline). | MVP |
-| FR-06 | Instant search and filtering by name, muscle, equipment, body part, favorites. | MVP |
-| FR-07 | User-created custom exercises with name, muscle group, equipment, notes. | MVP |
-| FR-08 | Favorites, sorted first in every exercise list. | MVP |
-| FR-09 | Active workout screen: per exercise show previous performance, previous best, current sets, weight, reps, optional RPE, completed state. | MVP |
-| FR-10 | Set types: warm-up, normal, drop set, failure, assisted, partial. Supersets modeled as a link between exercises (see ADR-0006). | MVP |
-| FR-11 | New sets pre-fill from the previous set's values. | MVP |
-| FR-12 | Quick adjust controls: +/-1 rep, +/-1.25 / 2.5 / 5 / 10 kg. Typing is always optional. | MVP |
-| FR-13 | Completing a set persists immediately, starts the rest timer, fires haptic feedback. | MVP |
-| FR-14 | Rest timer: automatic, global default, per-exercise override, sound, vibration, local notification, accurate across backgrounding and process death. | MVP |
-| FR-15 | Progressive overload panel: previous weight, previous reps, best weight, best reps, suggested next progression. | MVP |
-| FR-16 | Exercise-level notes and workout-level notes. | MVP |
-| FR-17 | Workout summary after finishing: duration, exercises, sets, volume, optional estimated calories, new PRs. | MVP |
-| FR-18 | Home screen: active plan, Quick Start, last workout, training streak, latest PR, weekly summary. | MVP |
-| FR-19 | **An in-progress workout must survive process death and be resumable.** Hard requirement. | MVP |
-| FR-20 | Gestures: swipe left deletes a set (with undo), swipe right edits a set, drag reorders exercises. | MVP |
-| FR-21 | Statistics: workout frequency, duration, volume, per-exercise progression, estimated 1RM, PR list, muscle-group volume, monthly and yearly views. | Phase 2 |
-| FR-22 | Monthly calendar of completed workouts showing duration, volume and which plan day was used. | Phase 2 |
-| FR-23 | Body measurements: weight, body fat, chest, waist, neck, arms, forearms, thighs, calves, with history. | Phase 2 |
-| FR-24 | Progress photos stored on-device with history. | Phase 2 |
-| FR-25 | JSON export and import (lossless backup/restore) and CSV export and import (lossy interchange). | Phase 2 |
-| FR-26 | Settings: nickname, avatar, units (kg/lb, cm/in), timer defaults, export, import. | MVP (partial) / Phase 2 (data) |
-| FR-27 | User-defined daily goals (boolean, counter, numeric) with independent per-goal weekday scheduling, not tied to workout or plan days. | P17 |
-| FR-28 | Daily view shows only today's active goals with quick complete/increment/decrement/add-progress actions requiring no navigation into configuration. | P17 |
-| FR-29 | Daily goal progress is persisted per calendar day, separately from goal configuration, so history is never overwritten - modeled to support future streaks, completion-rate and weekly/monthly statistics. | P17 |
-| FR-30 | Optional reminders, per-goal or standalone, as scheduled (time-of-day) or interval notifications, respecting their own weekday configuration. | P17 |
-| FR-31 | Interactive Done/Not done actions on every reminder notification, answerable without opening the app; a goal-linked reminder's "Done" action writes the same `daily_goal_entry` the in-app Daily View would; a per-reminder response-statistics view shows done/not-done/ignored counts. | P17 |
+| ID    | Requirement                                                                                                                                                                                                                                                                              | Priority                       |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| FR-01 | First launch collects a nickname and optional avatar, stored locally. No auth.                                                                                                                                                                                                           | MVP                            |
+| FR-02 | Unlimited workout plans, each with unlimited workout days, reorderable, duplicable, renamable, deletable.                                                                                                                                                                                | MVP                            |
+| FR-03 | Exercise catalog seeded from Free Exercise DB with images, instructions, muscles, equipment, level.                                                                                                                                                                                      | MVP                            |
+| FR-04 | Optional Polish display name rendered as `English Name (Polska nazwa)` when a translation exists.                                                                                                                                                                                        | MVP                            |
+| FR-05 | Curated YouTube technique video links per exercise (URLs only, never downloaded or embedded offline).                                                                                                                                                                                    | MVP                            |
+| FR-06 | Instant search and filtering by name, muscle, equipment, body part, favorites.                                                                                                                                                                                                           | MVP                            |
+| FR-07 | User-created custom exercises with name, muscle group, equipment, notes.                                                                                                                                                                                                                 | MVP                            |
+| FR-08 | Favorites, sorted first in every exercise list.                                                                                                                                                                                                                                          | MVP                            |
+| FR-09 | Active workout screen: per exercise show previous performance, previous best, current sets, weight, reps, optional RPE, completed state.                                                                                                                                                 | MVP                            |
+| FR-10 | Set types: warm-up, normal, drop set, failure, assisted, partial. Supersets modeled as a link between exercises (see ADR-0006).                                                                                                                                                          | MVP                            |
+| FR-11 | New sets pre-fill from the previous set's values.                                                                                                                                                                                                                                        | MVP                            |
+| FR-12 | Quick adjust controls: +/-1 rep, +/-1.25 / 2.5 / 5 / 10 kg. Typing is always optional.                                                                                                                                                                                                   | MVP                            |
+| FR-13 | Completing a set persists immediately, starts the rest timer, fires haptic feedback.                                                                                                                                                                                                     | MVP                            |
+| FR-14 | Rest timer: automatic, global default, per-exercise override, sound, vibration, local notification, accurate across backgrounding and process death.                                                                                                                                     | MVP                            |
+| FR-15 | Progressive overload panel: previous weight, previous reps, best weight, best reps, suggested next progression.                                                                                                                                                                          | MVP                            |
+| FR-16 | Exercise-level notes and workout-level notes.                                                                                                                                                                                                                                            | MVP                            |
+| FR-17 | Workout summary after finishing: duration, exercises, sets, volume, optional estimated calories, new PRs.                                                                                                                                                                                | MVP                            |
+| FR-18 | Home screen: active plan, Quick Start, last workout, training streak, latest PR, weekly summary.                                                                                                                                                                                         | MVP                            |
+| FR-19 | **An in-progress workout must survive process death and be resumable.** Hard requirement.                                                                                                                                                                                                | MVP                            |
+| FR-20 | Gestures: swipe left deletes a set (with undo), swipe right edits a set, drag reorders exercises.                                                                                                                                                                                        | MVP                            |
+| FR-21 | Statistics: workout frequency, duration, volume, per-exercise progression, estimated 1RM, PR list, muscle-group volume, monthly and yearly views.                                                                                                                                        | Phase 2                        |
+| FR-22 | Monthly calendar of completed workouts showing duration, volume and which plan day was used.                                                                                                                                                                                             | Phase 2                        |
+| FR-23 | Body measurements: weight, body fat, chest, waist, neck, arms, forearms, thighs, calves, with history.                                                                                                                                                                                   | Phase 2                        |
+| FR-24 | Progress photos stored on-device with history.                                                                                                                                                                                                                                           | Phase 2                        |
+| FR-25 | JSON export and import (lossless backup/restore) and CSV export and import (lossy interchange).                                                                                                                                                                                          | Phase 2                        |
+| FR-26 | Settings: nickname, avatar, units (kg/lb, cm/in), timer defaults, export, import.                                                                                                                                                                                                        | MVP (partial) / Phase 2 (data) |
+| FR-27 | User-defined daily goals (boolean, counter, numeric) with independent per-goal weekday scheduling, not tied to workout or plan days.                                                                                                                                                     | P17                            |
+| FR-28 | Daily view shows only today's active goals with quick complete/increment/decrement/add-progress actions requiring no navigation into configuration.                                                                                                                                      | P17                            |
+| FR-29 | Daily goal progress is persisted per calendar day, separately from goal configuration, so history is never overwritten - modeled to support future streaks, completion-rate and weekly/monthly statistics.                                                                               | P17                            |
+| FR-30 | Optional reminders, per-goal or standalone, as scheduled (time-of-day) or interval notifications, respecting their own weekday configuration.                                                                                                                                            | P17                            |
+| FR-31 | Interactive Done/Not done actions on every reminder notification, answerable without opening the app; a goal-linked reminder's "Done" action writes the same `daily_goal_entry` the in-app Daily View would; a per-reminder response-statistics view shows done/not-done/ignored counts. | P17                            |
 
 ### 2.2 Non-functional requirements
 
-| ID | Requirement | Target | How it is verified |
-|----|-------------|--------|--------------------|
-| NFR-01 | Time to log one completed set | <= 2 interactions, <= 100 ms perceived | Manual timing on the set-complete path; no `await` on the render path |
-| NFR-02 | Cold start to interactive Home | < 1.5 s on a mid-range Android device | Startup trace; DB opened lazily off the splash gate |
-| NFR-03 | Exercise search response | < 50 ms for ~900 catalog rows | FTS5 query benchmark (ADR-0003) |
-| NFR-04 | Workout history list scroll | 60 fps with 1000+ sessions | FlashList with fixed row estimates, benchmark fixture in phase P15 |
-| NFR-05 | Durability of a completed set | Survives app kill; survives OS crash | WAL + `synchronous=FULL`, E2E kill test (ADR-0005) |
-| NFR-06 | Data loss on uninstall | Total and expected; export is the only backup | Documented in settings UI |
-| NFR-07 | Type safety | `strict: true`, zero `any`, zero `@ts-expect-error` without a comment | `tsc --noEmit` in CI, ESLint `no-explicit-any` as error |
-| NFR-08 | Offline correctness | 100% of features work in airplane mode except YouTube link opening | E2E in airplane mode |
-| NFR-09 | Binary size | < 120 MB download on both stores | Measured at P16; see ADR-0011 asset budget |
-| NFR-10 | Accessibility | Minimum 44x44 pt touch targets, dynamic type respected on text, screen-reader labels on all controls | RNTL a11y assertions + manual VoiceOver/TalkBack pass |
+| ID     | Requirement                    | Target                                                                                               | How it is verified                                                    |
+| ------ | ------------------------------ | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| NFR-01 | Time to log one completed set  | <= 2 interactions, <= 100 ms perceived                                                               | Manual timing on the set-complete path; no `await` on the render path |
+| NFR-02 | Cold start to interactive Home | < 1.5 s on a mid-range Android device                                                                | Startup trace; DB opened lazily off the splash gate                   |
+| NFR-03 | Exercise search response       | < 50 ms for ~900 catalog rows                                                                        | FTS5 query benchmark (ADR-0003)                                       |
+| NFR-04 | Workout history list scroll    | 60 fps with 1000+ sessions                                                                           | FlashList with fixed row estimates, benchmark fixture in phase P15    |
+| NFR-05 | Durability of a completed set  | Survives app kill; survives OS crash                                                                 | WAL + `synchronous=FULL`, E2E kill test (ADR-0005)                    |
+| NFR-06 | Data loss on uninstall         | Total and expected; export is the only backup                                                        | Documented in settings UI                                             |
+| NFR-07 | Type safety                    | `strict: true`, zero `any`, zero `@ts-expect-error` without a comment                                | `tsc --noEmit` in CI, ESLint `no-explicit-any` as error               |
+| NFR-08 | Offline correctness            | 100% of features work in airplane mode except YouTube link opening                                   | E2E in airplane mode                                                  |
+| NFR-09 | Binary size                    | < 120 MB download on both stores                                                                     | Measured at P16; see ADR-0011 asset budget                            |
+| NFR-10 | Accessibility                  | Minimum 44x44 pt touch targets, dynamic type respected on text, screen-reader labels on all controls | RNTL a11y assertions + manual VoiceOver/TalkBack pass                 |
 
 ### 2.3 Explicit non-goals
 
@@ -106,7 +106,7 @@ backlog items in `docs/ROADMAP.md`, deliberately excluded from v1.0.
 
 **Clean Architecture with a modular, feature-sliced structure**, running as a single
 React Native process. No microservices, no event bus, no CQRS write side - those would
-be ceremony on a single-user local app. Two ideas from that family *are* used because
+be ceremony on a single-user local app. Two ideas from that family _are_ used because
 they pay for themselves here:
 
 - **A read/write split (CQRS-lite).** Statistics and history queries do not load
@@ -355,14 +355,14 @@ erDiagram
 
 ### 6.1 Aggregates
 
-| Aggregate root | Members | Written through | Transaction boundary |
-|----------------|---------|-----------------|----------------------|
-| `Plan` | `PlanDay`, `PlanDayExercise` | `PlanRepository` | Whole plan |
-| `WorkoutSession` | `SessionExercise`, `WorkoutSet`, `ActiveSessionState` | `WorkoutSessionRepository` | Whole session; individual set writes are still atomic within it |
-| `Exercise` | `ExerciseUserData`, `ExerciseMuscle`, `ExerciseVideo` | `ExerciseRepository` | Whole exercise |
-| `PersonalRecord` | - | `PersonalRecordRepository` | Single row, always inside the caller's transaction |
-| `BodyMetricEntry` | - | `BodyMetricRepository` | Single row |
-| `ProgressPhoto` | file on disk + row | `ProgressPhotoRepository` | Row commits only after the file write succeeds |
+| Aggregate root    | Members                                               | Written through            | Transaction boundary                                            |
+| ----------------- | ----------------------------------------------------- | -------------------------- | --------------------------------------------------------------- |
+| `Plan`            | `PlanDay`, `PlanDayExercise`                          | `PlanRepository`           | Whole plan                                                      |
+| `WorkoutSession`  | `SessionExercise`, `WorkoutSet`, `ActiveSessionState` | `WorkoutSessionRepository` | Whole session; individual set writes are still atomic within it |
+| `Exercise`        | `ExerciseUserData`, `ExerciseMuscle`, `ExerciseVideo` | `ExerciseRepository`       | Whole exercise                                                  |
+| `PersonalRecord`  | -                                                     | `PersonalRecordRepository` | Single row, always inside the caller's transaction              |
+| `BodyMetricEntry` | -                                                     | `BodyMetricRepository`     | Single row                                                      |
+| `ProgressPhoto`   | file on disk + row                                    | `ProgressPhotoRepository`  | Row commits only after the file write succeeds                  |
 
 Aggregates are the unit at which a future sync layer would resolve conflicts. That is
 the main reason a session is one aggregate rather than three independent tables: a
@@ -370,28 +370,28 @@ half-merged workout is meaningless to a user.
 
 ### 6.2 Value objects and pure calculators (domain layer, zero dependencies)
 
-| Unit | Responsibility | Why it is pure |
-|------|----------------|----------------|
-| `Weight` | Canonical kilograms + display conversion to lb, rounding to the nearest plate increment | Unit bugs are silent data corruption; this is the only place conversion happens |
-| `Length` | Canonical centimetres + display conversion to inches | Same |
-| `SetVolume` | `volume(set) -> kg`, applying the set-type rules table (6.3) | Used by 5 different screens; must never diverge |
-| `Estimated1RM` | Epley by default, Brzycki selectable; returns `null` above the reliable rep range | Formula choice is a setting, so it must be injectable and testable |
-| `ProgressionAdvisor` | Double progression: reps to the top of the range, then weight | The core "progressive overload" promise; heavily unit-tested |
-| `StreakCalculator` | Consecutive training weeks/days from `local_date` values | Timezone-sensitive; pure function over date strings, never over `Date.now()` |
-| `SessionTotals` | Duration, total volume, set count, rep count, estimated calories | Recomputed on demand and denormalized on finish; the pure function is the single definition |
+| Unit                 | Responsibility                                                                          | Why it is pure                                                                              |
+| -------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `Weight`             | Canonical kilograms + display conversion to lb, rounding to the nearest plate increment | Unit bugs are silent data corruption; this is the only place conversion happens             |
+| `Length`             | Canonical centimetres + display conversion to inches                                    | Same                                                                                        |
+| `SetVolume`          | `volume(set) -> kg`, applying the set-type rules table (6.3)                            | Used by 5 different screens; must never diverge                                             |
+| `Estimated1RM`       | Epley by default, Brzycki selectable; returns `null` above the reliable rep range       | Formula choice is a setting, so it must be injectable and testable                          |
+| `ProgressionAdvisor` | Double progression: reps to the top of the range, then weight                           | The core "progressive overload" promise; heavily unit-tested                                |
+| `StreakCalculator`   | Consecutive training weeks/days from `local_date` values                                | Timezone-sensitive; pure function over date strings, never over `Date.now()`                |
+| `SessionTotals`      | Duration, total volume, set count, rep count, estimated calories                        | Recomputed on demand and denormalized on finish; the pure function is the single definition |
 
 ### 6.3 Set-type semantics (normative table)
 
 This table is the contract. Every screen and every statistic obeys it.
 
-| Set type | Counts toward volume | Counts toward PR / e1RM | Counts toward "sets completed" | Weight field means |
-|----------|----------------------|-------------------------|--------------------------------|--------------------|
-| `warmup` | No | No | No | External load |
-| `normal` | Yes | Yes | Yes | External load |
-| `drop` | Yes | No (the parent set counts) | No (grouped with parent) | External load |
-| `failure` | Yes | Yes | Yes | External load |
-| `assisted` | No (see ADR-0006) | No | Yes | Assistance magnitude, positive |
-| `partial` | No | No | Yes | External load |
+| Set type   | Counts toward volume | Counts toward PR / e1RM    | Counts toward "sets completed" | Weight field means             |
+| ---------- | -------------------- | -------------------------- | ------------------------------ | ------------------------------ |
+| `warmup`   | No                   | No                         | No                             | External load                  |
+| `normal`   | Yes                  | Yes                        | Yes                            | External load                  |
+| `drop`     | Yes                  | No (the parent set counts) | No (grouped with parent)       | External load                  |
+| `failure`  | Yes                  | Yes                        | Yes                            | External load                  |
+| `assisted` | No (see ADR-0006)    | No                         | Yes                            | Assistance magnitude, positive |
+| `partial`  | No                   | No                         | Yes                            | External load                  |
 
 `superset` is deliberately **not** a set type. It is a grouping of exercises within a
 session, stored as `superset_group` on `session_exercise`. Rationale in ADR-0006.
@@ -633,7 +633,7 @@ CREATE TABLE plan_day_exercise (
 
 `ON DELETE RESTRICT` on `exercise_id` is intentional: an exercise used by a plan cannot
 be hard-deleted. The UI offers soft delete (archive) instead, and the repository
-surfaces the referencing plans so the user is told *why*.
+surfaces the referencing plans so the user is told _why_.
 
 ### 7.6 Workout sessions - the core write path
 
@@ -922,7 +922,7 @@ built on top of them, P17 is the one phase that ships its own real migration
 (`002_daily_goals.ts`) when it is implemented. That migration is deliberately not
 written yet; this section documents the schema it will contain.
 
-*Numbering note*: this subsection is placed after 7.11 rather than immediately after
+_Numbering note_: this subsection is placed after 7.11 rather than immediately after
 7.9 Indexes (its most natural conceptual position) so that the existing 7.10 (Views)
 and 7.11 (Storage volume estimate) keep their numbers - `docs/adr/0002`, `0009`,
 `0013` and `0015` all cross-reference "section 7.10" or "section 7.11" by number, and
@@ -1119,7 +1119,7 @@ export interface WriteRepository<TEntity, TCreate, TUpdate> {
   update(id: EntityId, patch: TUpdate, tx?: SqlExecutor): Promise<TEntity>;
   softDelete(id: EntityId, tx?: SqlExecutor): Promise<void>;
   restore(id: EntityId, tx?: SqlExecutor): Promise<void>;
-  purge(id: EntityId, tx?: SqlExecutor): Promise<void>;   // hard delete, explicit only
+  purge(id: EntityId, tx?: SqlExecutor): Promise<void>; // hard delete, explicit only
 }
 ```
 
@@ -1136,6 +1136,7 @@ Each feature declares its port in `features/<feature>/repository/<Name>Repositor
 mappers and the query builder live in top-level `repositories/`.
 
 **`ExerciseRepository`** (feature: `exercise-library`)
+
 ```
 search(query: ExerciseQuery): Promise<ExerciseListItem[]>   // FTS + filters + favorites-first ordering
 findById(id): Promise<Exercise | null>                      // with muscles, videos, user data
@@ -1149,9 +1150,11 @@ listReferencingPlans(id): Promise<PlanReference[]>          // powers "cannot de
 replaceCatalog(entries, catalogVersion): Promise<void>      // seeder path; rewrites catalog rows + FTS only
 deleteCustom(id): Promise<void>                             // P4 addition beyond the original 10-method list; soft delete
 ```
+
 `ExerciseQuery` = `{ text?, muscleSlugs?, equipmentSlugs?, bodyParts?, level?, favoritesOnly?, context?: 'gym' | 'home', source?, limit, offset }`.
 
 **`PlanRepository`** (feature: `plans`) - aggregate root
+
 ```
 listPlans(): Promise<PlanListItem[]>                        // with day counts
 getPlan(id): Promise<PlanAggregate | null>                  // plan + days + day exercises + exercise summaries
@@ -1172,6 +1175,7 @@ restoreDayExercise(id): Promise<void>                       // undoes removeExer
 
 **`WorkoutSessionRepository`** (feature: `workout-logging`) - aggregate root, the
 most important surface in the app
+
 ```
 findInProgress(): Promise<ActiveSessionAggregate | null>    // FR-19 recovery entry point
 startFromPlanDay(planDayId, startedAt): Promise<ActiveSessionAggregate>
@@ -1197,6 +1201,7 @@ deleteSession(id): Promise<void>                            // P9 addition beyon
 ```
 
 **`ExerciseHistoryRepository`** (read model, feature: `workout-logging`)
+
 ```
 getPreviousPerformance(exerciseId, beforeSessionId?): Promise<PreviousPerformance | null>
 getBestPerformance(exerciseId): Promise<BestPerformance | null>
@@ -1204,6 +1209,7 @@ listRecentSessionsForExercise(exerciseId, limit): Promise<ExerciseSessionEntry[]
 ```
 
 **`PersonalRecordRepository`** (feature: `records`)
+
 ```
 listCurrent(exerciseId?): Promise<PersonalRecord[]>
 listRecent(limit): Promise<PersonalRecord[]>                // Home "latest PR"
@@ -1214,31 +1220,45 @@ rebuild(exerciseIds?, tx?): Promise<void>                   // full recompute fr
 
 **`HomeDashboardRepository`** (read model, feature: `home`) - no accompanying service,
 same "flat DTOs, nothing to validate" shape as `ExerciseHistoryRepository`
+
 ```
 getTrainingLocalDates(sinceLocalDate): Promise<string[]>           // feeds StreakCalculator
 getWeeklySummary(localDateFrom, localDateTo): Promise<HomeWeeklySummary>   // single-table SQL aggregate
 getLastCompletedSession(): Promise<HomeLastSessionDto | null>
 getMostRecentCompletedPlanDayId(planId): Promise<string | null>    // feeds nextSuggestedPlanDay
 ```
+
 Added in P10 as a deliberate deviation from this section's own `StatisticsRepository`
 entry below (`streak()`/`weeklySummary()`) - see `docs/adr/0019-home-dashboard-read-model.md`
 for the full rationale and the P11 migration note. Every query is parameterized and
 filters `deleted_at IS NULL`.
 
-**`StatisticsRepository`** (read model, feature: `statistics`) - returns DTOs only
+**`StatisticsRepository`** (read model, feature: `statistics`, real as of P11) - returns
+DTOs from SQL aggregates only, no accompanying service (same "flat DTOs, nothing to
+validate" shape `ExerciseHistoryRepository`/`HomeDashboardRepository` established)
+
 ```
-volumeByPeriod(range, bucket: 'day'|'week'|'month'): Promise<TimeBucket[]>
-sessionFrequency(range, bucket): Promise<TimeBucket[]>
-durationTrend(range, bucket): Promise<TimeBucket[]>
-muscleGroupVolume(range): Promise<MuscleVolumeSlice[]>
-exerciseProgression(exerciseId, range, metric: 'top_set'|'e1rm'|'volume'): Promise<SeriesPoint[]>
+volumeByPeriod(localDateFrom, localDateTo, bucket: 'day'|'week'|'month'): Promise<TimeBucket[]>
+sessionFrequency(localDateFrom, localDateTo, bucket): Promise<TimeBucket[]>
+durationTrend(localDateFrom, localDateTo, bucket): Promise<TimeBucket[]>
+muscleGroupVolume(localDateFrom, localDateTo): Promise<MuscleVolumeSlice[]>
+exerciseProgression(exerciseId, localDateFrom, localDateTo, bucket, metric: 'top_set'|'e1rm'|'volume'): Promise<SeriesPoint[]>
 yearlyHeatmap(year): Promise<DayIntensity[]>
-weeklySummary(localDateFrom, localDateTo): Promise<WeeklySummary>  // NOTE: as of P10, Home does
-                                                                     // not call this - it has its own
-                                                                     // HomeDashboardRepository.getWeeklySummary
-                                                                     // instead; see ADR-0019
-streak(): Promise<StreakInfo>                                      // NOTE: same deviation - see ADR-0019
 ```
+
+Two deliberate deviations from this repository's original planned shape, both decided
+at P11 kickoff:
+
+- Takes concrete `[localDateFrom, localDateTo]` + `bucket` rather than a `StatRange`
+  enum on every date-bounded method - range resolution (`4w`/`3m`/`1y`/`all` ->
+  concrete dates + bucket granularity) is a hooks-layer concern
+  (`features/statistics/domain/statRange.ts`), keeping this repository as
+  settings/UI-free as every other repository in the codebase.
+- Does **not** implement `weeklySummary()`/`streak()` at all - `docs/adr/
+0019-home-dashboard-read-model.md`'s "P11 resolution" section records this as the
+  final answer to that ADR's own open migration note: `home` keeps
+  `HomeDashboardRepository`'s equivalents permanently, since neither method is
+  actually needed by anything P11 built.
 
 **`BodyMetricRepository`**, **`ProgressPhotoRepository`**, **`SettingsRepository`**,
 **`ProfileRepository`**, **`DataTransferRepository`** follow the same shape and are
@@ -1262,8 +1282,8 @@ export interface AppContainer {
   profile: ProfileRepository;
   files: FileStorage;
   notifications: NotificationScheduler;
-  clock: Clock;              // injectable: makes streak and timer logic deterministic in tests
-  idGenerator: IdGenerator;  // injectable: makes fixtures reproducible
+  clock: Clock; // injectable: makes streak and timer logic deterministic in tests
+  idGenerator: IdGenerator; // injectable: makes fixtures reproducible
 }
 
 export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer>): AppContainer;
@@ -1279,15 +1299,15 @@ reflect-metadata, no container library.
 This is the concrete answer to "prepare repository interfaces for future
 synchronization" without writing sync code today.
 
-| Sync requirement | Guaranteed in v1 by | Cost paid now |
-|------------------|---------------------|---------------|
-| Globally unique ids generated offline | UUIDv7 `TEXT` primary keys everywhere | Larger indexes than `INTEGER` PKs |
-| Deterministic change detection | `updated_at` written by the repository base on every mutation | One extra column write |
-| Deletes that can propagate | `deleted_at` soft delete + `purge()` as a separate operation | Every read carries `deleted_at IS NULL` |
-| A sane conflict unit | Aggregate-scoped repositories (session, plan, exercise) | Aggregate transactions instead of per-row writes |
-| A single mutation choke point | All writes go through repositories; lint forbids SQL elsewhere | Discipline, enforced by lint |
-| Recomputable derived data | `personal_record` and session totals are rebuildable from `workout_set` | A `rebuild()` implementation |
-| Schema evolution both sides can agree on | Versioned migrations + a versioned export envelope | Migration discipline |
+| Sync requirement                         | Guaranteed in v1 by                                                     | Cost paid now                                    |
+| ---------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------ |
+| Globally unique ids generated offline    | UUIDv7 `TEXT` primary keys everywhere                                   | Larger indexes than `INTEGER` PKs                |
+| Deterministic change detection           | `updated_at` written by the repository base on every mutation           | One extra column write                           |
+| Deletes that can propagate               | `deleted_at` soft delete + `purge()` as a separate operation            | Every read carries `deleted_at IS NULL`          |
+| A sane conflict unit                     | Aggregate-scoped repositories (session, plan, exercise)                 | Aggregate transactions instead of per-row writes |
+| A single mutation choke point            | All writes go through repositories; lint forbids SQL elsewhere          | Discipline, enforced by lint                     |
+| Recomputable derived data                | `personal_record` and session totals are rebuildable from `workout_set` | A `rebuild()` implementation                     |
+| Schema evolution both sides can agree on | Versioned migrations + a versioned export envelope                      | Migration discipline                             |
 
 What is **not** built now, and deliberately so: no `change_log` outbox table, no
 `SyncableRepository` decorator, no `findChangedSince()`, no vector clocks, no
@@ -1516,7 +1536,12 @@ Allowed dependency directions, stated explicitly:
   features (`statistics`, `calendar`, `home`, `data-transfer`).
 - `rest-timer` and `records` do **not** depend on `workout-logging`. They expose
   services that `workout-logging` calls. Inverting this would create a cycle.
-- `statistics` depends only on read models, never on write services.
+- `statistics` (real as of P11) depends only on read models, never on write services -
+  its one real edge, `STAT --> REC`, is `exerciseProgression`'s `e1rm` metric reusing
+  `records`' pure `estimated1RM`/`isRecordEligibleSetType` domain calculator, not a call
+  into any write service. `STAT --> WL` (drawn above) was never built - `statistics`
+  reads `v_working_set`/`workout_session` directly via its own repository, the same
+  "read the shared view, don't call the write feature" pattern `home` uses.
 - `data-transfer` depends on everything by nature; it is the only feature allowed to,
   and it is deliberately built last.
 - `daily-goals` is also a leaf, and a deliberately isolated one: it depends on nothing
@@ -1528,13 +1553,13 @@ Allowed dependency directions, stated explicitly:
 - `home` is real as of P10, and its actual dependency edges are `workout-logging`,
   `plans`, and `records` (read-only, one direction - nothing depends back on `home`),
   matching three of the five edges this diagram draws. The other two drawn edges,
-  `HOME --> STAT` and `HOME --> DG`, describe planned-but-not-yet-real dependencies:
-  `daily-goals` is still documentation-only (P17), and the `STAT` edge specifically
-  describes the `StatisticsRepository.streak()`/`weeklySummary()` surface P10
-  deliberately routes around with its own `HomeDashboardRepository` instead - see
-  `docs/adr/0019-home-dashboard-read-model.md` and section 8.3's note on the same
-  deviation. Both edges are left in the diagram as intent for their own future phases,
-  not removed.
+  `HOME --> STAT` and `HOME --> DG`, describe dependencies that - as of P11 - are now
+  known to never become real: `docs/adr/0019-home-dashboard-read-model.md`'s "P11
+  resolution" section settles this permanently (`home` keeps its own
+  `HomeDashboardRepository` rather than ever migrating onto `StatisticsRepository`,
+  which does not implement `streak()`/`weeklySummary()` at all), and `daily-goals`
+  remains documentation-only (P17). Both edges are left in the diagram as historical
+  intent rather than removed, exactly as ADR-0019 itself instructs.
 
 Cycles are prevented mechanically by `eslint-plugin-import`'s `no-cycle` rule set to
 error, plus the barrel-only rule from section 3.1.
@@ -1607,15 +1632,15 @@ entirely unbuilt (P17, documentation-only - see `CLAUDE.md`'s Status section).
 
 ### 10.2 Navigation rules
 
-| Rule | Reason |
-|------|--------|
-| `workout/active` is a root-level route **outside** the tab group, presented as `fullScreenModal` with `gestureEnabled: false` and the Android back button intercepted | A workout must not be dismissable by an accidental tab tap or edge swipe mid-set. Leaving requires an explicit Minimize or Finish. |
-| Minimizing an active workout routes back to the tabs and shows a persistent `ActiveWorkoutBanner` docked above the tab bar, showing elapsed time and rest countdown | Users legitimately need to check an exercise's technique video mid-workout without ending the session. |
-| Modals are used only for **pickers and single-purpose entry**; set editing is inline in the list | The brief's "avoid modal spam" rule. A swipe-right on a set expands it in place rather than opening a sheet. |
-| Confirmation dialogs are reserved for: discard workout, delete plan, delete session, replace-mode import, purge data | Everything else uses delete-plus-undo-toast. |
-| Deep links: `gymtracker://workout/active` (from the rest-timer notification), `gymtracker://exercise/:id`, `gymtracker://plan/:id` | The rest-timer notification must reopen straight into the workout, not into Home. |
-| Typed routes are on (`experiments.typedRoutes`), and every navigation goes through `navigation/routes.ts` helpers rather than raw string paths | Renaming a route becomes a compile error instead of a runtime dead link. |
-| The splash screen is held until: fonts loaded, migrations applied, profile query resolved, MMKV active-session flag read | Prevents a visible flash of Home before an onboarding redirect. |
+| Rule                                                                                                                                                                                    | Reason                                                                                                                                                                                                                                                                     |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workout/active` is a root-level route **outside** the tab group, presented as `fullScreenModal` with `gestureEnabled: false` and the Android back button intercepted                   | A workout must not be dismissable by an accidental tab tap or edge swipe mid-set. Leaving requires an explicit Minimize or Finish.                                                                                                                                         |
+| Minimizing an active workout routes back to the tabs and shows a persistent `ActiveWorkoutBanner` docked above the tab bar, showing elapsed time and rest countdown                     | Users legitimately need to check an exercise's technique video mid-workout without ending the session.                                                                                                                                                                     |
+| Modals are used only for **pickers and single-purpose entry**; set editing is inline in the list                                                                                        | The brief's "avoid modal spam" rule. A swipe-right on a set expands it in place rather than opening a sheet.                                                                                                                                                               |
+| Confirmation dialogs are reserved for: discard workout, delete plan, delete session, replace-mode import, purge data                                                                    | Everything else uses delete-plus-undo-toast.                                                                                                                                                                                                                               |
+| Deep links: `gymtracker://workout/active` (from the rest-timer notification), `gymtracker://exercise/:id`, `gymtracker://plan/:id`                                                      | The rest-timer notification must reopen straight into the workout, not into Home.                                                                                                                                                                                          |
+| Typed routes are on (`experiments.typedRoutes`), and every navigation goes through `navigation/routes.ts` helpers rather than raw string paths                                          | Renaming a route becomes a compile error instead of a runtime dead link.                                                                                                                                                                                                   |
+| The splash screen is held until: fonts loaded, migrations applied, profile query resolved, MMKV active-session flag read                                                                | Prevents a visible flash of Home before an onboarding redirect.                                                                                                                                                                                                            |
 | Daily Goals gets no sixth tab. It is reached from a `TodaysGoalsCard` on Home (same pattern as the last-workout summary card, section 10.3/P10) into the root-level `goals/index` route | Consistent with the existing "nested feature, not a tab" precedent - Calendar and Measurements are reached from Profile rather than being top-level tabs; a sixth tab would crowd the tab bar for a feature whose daily-glance need is already well served by a Home card. |
 
 ### 10.3 The active workout screen composition
@@ -1672,50 +1697,50 @@ behind the same names rather than editing every component.
 ```ts
 export const color = {
   // Surfaces - the "almost black to dark gray" ladder
-  background:        '#09090B',
-  backgroundElevated:'#0F0F12',
-  surface:           '#151518',
-  surfaceElevated:   '#1C1C21',
-  surfacePressed:    '#232329',
-  surfaceOverlay:    'rgba(9,9,11,0.72)',
+  background: '#09090B',
+  backgroundElevated: '#0F0F12',
+  surface: '#151518',
+  surfaceElevated: '#1C1C21',
+  surfacePressed: '#232329',
+  surfaceOverlay: 'rgba(9,9,11,0.72)',
 
   // Borders - the main hierarchy tool in a dark UI where shadows barely read
-  border:            '#26262C',
-  borderStrong:      '#35353E',
-  borderAccent:      'rgba(76,141,255,0.40)',
+  border: '#26262C',
+  borderStrong: '#35353E',
+  borderAccent: 'rgba(76,141,255,0.40)',
 
   // Text
-  textPrimary:       '#F4F4F5',
-  textSecondary:     '#A1A1AA',
-  textTertiary:      '#6B6B76',
-  textDisabled:      '#4A4A53',
-  textInverse:       '#09090B',
+  textPrimary: '#F4F4F5',
+  textSecondary: '#A1A1AA',
+  textTertiary: '#6B6B76',
+  textDisabled: '#4A4A53',
+  textInverse: '#09090B',
 
   // Accent - interactive and brand. Blue. Used sparingly.
-  accent:            '#4C8DFF',
-  accentPressed:     '#3B78E0',
-  accentSubtle:      'rgba(76,141,255,0.14)',
-  accentText:        '#8FB6FF',
+  accent: '#4C8DFF',
+  accentPressed: '#3B78E0',
+  accentSubtle: 'rgba(76,141,255,0.14)',
+  accentText: '#8FB6FF',
 
   // Semantic
-  success:           '#3DDC84',   // set completed, PR achieved - NEVER used as brand accent
-  successSubtle:     'rgba(61,220,132,0.14)',
-  warning:           '#F5A524',
-  danger:            '#F2545B',
-  dangerSubtle:      'rgba(242,84,91,0.14)',
+  success: '#3DDC84', // set completed, PR achieved - NEVER used as brand accent
+  successSubtle: 'rgba(61,220,132,0.14)',
+  warning: '#F5A524',
+  danger: '#F2545B',
+  dangerSubtle: 'rgba(242,84,91,0.14)',
 
   // Set-type badges
-  setWarmup:         '#F5A524',
-  setNormal:         '#A1A1AA',
-  setDrop:           '#B48BFF',
-  setFailure:        '#F2545B',
-  setAssisted:       '#4CC9F0',
-  setPartial:        '#8B8B95',
+  setWarmup: '#F5A524',
+  setNormal: '#A1A1AA',
+  setDrop: '#B48BFF',
+  setFailure: '#F2545B',
+  setAssisted: '#4CC9F0',
+  setPartial: '#8B8B95',
 
   // Charts - 6 hues, checked for separation on #09090B and for deuteranopia
   chart: ['#4C8DFF', '#3DDC84', '#B48BFF', '#F5A524', '#4CC9F0', '#FF7AB6'],
-  chartGrid:         '#1F1F25',
-  chartAxis:         '#6B6B76',
+  chartGrid: '#1F1F25',
+  chartAxis: '#6B6B76',
 } as const;
 ```
 
@@ -1726,21 +1751,63 @@ primary button is blue because it is an action. Mixing them makes both meaningle
 ### 11.3 Spacing, radii, elevation
 
 ```ts
-export const space = { 0:0, px:1, 0.5:2, 1:4, 2:8, 3:12, 4:16, 5:20, 6:24, 7:28,
-                       8:32, 10:40, 12:48, 16:64, 20:80 } as const;
+export const space = {
+  0: 0,
+  px: 1,
+  0.5: 2,
+  1: 4,
+  2: 8,
+  3: 12,
+  4: 16,
+  5: 20,
+  6: 24,
+  7: 28,
+  8: 32,
+  10: 40,
+  12: 48,
+  16: 64,
+  20: 80,
+} as const;
 
-export const radius = { none:0, sm:8, md:12, lg:16, xl:20, '2xl':28, '3xl':36, full:9999 } as const;
+export const radius = {
+  none: 0,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  '2xl': 28,
+  '3xl': 36,
+  full: 9999,
+} as const;
 // Cards default to radius.xl (20) and sheets to radius['2xl'] (28) - the brief's
 // "large rounded corners", calibrated against Hevy and Linear.
 
 export const elevation = {
-  none:  {},
-  card:  { shadowColor:'#000', shadowOpacity:0.35, shadowRadius:12, shadowOffset:{width:0,height:4}, elevation:3 },
-  sheet: { shadowColor:'#000', shadowOpacity:0.50, shadowRadius:24, shadowOffset:{width:0,height:-6}, elevation:12 },
-  float: { shadowColor:'#000', shadowOpacity:0.45, shadowRadius:16, shadowOffset:{width:0,height:6}, elevation:8 },
+  none: {},
+  card: {
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  sheet: {
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: -6 },
+    elevation: 12,
+  },
+  float: {
+    shadowColor: '#000',
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
 } as const;
 
-export const hitSlop = { small: 8, default: 12 } as const;  // minimum 44x44 effective target
+export const hitSlop = { small: 8, default: 12 } as const; // minimum 44x44 effective target
 ```
 
 Honest note on shadows: on a near-black background a drop shadow is almost invisible.
@@ -1752,13 +1819,33 @@ where the separation from scrolling content matters.
 
 ```ts
 export const font = {
-  family: { sans: 'System', mono: 'SpaceMono' },   // system = SF Pro on iOS, Roboto on Android
-  weight: { regular:'400', medium:'500', semibold:'600', bold:'700' },
-  size:   { caption:12, footnote:13, subhead:14, callout:15, body:16, title3:18,
-            title2:22, title1:28, display:34, numeric:44 },
-  lineHeight: { caption:16, footnote:18, subhead:20, callout:20, body:22, title3:24,
-                title2:28, title1:34, display:41, numeric:48 },
-  tracking: { tight:-0.4, normal:0, wide:0.4 },
+  family: { sans: 'System', mono: 'SpaceMono' }, // system = SF Pro on iOS, Roboto on Android
+  weight: { regular: '400', medium: '500', semibold: '600', bold: '700' },
+  size: {
+    caption: 12,
+    footnote: 13,
+    subhead: 14,
+    callout: 15,
+    body: 16,
+    title3: 18,
+    title2: 22,
+    title1: 28,
+    display: 34,
+    numeric: 44,
+  },
+  lineHeight: {
+    caption: 16,
+    footnote: 18,
+    subhead: 20,
+    callout: 20,
+    body: 22,
+    title3: 24,
+    title2: 28,
+    title1: 34,
+    display: 41,
+    numeric: 48,
+  },
+  tracking: { tight: -0.4, normal: 0, wide: 0.4 },
 } as const;
 ```
 
@@ -1775,12 +1862,16 @@ Text variants exposed by `<Text variant="...">`: `display`, `title1`, `title2`,
 
 ```ts
 export const motion = {
-  duration: { instant:0, fast:120, normal:200, slow:320, deliberate:480 },
-  easing:   { standard: Easing.bezier(0.2, 0, 0, 1),
-              decelerate: Easing.out(Easing.cubic),
-              accelerate: Easing.in(Easing.cubic) },
-  spring:   { snappy: { damping:18, stiffness:260, mass:0.9 },
-              gentle: { damping:22, stiffness:140, mass:1 } },
+  duration: { instant: 0, fast: 120, normal: 200, slow: 320, deliberate: 480 },
+  easing: {
+    standard: Easing.bezier(0.2, 0, 0, 1),
+    decelerate: Easing.out(Easing.cubic),
+    accelerate: Easing.in(Easing.cubic),
+  },
+  spring: {
+    snappy: { damping: 18, stiffness: 260, mass: 0.9 },
+    gentle: { damping: 22, stiffness: 140, mass: 1 },
+  },
 } as const;
 ```
 
@@ -1794,14 +1885,14 @@ SQLite writes on the JS thread.
 `services/haptics` exposes semantic calls, not raw Expo constants, so the mapping is
 defined once:
 
-| Semantic call | Expo API | Used for |
-|---------------|----------|----------|
-| `haptics.setCompleted()` | `notificationAsync(Success)` | Completing a set (FR-13) |
-| `haptics.personalRecord()` | `notificationAsync(Success)` + a second impact 120 ms later | New PR |
-| `haptics.adjust()` | `impactAsync(Light)` | Quick-adjust +/- taps |
-| `haptics.select()` | `selectionAsync()` | Picker and segmented control changes |
-| `haptics.destructive()` | `notificationAsync(Warning)` | Swipe-to-delete crossing threshold |
-| `haptics.timerFinished()` | `notificationAsync(Success)` + platform vibration pattern | Rest timer expiry |
+| Semantic call              | Expo API                                                    | Used for                             |
+| -------------------------- | ----------------------------------------------------------- | ------------------------------------ |
+| `haptics.setCompleted()`   | `notificationAsync(Success)`                                | Completing a set (FR-13)             |
+| `haptics.personalRecord()` | `notificationAsync(Success)` + a second impact 120 ms later | New PR                               |
+| `haptics.adjust()`         | `impactAsync(Light)`                                        | Quick-adjust +/- taps                |
+| `haptics.select()`         | `selectionAsync()`                                          | Picker and segmented control changes |
+| `haptics.destructive()`    | `notificationAsync(Warning)`                                | Swipe-to-delete crossing threshold   |
+| `haptics.timerFinished()`  | `notificationAsync(Success)` + platform vibration pattern   | Rest timer expiry                    |
 
 All of them are no-ops when the user disables haptics in settings, checked inside the
 service rather than at every call site.
@@ -1810,78 +1901,78 @@ service rather than at every call site.
 
 **`components/ui` - primitives, zero domain knowledge**
 
-| Component | API surface (abbreviated) |
-|-----------|---------------------------|
-| `Text` | `variant`, `color?: 'primary'\|'secondary'\|'tertiary'\|'accent'\|'success'\|'danger'`, `numberOfLines`, `align` |
-| `Button` | `variant: 'primary'\|'secondary'\|'ghost'\|'destructive'`, `size: 'sm'\|'md'\|'lg'`, `label`, `icon?`, `iconPosition?`, `loading?`, `disabled?`, `fullWidth?`, `onPress` |
-| `IconButton` | `icon`, `size`, `variant`, `accessibilityLabel` (required), `onPress` |
-| `Chip` | `label`, `selected?`, `icon?`, `size`, `onPress?`, `onRemove?` |
-| `SegmentedControl<T>` | `options: {value:T,label:string}[]`, `value`, `onChange` |
-| `Card` | `variant: 'default'\|'elevated'\|'outlined'`, `padding?`, `onPress?` |
-| `Surface` | `level: 0\|1\|2\|3`, `radius?`, `padding?` |
-| `ListRow` | `title`, `subtitle?`, `leading?`, `trailing?`, `onPress?`, `showChevron?`, `destructive?` |
-| `TextField` | `label?`, `value`, `onChangeText`, `error?`, `helper?`, `leading?`, `trailing?`, `keyboardType`, `maxLength` |
-| `NumberField` | `value: number\|null`, `onChange`, `step`, `min`, `max`, `precision`, `unitSuffix?`, `selectOnFocus` |
-| `StepperField` | `NumberField` + `-`/`+` buttons with press-and-hold acceleration |
-| `Switch`, `Slider`, `Checkbox` | thin token-styled wrappers |
-| `Avatar` | `uri?`, `name`, `size`, `editable?` |
-| `Badge` | `label`, `tone: 'neutral'\|'accent'\|'success'\|'warning'\|'danger'`, `size` |
-| `StatTile` | `label`, `value`, `unit?`, `delta?`, `trend?: 'up'\|'down'\|'flat'`, `icon?`, `onPress?` |
-| `ProgressRing` | `progress: 0..1`, `size`, `strokeWidth`, `color`, `trackColor`, `children?` |
-| `Divider`, `Spacer`, `Section`, `SectionHeader` | layout primitives |
-| `BottomSheet` | `snapPoints`, `visible`, `onDismiss`, `children` |
-| `ConfirmDialog` | `title`, `message`, `confirmLabel`, `destructive?`, `onConfirm`, `onCancel` |
-| `Toast` / `UndoToast` | `message`, `actionLabel?`, `onAction?`, `duration` |
-| `EmptyState` | `illustration?`, `title`, `message`, `actionLabel?`, `onAction?` |
-| `Skeleton` | `width`, `height`, `radius`, shimmer via Reanimated |
-| `ErrorState` | `error`, `onRetry` |
+| Component                                       | API surface (abbreviated)                                                                                                                                                |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Text`                                          | `variant`, `color?: 'primary'\|'secondary'\|'tertiary'\|'accent'\|'success'\|'danger'`, `numberOfLines`, `align`                                                         |
+| `Button`                                        | `variant: 'primary'\|'secondary'\|'ghost'\|'destructive'`, `size: 'sm'\|'md'\|'lg'`, `label`, `icon?`, `iconPosition?`, `loading?`, `disabled?`, `fullWidth?`, `onPress` |
+| `IconButton`                                    | `icon`, `size`, `variant`, `accessibilityLabel` (required), `onPress`                                                                                                    |
+| `Chip`                                          | `label`, `selected?`, `icon?`, `size`, `onPress?`, `onRemove?`                                                                                                           |
+| `SegmentedControl<T>`                           | `options: {value:T,label:string}[]`, `value`, `onChange`                                                                                                                 |
+| `Card`                                          | `variant: 'default'\|'elevated'\|'outlined'`, `padding?`, `onPress?`                                                                                                     |
+| `Surface`                                       | `level: 0\|1\|2\|3`, `radius?`, `padding?`                                                                                                                               |
+| `ListRow`                                       | `title`, `subtitle?`, `leading?`, `trailing?`, `onPress?`, `showChevron?`, `destructive?`                                                                                |
+| `TextField`                                     | `label?`, `value`, `onChangeText`, `error?`, `helper?`, `leading?`, `trailing?`, `keyboardType`, `maxLength`                                                             |
+| `NumberField`                                   | `value: number\|null`, `onChange`, `step`, `min`, `max`, `precision`, `unitSuffix?`, `selectOnFocus`                                                                     |
+| `StepperField`                                  | `NumberField` + `-`/`+` buttons with press-and-hold acceleration                                                                                                         |
+| `Switch`, `Slider`, `Checkbox`                  | thin token-styled wrappers                                                                                                                                               |
+| `Avatar`                                        | `uri?`, `name`, `size`, `editable?`                                                                                                                                      |
+| `Badge`                                         | `label`, `tone: 'neutral'\|'accent'\|'success'\|'warning'\|'danger'`, `size`                                                                                             |
+| `StatTile`                                      | `label`, `value`, `unit?`, `delta?`, `trend?: 'up'\|'down'\|'flat'`, `icon?`, `onPress?`                                                                                 |
+| `ProgressRing`                                  | `progress: 0..1`, `size`, `strokeWidth`, `color`, `trackColor`, `children?`                                                                                              |
+| `Divider`, `Spacer`, `Section`, `SectionHeader` | layout primitives                                                                                                                                                        |
+| `BottomSheet`                                   | `snapPoints`, `visible`, `onDismiss`, `children`                                                                                                                         |
+| `ConfirmDialog`                                 | `title`, `message`, `confirmLabel`, `destructive?`, `onConfirm`, `onCancel`                                                                                              |
+| `Toast` / `UndoToast`                           | `message`, `actionLabel?`, `onAction?`, `duration`                                                                                                                       |
+| `EmptyState`                                    | `illustration?`, `title`, `message`, `actionLabel?`, `onAction?`                                                                                                         |
+| `Skeleton`                                      | `width`, `height`, `radius`, shimmer via Reanimated                                                                                                                      |
+| `ErrorState`                                    | `error`, `onRetry`                                                                                                                                                       |
 
 **`components/gestures`**
 
-| Component | API surface |
-|-----------|-------------|
-| `SwipeableRow` | `leftAction?: {icon,label,color,onTrigger}`, `rightAction?`, `threshold`, `hapticOnThreshold`, `children`. Reanimated + Gesture Handler; the row itself never re-renders during the gesture. |
-| `DraggableList<T>` | `data`, `renderItem`, `keyExtractor`, `onReorder(orderedIds)`, `dragHandle?: 'row'\|'handle'`, built on FlashList + Reanimated |
-| `PressScale` | wraps children in a 0.97 scale spring on press |
+| Component          | API surface                                                                                                                                                                                  |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SwipeableRow`     | `leftAction?: {icon,label,color,onTrigger}`, `rightAction?`, `threshold`, `hapticOnThreshold`, `children`. Reanimated + Gesture Handler; the row itself never re-renders during the gesture. |
+| `DraggableList<T>` | `data`, `renderItem`, `keyExtractor`, `onReorder(orderedIds)`, `dragHandle?: 'row'\|'handle'`, built on FlashList + Reanimated                                                               |
+| `PressScale`       | wraps children in a 0.97 scale spring on press                                                                                                                                               |
 
 **`components/charts` - the adapter that isolates Victory Native XL (ADR-0010)**
 
-| Component | API surface |
-|-----------|-------------|
-| `ChartCard` | `title`, `subtitle?`, `range?`, `onRangeChange?`, `isEmpty?`, `children` |
-| `LineChartView` | `data: SeriesPoint[]`, `xKey`, `yKeys`, `formatX`, `formatY`, `showArea?`, `showPoints?`, `onPointPress?` |
-| `BarChartView` | `data`, `xKey`, `yKey`, `barRadius`, `highlightIndex?` |
-| `StackedBarChartView` | for muscle-group volume |
-| `HeatmapView` | for the yearly activity map (custom, React Native SVG) |
-| `ChartTooltip` | shared tooltip surface, driven by a Reanimated shared value |
-| `ChartLegend` | `series: {label,color}[]` |
+| Component             | API surface                                                                                                                                                                                                                                                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ChartCard`           | `title`, `subtitle?`, `isPending`, `isEmpty`, `children` (P11's shipped shape moves range selection to one screen-level `StatRangeSelector` shared by every card, rather than a `range`/`onRangeChange` pair on each card individually - every chart on a Statistics screen shares one range, so a per-card selector would be redundant UI) |
+| `LineChartView`       | `data: SeriesPoint[]`, `xKey`, `yKeys`, `formatX`, `formatY`, `showArea?`, `showPoints?`, `onPointPress?`                                                                                                                                                                                                                                   |
+| `BarChartView`        | `data`, `xKey`, `yKey`, `barRadius`, `highlightIndex?`                                                                                                                                                                                                                                                                                      |
+| `StackedBarChartView` | for muscle-group volume - P11 shipped this as custom `View`-drawn proportional bars, not `victory-native`'s own `StackedBar` (its stacked keys are a static generic type parameter, which doesn't fit a runtime-variable category list like `body_part` slices without an `any` escape hatch)                                               |
+| `HeatmapView`         | for the yearly activity map (custom, React Native SVG)                                                                                                                                                                                                                                                                                      |
+| `ChartTooltip`        | shared tooltip surface, driven by a Reanimated shared value                                                                                                                                                                                                                                                                                 |
+| `ChartLegend`         | `series: {label,color}[]`                                                                                                                                                                                                                                                                                                                   |
 
 No screen imports `victory-native` directly. Replacing the chart library means
 rewriting six files in `components/charts`, not sixty screens.
 
 **Feature components (domain-aware, live inside their feature)**
 
-| Feature | Components |
-|---------|-----------|
-| `workout-logging` | `SetRow`, `SetTypeBadge`, `DropSetGroup`, `QuickAdjustBar`, `SessionExerciseCard`, `PreviousPerformancePanel`, `ProgressionHint`, `SupersetBracket`, `WorkoutHeader`, `AddExerciseSheet`, `WorkoutNotesSheet`, `ActiveWorkoutBanner`, `FinishWorkoutSheet` |
-| `rest-timer` | `RestTimerBar`, `RestTimerRing`, `RestTimerSettingsSheet`, `TimerPresetChips` |
-| `exercise-library` | `ExerciseListItem`, `ExerciseFilterSheet`, `MuscleTag`, `EquipmentTag`, `ExerciseImageGallery`, `InstructionsList`, `VideoListItem`, `CustomExerciseForm` |
-| `plans` | `PlanCard`, `PlanDayCard`, `PlanDayExerciseRow`, `PlanEditorHeader`, `SupersetGroupEditor` |
-| `records` | `PRBadge`, `PRListItem`, `PRTimeline` |
-| `statistics` | `VolumeChartCard`, `FrequencyChartCard`, `MuscleVolumeCard`, `ExerciseProgressionCard`, `StatRangeSelector` |
-| `body-metrics` | `MetricEntryRow`, `MetricChartCard`, `PhotoGrid`, `PhotoCompareView` |
-| `calendar` | `CalendarMonth`, `CalendarDayCell`, `CalendarLegend` |
+| Feature            | Components                                                                                                                                                                                                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `workout-logging`  | `SetRow`, `SetTypeBadge`, `DropSetGroup`, `QuickAdjustBar`, `SessionExerciseCard`, `PreviousPerformancePanel`, `ProgressionHint`, `SupersetBracket`, `WorkoutHeader`, `AddExerciseSheet`, `WorkoutNotesSheet`, `ActiveWorkoutBanner`, `FinishWorkoutSheet`                                                                                             |
+| `rest-timer`       | `RestTimerBar`, `RestTimerRing`, `RestTimerSettingsSheet`, `TimerPresetChips`                                                                                                                                                                                                                                                                          |
+| `exercise-library` | `ExerciseListItem`, `ExerciseFilterSheet`, `MuscleTag`, `EquipmentTag`, `ExerciseImageGallery`, `InstructionsList`, `VideoListItem`, `CustomExerciseForm`                                                                                                                                                                                              |
+| `plans`            | `PlanCard`, `PlanDayCard`, `PlanDayExerciseRow`, `PlanEditorHeader`, `SupersetGroupEditor`                                                                                                                                                                                                                                                             |
+| `records`          | `PRBadge`, `PRListItem`, `PRTimeline`                                                                                                                                                                                                                                                                                                                  |
+| `statistics`       | `VolumeChartCard`, `FrequencyChartCard`, `DurationTrendCard`, `MuscleVolumeCard`, `YearlyHeatmapCard`, `ExerciseProgressionCard`, `StatRangeSelector` (the last two beyond this table's original list - P11's plan; "duration trend" and "yearly activity heatmap" are both real roadmap acceptance items with no card named for them here originally) |
+| `body-metrics`     | `MetricEntryRow`, `MetricChartCard`, `PhotoGrid`, `PhotoCompareView`                                                                                                                                                                                                                                                                                   |
+| `calendar`         | `CalendarMonth`, `CalendarDayCell`, `CalendarLegend`                                                                                                                                                                                                                                                                                                   |
 
 Key component contracts worth pinning down now, because they are the ones the whole
 UX rides on:
 
 ```ts
 interface SetRowProps {
-  set: WorkoutSetView;                 // includes previousValue hints and prBadges
-  index: number;                       // 1-based display index, warmups excluded from numbering
-  trackingType: TrackingType;          // decides which fields render
+  set: WorkoutSetView; // includes previousValue hints and prBadges
+  index: number; // 1-based display index, warmups excluded from numbering
+  trackingType: TrackingType; // decides which fields render
   isFocused: boolean;
-  weightUnit: WeightUnit;              // display only; values stay canonical kg
+  weightUnit: WeightUnit; // display only; values stay canonical kg
   onFocus(setId: EntityId): void;
   onChangeWeight(setId: EntityId, kg: number | null): void;
   onChangeReps(setId: EntityId, reps: number | null): void;
@@ -1894,15 +1985,15 @@ interface SetRowProps {
 
 interface QuickAdjustBarProps {
   target: { setId: EntityId; weightKg: number | null; reps: number | null } | null;
-  weightIncrements: number[];          // display units, from settings; default [1.25, 2.5, 5, 10]
+  weightIncrements: number[]; // display units, from settings; default [1.25, 2.5, 5, 10]
   weightUnit: WeightUnit;
   onAdjustWeight(deltaInDisplayUnit: number): void;
   onAdjustReps(delta: number): void;
-  onOpenKeypad(): void;                // typing is always available, never required
+  onOpenKeypad(): void; // typing is always available, never required
 }
 
 interface RestTimerBarProps {
-  deadlineAt: number | null;           // absolute epoch ms - NOT a remaining-seconds number
+  deadlineAt: number | null; // absolute epoch ms - NOT a remaining-seconds number
   totalSeconds: number;
   onAdjust(deltaSeconds: number): void;
   onSkip(): void;
@@ -1918,13 +2009,13 @@ rather than left to implementation.
 
 ## 12. State management
 
-| Concern | Owner | Rationale |
-|---------|-------|-----------|
-| All persistent domain data | **SQLite** | Single source of truth, full stop |
-| Server-cache semantics over local async reads (caching, invalidation, background refetch, suspense) | **TanStack Query** | Local repositories are still async; Query gives dedup, staleness and invalidation for free |
-| Ephemeral UI state: focused set, filter panel state, sheet visibility, timer tick | **Zustand** | Cheap, no boilerplate, no re-render storms when sliced with selectors |
-| Boot-critical flags read before the DB opens | **MMKV** | Synchronous; used for `onboarding.completed`, `session.active`, `catalog.version` |
-| Form state | **React Hook Form + Zod** | Uncontrolled inputs mean typing a weight does not re-render the list |
+| Concern                                                                                             | Owner                     | Rationale                                                                                  |
+| --------------------------------------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------ |
+| All persistent domain data                                                                          | **SQLite**                | Single source of truth, full stop                                                          |
+| Server-cache semantics over local async reads (caching, invalidation, background refetch, suspense) | **TanStack Query**        | Local repositories are still async; Query gives dedup, staleness and invalidation for free |
+| Ephemeral UI state: focused set, filter panel state, sheet visibility, timer tick                   | **Zustand**               | Cheap, no boilerplate, no re-render storms when sliced with selectors                      |
+| Boot-critical flags read before the DB opens                                                        | **MMKV**                  | Synchronous; used for `onboarding.completed`, `session.active`, `catalog.version`          |
+| Form state                                                                                          | **React Hook Form + Zod** | Uncontrolled inputs mean typing a weight does not re-render the list                       |
 
 ### 12.1 Query key conventions and invalidation
 
@@ -1944,13 +2035,13 @@ rather than left to implementation.
 Invalidation is centralized in `features/*/hooks/invalidation.ts` rather than scattered
 across mutations:
 
-| Mutation | Invalidates |
-|----------|-------------|
-| `completeSet` / `updateSet` / `deleteSet` | nothing during the workout (Zustand owns the screen); on `finish` only |
-| `finishWorkout` | `['sessions',*]`, `['records',*]`, `['stats',*]`, `['calendar',*]`, `['home',*]`, `['exercises','history',*]` |
-| `setFavorite` | `['exercises','list',*]`, `['exercises','detail',id]` |
-| plan mutations | `['plans',*]`, `['home','dashboard']` |
-| import (any mode) | everything (`queryClient.clear()` then refetch) |
+| Mutation                                  | Invalidates                                                                                                   |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `completeSet` / `updateSet` / `deleteSet` | nothing during the workout (Zustand owns the screen); on `finish` only                                        |
+| `finishWorkout`                           | `['sessions',*]`, `['records',*]`, `['stats',*]`, `['calendar',*]`, `['home',*]`, `['exercises','history',*]` |
+| `setFavorite`                             | `['exercises','list',*]`, `['exercises','detail',id]`                                                         |
+| plan mutations                            | `['plans',*]`, `['home','dashboard']`                                                                         |
+| import (any mode)                         | everything (`queryClient.clear()` then refetch)                                                               |
 
 ### 12.2 The one deliberate exception: the active workout
 
@@ -1984,20 +2075,20 @@ There is no server, no account and no network traffic except user-initiated YouT
 link opens. That removes most of the usual attack surface and leaves a device-local
 threat model.
 
-| Concern | Position | Rationale |
-|---------|----------|-----------|
-| Authentication | None | Single-user local app (brief). Documented here so its absence is a decision, not an oversight. |
-| Authorization | None. Every operation is available to the device owner. | Same. If sync is ever added, this section becomes a real design task - noted in ADR-0004. |
-| Data at rest | Unencrypted SQLite inside the app sandbox | Fitness logs are not regulated health data. OS sandboxing already prevents other apps from reading the file on non-rooted devices. SQLCipher is not available in `expo-sqlite` without a custom build, and the cost (a custom dev client, key management with no account to derive a key from) buys little against the realistic threat. An optional biometric app lock is the post-1.0 answer if photos become a concern (D-08). |
-| Device backup | Database and photos are included in iCloud / Google backups by default | Data loss from a lost phone is by far the likelier harm than backup exfiltration. |
-| SQL injection | All queries parameterized; string interpolation into SQL is an ESLint error | Import filenames and user-entered exercise names both reach SQL. |
-| Untrusted input | Every external boundary (import files, deep links, catalog seed JSON) is parsed with Zod before it reaches a repository | A malformed import must fail validation, not corrupt the database. |
-| File paths | Import/export paths are confined to the app's document and cache directories; imported file names are never used as write paths | Prevents path traversal from a crafted archive. |
-| YouTube links | Opened with `expo-linking` / `WebBrowser`, never in a WebView with JS bridges | No reason to give a third-party page a bridge into the app. |
-| Progress photos | Never leave the device; excluded from CSV export; excluded from JSON export in v1 (D-06) | The most sensitive data the app holds. |
-| Crash reporting | Off by default; opt-in toggle; PII scrubbed if enabled (D-05). No external service is initialized unless the user turns it on. | A store-published app is hard to maintain blind, but the brief's "no cloud" stance is honored as the default. |
-| Store compliance | Privacy policy URL required; App Privacy / Data Safety declared as "no data collected" while crash reporting is off | Both stores require the declaration even for offline apps. |
-| Dependency supply chain | `npm audit` + Dependabot in CI; lockfile committed; no post-install scripts from unvetted packages | The only realistic remote code path into this app is a compromised dependency. |
+| Concern                 | Position                                                                                                                        | Rationale                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authentication          | None                                                                                                                            | Single-user local app (brief). Documented here so its absence is a decision, not an oversight.                                                                                                                                                                                                                                                                                                                                    |
+| Authorization           | None. Every operation is available to the device owner.                                                                         | Same. If sync is ever added, this section becomes a real design task - noted in ADR-0004.                                                                                                                                                                                                                                                                                                                                         |
+| Data at rest            | Unencrypted SQLite inside the app sandbox                                                                                       | Fitness logs are not regulated health data. OS sandboxing already prevents other apps from reading the file on non-rooted devices. SQLCipher is not available in `expo-sqlite` without a custom build, and the cost (a custom dev client, key management with no account to derive a key from) buys little against the realistic threat. An optional biometric app lock is the post-1.0 answer if photos become a concern (D-08). |
+| Device backup           | Database and photos are included in iCloud / Google backups by default                                                          | Data loss from a lost phone is by far the likelier harm than backup exfiltration.                                                                                                                                                                                                                                                                                                                                                 |
+| SQL injection           | All queries parameterized; string interpolation into SQL is an ESLint error                                                     | Import filenames and user-entered exercise names both reach SQL.                                                                                                                                                                                                                                                                                                                                                                  |
+| Untrusted input         | Every external boundary (import files, deep links, catalog seed JSON) is parsed with Zod before it reaches a repository         | A malformed import must fail validation, not corrupt the database.                                                                                                                                                                                                                                                                                                                                                                |
+| File paths              | Import/export paths are confined to the app's document and cache directories; imported file names are never used as write paths | Prevents path traversal from a crafted archive.                                                                                                                                                                                                                                                                                                                                                                                   |
+| YouTube links           | Opened with `expo-linking` / `WebBrowser`, never in a WebView with JS bridges                                                   | No reason to give a third-party page a bridge into the app.                                                                                                                                                                                                                                                                                                                                                                       |
+| Progress photos         | Never leave the device; excluded from CSV export; excluded from JSON export in v1 (D-06)                                        | The most sensitive data the app holds.                                                                                                                                                                                                                                                                                                                                                                                            |
+| Crash reporting         | Off by default; opt-in toggle; PII scrubbed if enabled (D-05). No external service is initialized unless the user turns it on.  | A store-published app is hard to maintain blind, but the brief's "no cloud" stance is honored as the default.                                                                                                                                                                                                                                                                                                                     |
+| Store compliance        | Privacy policy URL required; App Privacy / Data Safety declared as "no data collected" while crash reporting is off             | Both stores require the declaration even for offline apps.                                                                                                                                                                                                                                                                                                                                                                        |
+| Dependency supply chain | `npm audit` + Dependabot in CI; lockfile committed; no post-install scripts from unvetted packages                              | The only realistic remote code path into this app is a compromised dependency.                                                                                                                                                                                                                                                                                                                                                    |
 
 ---
 
@@ -2016,7 +2107,7 @@ threat model.
 ```
 
 The pyramid is deliberately fat in the middle. In an app with no backend, the
-repository layer *is* the backend, and its SQL is where correctness bugs will live.
+repository layer _is_ the backend, and its SQL is where correctness bugs will live.
 
 ### 14.2 Repository tests without a simulator
 
@@ -2033,15 +2124,15 @@ SQLite version and enabled features at app start in a dev-only diagnostic.
 
 ### 14.3 What gets tested where
 
-| Layer | Tooling | Coverage expectation |
-|-------|---------|----------------------|
-| Domain calculators (e1RM, volume, progression, streak, unit conversion, session totals) | Jest, table-driven, plus `fast-check` property tests for unit conversion round-trips and volume monotonicity | ~100% branch; these are the rules that silently corrupt history if wrong |
-| Repositories | Jest + in-memory SQLite, one file per repository, including constraint violations and transaction rollback | All public methods; every `UNIQUE`/`CHECK`/partial index asserted |
-| Migrations | Apply `001..N` to an empty DB, assert final schema equals `schema.sql`; apply to a seeded v1 fixture, assert no data loss | Every migration, forever |
-| Services | Jest with fake repositories; focus on transaction composition and error paths | All use cases |
-| Hooks | RNTL `renderHook` with a container of fakes | Query keys, invalidation, optimistic paths |
-| Components | RNTL; snapshot tests only for pure presentational primitives, behavioral tests everywhere else | `SetRow`, `QuickAdjustBar`, `SwipeableRow`, `RestTimerBar` are must-cover |
-| E2E | Maestro | Flows listed in 14.4 |
+| Layer                                                                                   | Tooling                                                                                                                   | Coverage expectation                                                      |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Domain calculators (e1RM, volume, progression, streak, unit conversion, session totals) | Jest, table-driven, plus `fast-check` property tests for unit conversion round-trips and volume monotonicity              | ~100% branch; these are the rules that silently corrupt history if wrong  |
+| Repositories                                                                            | Jest + in-memory SQLite, one file per repository, including constraint violations and transaction rollback                | All public methods; every `UNIQUE`/`CHECK`/partial index asserted         |
+| Migrations                                                                              | Apply `001..N` to an empty DB, assert final schema equals `schema.sql`; apply to a seeded v1 fixture, assert no data loss | Every migration, forever                                                  |
+| Services                                                                                | Jest with fake repositories; focus on transaction composition and error paths                                             | All use cases                                                             |
+| Hooks                                                                                   | RNTL `renderHook` with a container of fakes                                                                               | Query keys, invalidation, optimistic paths                                |
+| Components                                                                              | RNTL; snapshot tests only for pure presentational primitives, behavioral tests everywhere else                            | `SetRow`, `QuickAdjustBar`, `SwipeableRow`, `RestTimerBar` are must-cover |
+| E2E                                                                                     | Maestro                                                                                                                   | Flows listed in 14.4                                                      |
 
 ### 14.4 Mandatory E2E flows
 
@@ -2078,22 +2169,22 @@ review. This is stated explicitly because its absence is a decision.
 
 ### 15.1 Pipeline
 
-| Stage | Runs on | Contents |
-|-------|---------|----------|
-| Pre-commit (husky + lint-staged) | local | `prettier`, `eslint --fix` on staged files |
-| Commit message hook | local | `commitlint` with the Conventional Commits config - the brief mandates `feat:`, `fix:`, `refactor:`, `chore:` |
-| CI: verify | GitHub Actions, every push and PR | `tsc --noEmit`, `eslint`, `prettier --check`, `jest --coverage`, `npx expo-doctor`, `npm audit --audit-level=high` |
-| CI: benchmark | GitHub Actions, on PR to main | Section 14.5 thresholds |
-| Build: preview | EAS Build, on demand / PR label | Internal distribution (`.apk`, ad-hoc iOS) |
-| Build: production | EAS Build, on a tagged release | Store-ready `.aab` and `.ipa` |
-| E2E | Maestro Cloud or a local device, on release candidates | Section 14.4 flows |
-| Submit | EAS Submit | Google Play internal track, TestFlight |
-| OTA | EAS Update | JS-only fixes on the production channel; never used to ship a native module or a migration |
+| Stage                            | Runs on                                                | Contents                                                                                                           |
+| -------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| Pre-commit (husky + lint-staged) | local                                                  | `prettier`, `eslint --fix` on staged files                                                                         |
+| Commit message hook              | local                                                  | `commitlint` with the Conventional Commits config - the brief mandates `feat:`, `fix:`, `refactor:`, `chore:`      |
+| CI: verify                       | GitHub Actions, every push and PR                      | `tsc --noEmit`, `eslint`, `prettier --check`, `jest --coverage`, `npx expo-doctor`, `npm audit --audit-level=high` |
+| CI: benchmark                    | GitHub Actions, on PR to main                          | Section 14.5 thresholds                                                                                            |
+| Build: preview                   | EAS Build, on demand / PR label                        | Internal distribution (`.apk`, ad-hoc iOS)                                                                         |
+| Build: production                | EAS Build, on a tagged release                         | Store-ready `.aab` and `.ipa`                                                                                      |
+| E2E                              | Maestro Cloud or a local device, on release candidates | Section 14.4 flows                                                                                                 |
+| Submit                           | EAS Submit                                             | Google Play internal track, TestFlight                                                                             |
+| OTA                              | EAS Update                                             | JS-only fixes on the production channel; never used to ship a native module or a migration                         |
 
 **EAS Update and migrations are incompatible by nature and this is a real hazard.** An
 OTA update can ship JS that expects schema version N+1 without shipping the native
 binary. Rule: any release containing a migration ships as a store build, never as an
-OTA update, and the app refuses to run if `PRAGMA user_version` is *higher* than the
+OTA update, and the app refuses to run if `PRAGMA user_version` is _higher_ than the
 highest migration the bundle knows about (a downgraded JS bundle against an upgraded
 database), showing a "please update the app" screen instead of corrupting data.
 
@@ -2110,32 +2201,32 @@ closes with exactly one commit, per the stakeholder's process requirement.
 Without a backend there is no server-side telemetry, so observability is limited to
 what the device can report.
 
-| Capability | Approach |
-|------------|----------|
-| Crash reporting | Sentry via `@sentry/react-native` with the Expo config plugin, **opt-in**, default off, `sendDefaultPii: false`, breadcrumbs scrubbed of nicknames, notes and measurements. Decided per D-05: the SDK is never initialized while the toggle is off, so the shipped default makes no network calls at all. |
-| In-app diagnostics | `services/logging`: a 500-entry ring buffer in memory plus an optional rolling file in the cache directory. Settings offers "Export diagnostics" which shares a redacted text file. |
-| Database health | A dev-only screen showing schema version, row counts per table, database file size, integrity check (`PRAGMA integrity_check`), and the last migration applied. |
-| Performance | React Native's built-in `PerformanceObserver` marks around the set-completion path in dev builds; the section 14.5 benchmark suite in CI. |
-| User-facing recovery | Any repository error surfaces as a toast plus a logged entry; the app never silently swallows a failed write on the workout screen. |
+| Capability           | Approach                                                                                                                                                                                                                                                                                                  |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Crash reporting      | Sentry via `@sentry/react-native` with the Expo config plugin, **opt-in**, default off, `sendDefaultPii: false`, breadcrumbs scrubbed of nicknames, notes and measurements. Decided per D-05: the SDK is never initialized while the toggle is off, so the shipped default makes no network calls at all. |
+| In-app diagnostics   | `services/logging`: a 500-entry ring buffer in memory plus an optional rolling file in the cache directory. Settings offers "Export diagnostics" which shares a redacted text file.                                                                                                                       |
+| Database health      | A dev-only screen showing schema version, row counts per table, database file size, integrity check (`PRAGMA integrity_check`), and the last migration applied.                                                                                                                                           |
+| Performance          | React Native's built-in `PerformanceObserver` marks around the set-completion path in dev builds; the section 14.5 benchmark suite in CI.                                                                                                                                                                 |
+| User-facing recovery | Any repository error surfaces as a toast plus a logged entry; the app never silently swallows a failed write on the workout screen.                                                                                                                                                                       |
 
 ---
 
 ## 17. Risks
 
-| # | Risk | Likelihood | Impact | Mitigation |
-|---|------|-----------|--------|------------|
-| R-01 | Bundled exercise imagery pushes the binary past a comfortable download size (NFR-09) | High | Medium | Full bundling is a settled decision (D-01), so this is a budget to manage, not a choice to revisit. Build-time asset pipeline: downscale to 512 px WebP q70, two images per exercise, strip duplicates. Measured at P2 and again at P16. Escalation if over budget: tighten WebP quality, then one image per exercise. Lazy downloading stays off the table. |
-| R-02 | Curating Polish names and YouTube links for 800+ exercises is content work that dwarfs the code work | High | Medium | Overlay files with graceful fallback to English and "no videos yet". v1 targets the ~150 most-used exercises; the app is fully correct without full coverage. |
-| R-03 | Victory Native XL pulls in `@shopify/react-native-skia`, coupling chart rendering to Expo SDK and native build health | Medium | High | All chart usage behind `components/charts` (ADR-0010). A swap to `react-native-gifted-charts` (SVG-only, no Skia) touches six files. |
-| R-04 | Rest-timer accuracy under aggressive Android battery optimization (Doze, OEM killers) | High | High | Never rely on a JS timer or a background task. The deadline is persisted; the notification is scheduled with the OS; the UI recomputes remaining time from wall clock on every foreground. |
-| R-05 | An in-progress workout is lost despite FR-19 | Low | Critical | `synchronous=FULL`, per-set commits, no draft-only state, a dedicated E2E kill test, and a partial unique index preventing duplicate active sessions. |
-| R-06 | Statistics screens load entities into JS and stutter on large histories | Medium | High | Structural: `StatisticsRepository` returns DTOs from SQL aggregates and cannot return entities. Benchmarked in CI. |
-| R-07 | An OTA update lands JS expecting a schema the installed binary does not have | Medium | Critical | Migrations never ship via OTA; forward-version guard screen (section 15.1). |
-| R-08 | Import corrupts an existing database | Low | Critical | Whole-import transaction, Zod validation before any write, mandatory automatic JSON backup written before a `replace`-mode import. |
-| R-09 | Timezone and DST bugs corrupt streaks and the calendar | Medium | Medium | `local_date` computed at write time and never recomputed; all streak logic is a pure function over date strings, unit-tested across DST boundaries. |
-| R-10 | Free Exercise DB data quality (nullable `force`/`mechanic`/`equipment`, duplicate images) | Certain | Low | Normalization happens in the build-time seed script, not at runtime; nullable columns are modeled as nullable and the UI omits missing facets. |
-| R-11 | Scope: the brief's feature list is roughly 3-4x a typical MVP | Certain | High | `docs/ROADMAP.md` draws an explicit MVP line at P10 and defers statistics, calendar, measurements and data transfer behind it. |
-| R-12 | Solo-developer bus factor and long build sequence | Certain | Medium | One feature per commit, every feature independently shippable, architecture documented up front so context survives gaps between sessions. |
+| #    | Risk                                                                                                                  | Likelihood | Impact   | Mitigation                                                                                                                                                                                                                                                                                                                                                   |
+| ---- | --------------------------------------------------------------------------------------------------------------------- | ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| R-01 | Bundled exercise imagery pushes the binary past a comfortable download size (NFR-09)                                  | High       | Medium   | Full bundling is a settled decision (D-01), so this is a budget to manage, not a choice to revisit. Build-time asset pipeline: downscale to 512 px WebP q70, two images per exercise, strip duplicates. Measured at P2 and again at P16. Escalation if over budget: tighten WebP quality, then one image per exercise. Lazy downloading stays off the table. |
+| R-02 | Curating Polish names and YouTube links for 800+ exercises is content work that dwarfs the code work                  | High       | Medium   | Overlay files with graceful fallback to English and "no videos yet". v1 targets the ~150 most-used exercises; the app is fully correct without full coverage.                                                                                                                                                                                                |
+| R-03 | Victory Native XL pulls in `@shopify/react-native-skia`, coupling chart rendering to Expo SDK and native build health | Medium     | High     | All chart usage behind `components/charts` (ADR-0010). A swap to `react-native-gifted-charts` (SVG-only, no Skia) touches six files.                                                                                                                                                                                                                         |
+| R-04 | Rest-timer accuracy under aggressive Android battery optimization (Doze, OEM killers)                                 | High       | High     | Never rely on a JS timer or a background task. The deadline is persisted; the notification is scheduled with the OS; the UI recomputes remaining time from wall clock on every foreground.                                                                                                                                                                   |
+| R-05 | An in-progress workout is lost despite FR-19                                                                          | Low        | Critical | `synchronous=FULL`, per-set commits, no draft-only state, a dedicated E2E kill test, and a partial unique index preventing duplicate active sessions.                                                                                                                                                                                                        |
+| R-06 | Statistics screens load entities into JS and stutter on large histories                                               | Medium     | High     | Structural: `StatisticsRepository` returns DTOs from SQL aggregates and cannot return entities. Benchmarked in CI.                                                                                                                                                                                                                                           |
+| R-07 | An OTA update lands JS expecting a schema the installed binary does not have                                          | Medium     | Critical | Migrations never ship via OTA; forward-version guard screen (section 15.1).                                                                                                                                                                                                                                                                                  |
+| R-08 | Import corrupts an existing database                                                                                  | Low        | Critical | Whole-import transaction, Zod validation before any write, mandatory automatic JSON backup written before a `replace`-mode import.                                                                                                                                                                                                                           |
+| R-09 | Timezone and DST bugs corrupt streaks and the calendar                                                                | Medium     | Medium   | `local_date` computed at write time and never recomputed; all streak logic is a pure function over date strings, unit-tested across DST boundaries.                                                                                                                                                                                                          |
+| R-10 | Free Exercise DB data quality (nullable `force`/`mechanic`/`equipment`, duplicate images)                             | Certain    | Low      | Normalization happens in the build-time seed script, not at runtime; nullable columns are modeled as nullable and the UI omits missing facets.                                                                                                                                                                                                               |
+| R-11 | Scope: the brief's feature list is roughly 3-4x a typical MVP                                                         | Certain    | High     | `docs/ROADMAP.md` draws an explicit MVP line at P10 and defers statistics, calendar, measurements and data transfer behind it.                                                                                                                                                                                                                               |
+| R-12 | Solo-developer bus factor and long build sequence                                                                     | Certain    | Medium   | One feature per commit, every feature independently shippable, architecture documented up front so context survives gaps between sessions.                                                                                                                                                                                                                   |
 
 ---
 
@@ -2150,20 +2241,20 @@ makes it reviewable later.
 Identifiers changed from `OQ-nn` (open question) to `D-nn` (decision) and retain the
 same numbering, so earlier references remain traceable.
 
-| # | Question raised | Decision | Where implemented | ADR |
-|---|-----------------|----------|-------------------|-----|
-| D-01 | Exercise imagery: bundle all ~1,600 images for true offline use, or bundle thumbnails and lazy-download the gallery? | **Bundle everything** - all thumbnails and gallery images, downscaled to 512 px WebP (~30-55 MB). No network-dependent gallery path exists or will be added. | P2 | ADR-0011 |
-| D-02 | Assisted sets: subtract assistance from bodyweight to derive a real load, or exclude from volume and PR? | **Exclude from volume and PR** in v1. Assisted sets still save and count toward the set count. The roadmap is explicitly **not** reordered to pull body metrics earlier; bodyweight-relative volume stays post-1.0 and is a read-time change when it comes. | P6 | ADR-0006 |
-| D-03 | Supersets: display grouping only, or does it change rest-timer behavior? | **Grouping plus timer behavior**: completing a set of a non-terminal member starts no timer; completing a set of the last member in the group does. | P7 | ADR-0006 |
-| D-04 | Estimated calories in the workout summary at all? | **Include**, labeled "estimate", **off by default** in settings. | P9 | ADR-0018 |
-| D-05 | Crash reporting: opt-in Sentry, or strictly zero third-party services? | **Opt-in, default off.** No external service is initialized unless the user enables it, so the shipped default is zero external services. PII scrubbed when enabled. | P16 (declarations), wired at P0 | ADR-0014 |
-| D-06 | Progress photos in JSON export: exclude, or base64-embed? | **Exclude in v1**, with an explicit warning on the export screen and a separate "Share progress photos" action. A streaming zip export is post-1.0. | P14 | ADR-0012, ADR-0013 |
-| D-07 | CSV import: own format only, or best-effort Strong/Hevy import? | **Own format only in v1.** Third-party dialects are a post-1.0 feature over the same pipeline. | P14 | ADR-0013 |
-| D-08 | Optional biometric app lock? | **Post-1.0 backlog.** | - | - |
-| D-09 | Offer RIR as an alternative to RPE? | **RPE only in v1.** RIR is backlog. | P6 | - |
-| D-10 | Plate calculator in v1? | **Out of v1**, top post-1.0 backlog candidate. | - | - |
-| D-11 | UI language: English, Polish, or device-language? | **English UI for v1**, with Polish exercise names per FR-04. i18n infrastructure lands in **P1** so a Polish translation file can be added later with no refactor. No Polish UI is built for v1. | P1 | - |
-| D-12 | Auto-include bodyweight in volume for calisthenics? | **No auto-inclusion in v1.** Added weight is logged explicitly. Needs reliable bodyweight history first. | - | - |
+| #    | Question raised                                                                                                      | Decision                                                                                                                                                                                                                                                    | Where implemented               | ADR                |
+| ---- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------ |
+| D-01 | Exercise imagery: bundle all ~1,600 images for true offline use, or bundle thumbnails and lazy-download the gallery? | **Bundle everything** - all thumbnails and gallery images, downscaled to 512 px WebP (~30-55 MB). No network-dependent gallery path exists or will be added.                                                                                                | P2                              | ADR-0011           |
+| D-02 | Assisted sets: subtract assistance from bodyweight to derive a real load, or exclude from volume and PR?             | **Exclude from volume and PR** in v1. Assisted sets still save and count toward the set count. The roadmap is explicitly **not** reordered to pull body metrics earlier; bodyweight-relative volume stays post-1.0 and is a read-time change when it comes. | P6                              | ADR-0006           |
+| D-03 | Supersets: display grouping only, or does it change rest-timer behavior?                                             | **Grouping plus timer behavior**: completing a set of a non-terminal member starts no timer; completing a set of the last member in the group does.                                                                                                         | P7                              | ADR-0006           |
+| D-04 | Estimated calories in the workout summary at all?                                                                    | **Include**, labeled "estimate", **off by default** in settings.                                                                                                                                                                                            | P9                              | ADR-0018           |
+| D-05 | Crash reporting: opt-in Sentry, or strictly zero third-party services?                                               | **Opt-in, default off.** No external service is initialized unless the user enables it, so the shipped default is zero external services. PII scrubbed when enabled.                                                                                        | P16 (declarations), wired at P0 | ADR-0014           |
+| D-06 | Progress photos in JSON export: exclude, or base64-embed?                                                            | **Exclude in v1**, with an explicit warning on the export screen and a separate "Share progress photos" action. A streaming zip export is post-1.0.                                                                                                         | P14                             | ADR-0012, ADR-0013 |
+| D-07 | CSV import: own format only, or best-effort Strong/Hevy import?                                                      | **Own format only in v1.** Third-party dialects are a post-1.0 feature over the same pipeline.                                                                                                                                                              | P14                             | ADR-0013           |
+| D-08 | Optional biometric app lock?                                                                                         | **Post-1.0 backlog.**                                                                                                                                                                                                                                       | -                               | -                  |
+| D-09 | Offer RIR as an alternative to RPE?                                                                                  | **RPE only in v1.** RIR is backlog.                                                                                                                                                                                                                         | P6                              | -                  |
+| D-10 | Plate calculator in v1?                                                                                              | **Out of v1**, top post-1.0 backlog candidate.                                                                                                                                                                                                              | -                               | -                  |
+| D-11 | UI language: English, Polish, or device-language?                                                                    | **English UI for v1**, with Polish exercise names per FR-04. i18n infrastructure lands in **P1** so a Polish translation file can be added later with no refactor. No Polish UI is built for v1.                                                            | P1                              | -                  |
+| D-12 | Auto-include bodyweight in volume for calisthenics?                                                                  | **No auto-inclusion in v1.** Added weight is logged explicitly. Needs reliable bodyweight history first.                                                                                                                                                    | -                               | -                  |
 
 ### Consequences of D-11 for P1
 
@@ -2177,27 +2268,26 @@ exactly the refactor this decision is designed to avoid. The Definition of Done 
 
 ## 19. Document map
 
-| Document | Contents |
-|----------|----------|
-| `docs/PRODUCT-BRIEF.md` | Stakeholder brief, verbatim. Product source of truth. |
-| `docs/ARCHITECTURE.md` | This document. |
-| `docs/adr/0001-clean-architecture-feature-slices.md` | Layering and module boundaries |
-| `docs/adr/0002-sqlite-schema-and-identifiers.md` | UUIDv7 keys, timestamps, units, soft delete |
-| `docs/adr/0003-exercise-search-with-fts5.md` | Search implementation |
-| `docs/adr/0004-repository-contracts-and-sync-readiness.md` | What sync will need and what is deferred |
-| `docs/adr/0005-crash-safe-active-workout.md` | FR-19 implementation |
-| `docs/adr/0006-set-types-supersets-drop-sets.md` | Set-type representation |
-| `docs/adr/0007-expo-router-navigation-model.md` | Route graph and full-screen workout |
-| `docs/adr/0008-state-management-boundaries.md` | SQLite / Query / Zustand / MMKV split |
-| `docs/adr/0009-units-and-measurement-storage.md` | Canonical units and conversion |
-| `docs/adr/0010-charting-library.md` | Victory Native XL, alternatives, adapter |
-| `docs/adr/0011-exercise-catalog-seeding.md` | Free Exercise DB pipeline, images, PL overlay, videos |
-| `docs/adr/0012-progress-photo-storage.md` | FileSystem layout and relative paths |
-| `docs/adr/0013-export-import-formats.md` | JSON backup vs CSV interchange |
-| `docs/adr/0014-testing-and-observability.md` | Test seams and crash reporting stance |
-| `docs/adr/0015-progressive-overload-algorithm.md` | e1RM formula and progression rules |
-| `docs/adr/0016-shared-notification-scheduler.md` | Why P17 finally implements `services/notifications/NotificationScheduler`, and why rest-timer's own P7 wrapper is left as-is |
-| `docs/adr/0017-daily-goal-reminder-scheduling.md` | Weekday bitmask, derived completion state, today-only interval reminder re-arming |
-| `docs/adr/0018-estimated-calories-formula.md` | Flat kcal/min constant vs. MET x bodyweight for the workout summary's calorie estimate |
-| `docs/ROADMAP.md` | MVP scope, phased build order, backlog |
-
+| Document                                                   | Contents                                                                                                                     |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `docs/PRODUCT-BRIEF.md`                                    | Stakeholder brief, verbatim. Product source of truth.                                                                        |
+| `docs/ARCHITECTURE.md`                                     | This document.                                                                                                               |
+| `docs/adr/0001-clean-architecture-feature-slices.md`       | Layering and module boundaries                                                                                               |
+| `docs/adr/0002-sqlite-schema-and-identifiers.md`           | UUIDv7 keys, timestamps, units, soft delete                                                                                  |
+| `docs/adr/0003-exercise-search-with-fts5.md`               | Search implementation                                                                                                        |
+| `docs/adr/0004-repository-contracts-and-sync-readiness.md` | What sync will need and what is deferred                                                                                     |
+| `docs/adr/0005-crash-safe-active-workout.md`               | FR-19 implementation                                                                                                         |
+| `docs/adr/0006-set-types-supersets-drop-sets.md`           | Set-type representation                                                                                                      |
+| `docs/adr/0007-expo-router-navigation-model.md`            | Route graph and full-screen workout                                                                                          |
+| `docs/adr/0008-state-management-boundaries.md`             | SQLite / Query / Zustand / MMKV split                                                                                        |
+| `docs/adr/0009-units-and-measurement-storage.md`           | Canonical units and conversion                                                                                               |
+| `docs/adr/0010-charting-library.md`                        | Victory Native XL, alternatives, adapter                                                                                     |
+| `docs/adr/0011-exercise-catalog-seeding.md`                | Free Exercise DB pipeline, images, PL overlay, videos                                                                        |
+| `docs/adr/0012-progress-photo-storage.md`                  | FileSystem layout and relative paths                                                                                         |
+| `docs/adr/0013-export-import-formats.md`                   | JSON backup vs CSV interchange                                                                                               |
+| `docs/adr/0014-testing-and-observability.md`               | Test seams and crash reporting stance                                                                                        |
+| `docs/adr/0015-progressive-overload-algorithm.md`          | e1RM formula and progression rules                                                                                           |
+| `docs/adr/0016-shared-notification-scheduler.md`           | Why P17 finally implements `services/notifications/NotificationScheduler`, and why rest-timer's own P7 wrapper is left as-is |
+| `docs/adr/0017-daily-goal-reminder-scheduling.md`          | Weekday bitmask, derived completion state, today-only interval reminder re-arming                                            |
+| `docs/adr/0018-estimated-calories-formula.md`              | Flat kcal/min constant vs. MET x bodyweight for the workout summary's calorie estimate                                       |
+| `docs/ROADMAP.md`                                          | MVP scope, phased build order, backlog                                                                                       |
