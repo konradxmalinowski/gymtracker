@@ -76,6 +76,12 @@ export {
   type SessionTotalsSetInput,
 } from './domain/SessionTotals';
 export { CALORIES_PER_MINUTE, estimatedCalories } from './domain/EstimatedCalories';
+/**
+ * P10: `home`'s `LastWorkoutCard`/`WeeklySummaryCard` need this - added here
+ * rather than left duplicated (`features/home/components/formatHomeDuration.ts`
+ * used to reimplement it byte-for-byte before this export existed).
+ */
+export { formatSessionDurationSeconds } from './components/formatSessionDuration';
 export {
   assignSetDisplayNumbers,
   orderSetsForDisplay,

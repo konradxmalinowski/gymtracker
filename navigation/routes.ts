@@ -102,6 +102,17 @@ export const routes = {
       pathname: '/(modals)/rest-timer-settings',
       params: { sessionExerciseId },
     }),
+    /**
+     * P10: Home's active-plan card "change day" action - picks a different
+     * day than the one `nextSuggestedPlanDay` suggested. Same "plain id as a
+     * route param" shape as `restTimerSettings`, not `exercisePicker`'s
+     * store: the result here is a single `planDayId` picked once, not an
+     * unbounded list.
+     */
+    planDayPicker: (planId: string): Href => ({
+      pathname: '/(modals)/plan-day-picker',
+      params: { planId },
+    }),
   },
 
   /**

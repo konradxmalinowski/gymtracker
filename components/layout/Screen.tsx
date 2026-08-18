@@ -1,5 +1,11 @@
-import type { PropsWithChildren } from 'react';
-import { ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
+import type { PropsWithChildren, ReactElement } from 'react';
+import {
+  ScrollView,
+  View,
+  type RefreshControlProps,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 
 import { color, space } from '@/theme/tokens';
@@ -9,6 +15,14 @@ export interface ScreenProps extends PropsWithChildren {
   padded?: boolean | undefined;
   edges?: readonly Edge[] | undefined;
   style?: StyleProp<ViewStyle> | undefined;
+  /**
+   * P10: pull-to-refresh, `ScrollView`'s own `refreshControl` prop passed
+   * straight through - Home is the first screen in the app needing it.
+   * Ignored when `scroll` is false (there is no `ScrollView` to attach it
+   * to); build a real `<RefreshControl refreshing={...} onRefresh={...} />`
+   * at the call site, this prop just forwards it.
+   */
+  refreshControl?: ReactElement<RefreshControlProps> | undefined;
   testID?: string | undefined;
 }
 
@@ -22,6 +36,7 @@ export function Screen({
   padded = true,
   edges = ['top', 'bottom'],
   style,
+  refreshControl,
   testID,
   children,
 }: ScreenProps) {
@@ -41,6 +56,7 @@ export function Screen({
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={padded ? { paddingHorizontal: space[4] } : undefined}
+          refreshControl={refreshControl}
         >
           {children}
         </ScrollView>
