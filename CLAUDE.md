@@ -9,8 +9,10 @@ reference, not a replacement. Section numbers below refer to `docs/ARCHITECTURE.
 P0 (project foundation), P1 (design system and UI primitives), P2 (persistence
 foundation), P3 (onboarding, profile and core settings), P4 (exercise library), P5
 (workout plans), P6 (workout logging), P7 (rest timer), P8 (progressive overload and
-personal records), P9 (workout summary and history), and P10 (home dashboard) are
-complete - `docs/ROADMAP.md`'s MVP line is now closed. P8 (`feat/p8-progressive-overload`) was cut from
+personal records), P9 (workout summary and history), P10 (home dashboard), and P11
+(statistics and charts) are complete - `docs/ROADMAP.md`'s MVP line closed at P10, and
+P11 is the first phase past it (v1.1-v1.3, "Statistics, calendar, body metrics, data
+transfer"). P8 (`feat/p8-progressive-overload`) was cut from
 `main` before P7's PR merged - a documented decision made when P8 was kicked off so
 the two phases could be reviewed independently (see
 `plans/2026-08-11-p8-progressive-overload.md`'s "Branch note") - so the two branches'
@@ -19,11 +21,11 @@ overlapping files (`WorkoutSessionRepository.ts`/`SqliteWorkoutSessionRepository
 this file and `docs/architecture-snapshot.md`) needed a merge; that merge is reflected
 throughout this file as of this update, not left as an open branch note. The
 `onboarding`, `profile`, `exercise-library`, `plans`, `workout-logging`, `rest-timer`,
-`records`, and `home` features now have real implementations (screens, hooks, services,
-repository where applicable - `rest-timer` itself owns no database table and
-therefore no repository; `records` does, see below; `home` has a repository but no
-accompanying service, see below); the remaining four features
-(`statistics`, `body-metrics`, `calendar`, `data-transfer`) are still empty skeleton
+`records`, `home`, and `statistics` features now have real implementations (screens,
+hooks, services, repository where applicable - `rest-timer` itself owns no database
+table and therefore no repository; `records` does, see below; `home` and `statistics`
+each have a repository but no accompanying service, see below); the remaining three
+features (`body-metrics`, `calendar`, `data-transfer`) are still empty skeleton
 directories (components/hooks/screens/services/domain/repository/types/index.ts
 subfolders, no implementation) awaiting their own phase.
 
@@ -34,9 +36,9 @@ query resolves, then gates to `/onboarding` (no profile yet) or the tab bar.
 `app/index.tsx` no longer exists - the Home screen moved to `app/(tabs)/index.tsx`
 under a 5-tab layout (`app/(tabs)/_layout.tsx`: Home, Plans, Exercises, Stats,
 Profile) using `@expo/vector-icons` (Ionicons; see "Known gaps" history below - this
-resolved the prior no-icon-library gap). The Stats tab is the only one still
-rendering a genuine "not built yet" empty state (its feature lands in P11), not a
-stub - Plans joined Exercises as a real nested Stack navigator in P5 (see below).
+resolved the prior no-icon-library gap). Every tab now renders real content - Plans
+joined Exercises as a real nested Stack navigator in P5, Stats joined them in P11 (see
+below); none of the five tabs render a "not built yet" placeholder any longer.
 Onboarding (`app/onboarding/index.tsx` + `features/onboarding/*`) collects a required
 nickname and an optional avatar via `expo-image-picker`, is skippable, and handles
 permission denial gracefully. All navigation goes through the typed helpers in
@@ -938,6 +940,165 @@ phase since P4 has flagged (dev-client build remains deferred per the user's own
 standing preference, noted here for continuity rather than silently repeated without
 comment).
 
+**Statistics and charts (P11):** the Stats tab is no longer P6's placeholder "not built
+yet" empty state - it is a real, composed dashboard, and this is the first phase past
+`docs/ROADMAP.md`'s v1.0 MVP line. `features/statistics/` fills the P2-era empty
+skeleton directory, built to the same "read model, no accompanying service" shape P8's
+`ExerciseHistoryRepository` and P10's `HomeDashboardRepository` established.
+`features/statistics/domain/{statRange.ts,dateRangeBuckets.ts,localDate.ts,
+exerciseProgressionReducer.ts,yearlyHeatmapBinning.ts}` are pure calculators:
+`resolveStatRange` maps the four-option range selector (`4w`/`3m`/`1y`/`all`) to
+concrete `[localDateFrom, localDateTo]` bounds plus a bucket granularity
+(`day`/`week`/`week`/`month` respectively - Step 0 decision 1); `dateRangeBuckets.ts`
+generates gap-free bucket boundaries and re-buckets already-day-level SQL aggregates
+in JS (never a second, independently-hand-written SQL date-bucket expression - the
+file's own header comment explains why this is not the "load-all-then-sum-in-JS"
+pattern CQRS-lite forbids); `exerciseProgressionReducer.ts` reduces raw per-set rows
+into one `SeriesPoint` per bucket per metric (`top_set`/`e1rm`/`volume` - `top_set`/
+`e1rm` return `null`, not `0`, for a bucket with no record-eligible set, matching
+ADR-0015's "shows nothing rather than a number" philosophy); `yearlyHeatmapBinning.ts`
+gap-fills a full calendar year and quantile-bins each trained day into levels 1-4 over
+the year's trained-day volumes only (Step 0 decision 3, GitHub-contribution-graph
+style). `localDate.ts` intentionally duplicates `home`'s `StreakCalculator.ts`
+calendar-math primitives rather than importing them - the module dependency graph
+forbids `statistics` depending on `home`, and both files are simply a transcription of
+the same timezone-free `YYYY-MM-DD` arithmetic, the same reasoning
+`features/records/domain/Estimated1RM.ts` already gives for its own deliberately
+duplicated `SET_TYPES` union.
+
+`features/statistics/repository/{StatisticsRepository.ts,SqliteStatisticsRepository.ts}`
+ships six of section 8.3's originally-planned eight methods -
+`volumeByPeriod`/`sessionFrequency`/`durationTrend`/`muscleGroupVolume`/
+`exerciseProgression`/`yearlyHeatmap` - deliberately never implementing
+`weeklySummary()`/`streak()` at all. This resolves `docs/adr/
+0019-home-dashboard-read-model.md`'s open migration note (added when P10 built its own
+`HomeDashboardRepository` rather than pulling `StatisticsRepository` forward a phase
+early): Home keeps its lightweight read model **permanently**, since neither the
+roadmap's P11 scope nor its acceptance criteria call for either method on the
+Statistics tab, and migrating already-shipped, tested P10 code for zero user-visible
+benefit was rejected as unwarranted churn - see that ADR's own "P11 resolution"
+section for the full reasoning. Every date-bounded method takes concrete
+`[localDateFrom, localDateTo]` + `bucket` rather than a `StatRange` enum (range
+resolution is a hooks-layer concern, keeping the repository as settings-free as every
+other repository in the codebase) - except `exerciseProgression`'s `e1rm` metric,
+which resolves `oneRm.formula` from settings _internally_, reusing
+`SqlitePersonalRecordRepository.resolveFormula`'s exact pattern (ADR-0015's "one
+module owns every training formula," extended to this second repository since both
+legitimately need the same setting). This is the app's second `statistics -> records`-
+class dependency (a pure domain-calculator reuse -
+`estimated1RM`/`isRecordEligibleSetType` - not a write-service call), a documented
+addition to `docs/ARCHITECTURE.md` section 9.1 alongside the already-established
+`records -> exercise-library` edge. `muscleGroupVolume` groups by the already-
+denormalized `exercise.body_part` column (not a fresh `exercise_muscle` join),
+primary-muscle-only with no double counting (Step 0 decision 2); a `NULL` `body_part`
+(a custom exercise with no muscle selected) buckets under a synthesized `'other'`
+slice rather than silently vanishing. `services/container.ts` gained
+`statisticsRepository`, the eighth feature-repository pair after P3-P10's profile/
+exercise-library/plans/workout-logging/records/exercise-history/home ones.
+
+`components/charts/` is real as of this phase - the ADR-0010 Victory Native XL
+adapter, declared since P0 as an empty `.gitkeep` skeleton, is now `ChartCard`,
+`LineChartView`, `BarChartView`, `StackedBarChartView`, `HeatmapView`, `ChartTooltip`,
+`ChartLegend`, and `types.ts`. Two deliberate deviations from ADR-0010's original
+sketch, both plan-decided at kickoff: `StackedBarChartView` is custom `View`-drawn
+proportional bars rather than `victory-native`'s own `StackedBar` (its stacked keys
+are a static generic type parameter, which does not fit a runtime-variable category
+list like `body_part` slices without an `any` escape hatch this project's Definition
+of Done forbids); and chart interactivity was trimmed to static rendering for this
+pass - no drag-to-inspect tooltip gesture (`ChartTooltip` still exists as a static
+positioned label, satisfying the 8-file adapter surface; wiring it to
+`useChartPressState` is a real, scoped follow-up, not attempted half-finished here).
+`ChartCard`'s shipped shape also moves range selection to one screen-level
+`StatRangeSelector` shared by every card rather than a `range`/`onRangeChange` pair
+per card (ARCHITECTURE.md section 10's original table) - every chart on a Statistics
+screen shares one range, so a per-card selector would be redundant UI.
+
+The UI layer: `features/statistics/components/` has seven cards -
+`VolumeChartCard`/`FrequencyChartCard`/`MuscleVolumeCard`/`ExerciseProgressionCard`/
+`StatRangeSelector` from section 10's original list, plus `DurationTrendCard` and
+`YearlyHeatmapCard` beyond it (the roadmap's own "duration trend" and "yearly activity
+heatmap" acceptance items have no card named for them in that table, an oversight
+this phase's plan corrects rather than silently reproduces). `useStatisticsDashboard`
+composes `volumeByPeriod`/`sessionFrequency`/`durationTrend`/`muscleGroupVolume`/
+`yearlyHeatmap` into one `useQuery` under `['stats','dashboard',range]` (the query-key
+shape ARCHITECTURE.md section 12.1 already anticipated) - the same "one query, one
+`isPending`/`isError`/`refetch`" acceptance criterion P10's `useHomeDashboard`
+established for Home, now reused for Stats. `useExerciseProgression` backs both
+`ExerciseProgressionScreen` (`stats/exercise/[exerciseId]`, reached from the
+Statistics tab) and `ExerciseDetailScreen`'s third slot, `progressChartSlot` - empty
+since P4, tracked in this file's own prose as "pending a future statistics/charting
+phase," which this phase is. `app/(tabs)/stats/` is restructured into a real nested
+Stack navigator exactly the way P4/P5 restructured Exercises/Plans
+(`app/(tabs)/_layout.tsx`'s tab registration: `"stats/index"` -> `"stats"`) - the last
+of the five tabs to leave its P6-era placeholder behind.
+
+A real accessibility gap was found and fixed during this phase's own review, not
+carried forward: `LineChartView`/`BarChartView` render through `victory-native`'s Skia
+canvas, which exposes nothing to the accessibility tree, and neither they nor
+`ChartCard`'s content wrapper supplied any textual fallback - verified empirically via
+an RNTL `toJSON()` prop-tree dump (not just a static-code assumption) showing zero
+accessibility props on a rendered card's content, leaving four of five dashboard cards
+(Volume, Frequency, Duration, Exercise Progression) completely silent for VoiceOver/
+TalkBack (A11Y-P11-001, HIGH, non-blocking). Fixed with an opt-in
+`contentAccessibilityLabel` prop on `ChartCard` plus a new `summarizeSeries()` helper
+in `components/charts` (min/max/count over a series), wired into the four affected
+cards with real, translated, data-summarizing labels (e.g. "Volume chart, 12 periods,
+ranging from 1200 to 3400 kg") - deliberately _not_ wired into `MuscleVolumeCard`,
+since its `StackedBarChartView` content is already independently accessible via real
+per-row `Text`, and applying the same wrapper there would collapse it into exactly the
+`SwipeableRow`-style compound-node anti-pattern this project's P7/P8 reviews already
+fixed elsewhere. A second, MEDIUM finding: `HeatmapView`'s `accessibilityLabel` was
+hardcoded, untranslated English describing the chart type rather than its data
+(A11Y-P11-002) - fixed by making the prop required (no silent default) and having
+`YearlyHeatmapCard` compute a real, translated, count-aware summary ("2026 training
+activity heatmap, 42 training days"). The recurring `SwipeableRow`-collapse bug class
+that blocked P7/P8 was confirmed absent from this feature entirely (`grep -rn
+"SwipeableRow" features/statistics components/charts "app/(tabs)/stats"` returns zero
+matches) - explicitly checked, not assumed, per this project's own established
+practice for that recurring finding class.
+
+A security review (`reports/security-2026-08-18-p11.md`, security-agent-sonnet,
+routine scope) found zero critical/high/medium/low findings and four informational
+notes: every new query in `SqliteStatisticsRepository.ts` is fully parameterized with
+consistent `deleted_at IS NULL`/`status = 'completed'` filtering (three methods
+inherit it for free from the pre-existing `v_working_set`/`v_session_summary` views;
+`sessionFrequency`/`durationTrend` carry it inline); the `oneRm.formula` resolution is
+byte-identical to the already-reviewed `SqlitePersonalRecordRepository.resolveFormula`,
+introducing no new surface; no new npm dependency (`victory-native`/`@shopify/
+react-native-skia` were confirmed traced back to the P0 bootstrap commit via `git log
+-p`, not just an empty `git diff main`); no injection surface in the new `exerciseId`
+route param or the closed-enum range/metric selectors. One informational note flagged
+a stale doc comment on `SqliteStatisticsRepository` incorrectly implying `exercise`
+was filtered on `deleted_at` in `muscleGroupVolume` when it deliberately is not (a
+soft-deleted exercise, never hard-deleted while any session still references it via
+`ON DELETE RESTRICT`, correctly keeps its historical volume attribution) - fixed by
+correcting the comment, not the (already-correct) query. Nothing else needed fixing.
+
+P11 verification (all independently re-run by the orchestrator, not just
+agent-reported): `npx tsc --noEmit` clean; `npx eslint .` clean (0 errors repo-wide,
+only the same class of pre-existing `no-require-imports` warnings in test files every
+prior phase already has); full Jest suite: 135 suites, 1228 passed, 1 pre-existing
+skip (up from P10's 123/1132 - 12 new suites: 5 domain, 1 repository, 3 component, 2
+screen, 1 chart-adapter smoke test); `npx expo export --platform ios` bundled
+successfully, used again as the build-verification proxy - no simulator/emulator/
+dev-client available in this environment, the same constraint every phase since P4 has
+flagged. A new project-owned Jest mock, `__tests__/__mocks__/victoryNativeMock.tsx`
+(wired via `jest.config.js`'s `moduleNameMapper`, alongside the existing Reanimated/
+Worklets mocks), stands in for `victory-native` in every test - the library's own
+official Jest setup needs a WASM `CanvasKit` runtime and a non-default `testEnvironment`
+(`jest-environment-node` rather than this project's existing one), a heavyweight,
+repo-wide test-infrastructure change judged disproportionate since `components/charts`
+is the only place `victory-native` is ever imported at all; mocking it there is
+sufficient to test every card/screen that composes a chart without needing to verify
+Skia's own pixel-level rendering, the same "test the call, not the animation frame"
+precedent this project already applies to Reanimated. The performance benchmark suite
+(`__tests__/database/benchmarks.perf.test.ts`) gained a new case against the existing
+75,000-set fixture: `muscleGroupVolume` (4ms) and `exerciseProgression` (1ms) over a
+one-year range, both far under the 150ms budget shared with the pre-existing one-year
+volume aggregation case - directly satisfying `docs/ROADMAP.md`'s P11 acceptance line
+("one year of volume aggregation completes within the benchmark bound on the
+75,000-set fixture").
+
 ## Product
 
 Offline-only React Native/Expo workout logging app. No backend, no accounts, no
@@ -1037,14 +1198,22 @@ item, non-blocking).
   `workout-logging`, or `exercise-library` - goals are user-defined and must not be
   tied to training days or workout state. `home` is its only dependent, via a summary
   card (P17, documentation-only so far - see "Status" above).
-- `home` (P10, real as of this phase) depends on `workout-logging`, `plans`, and
-  `records` - read-only, one direction, nothing depends back on `home`. It does not
-  depend on `statistics` in practice, despite `docs/ARCHITECTURE.md` section 9.1's
-  diagram drawing a `HOME --> STAT` edge - that edge describes the originally-planned
-  `StatisticsRepository.streak()`/`weeklySummary()` surface, which P10 deliberately
-  routes around with its own lightweight read model instead (see the ADR-0019 note
-  under "Status" above). The diagram's `HOME --> DG` edge is likewise still unbuilt,
-  since `daily-goals` remains documentation-only (P17).
+- `home` (P10) depends on `workout-logging`, `plans`, and `records` - read-only, one
+  direction, nothing depends back on `home`. It does not depend on `statistics` in
+  practice, despite `docs/ARCHITECTURE.md` section 9.1's diagram drawing a
+  `HOME --> STAT` edge - `docs/adr/0019-home-dashboard-read-model.md`'s "P11
+  resolution" settles this permanently: `home` keeps its own lightweight read model
+  (`HomeDashboardRepository`) forever, since `statistics` (real as of P11) never
+  implements `streak()`/`weeklySummary()` at all. The diagram's `HOME --> DG` edge is
+  likewise still unbuilt, since `daily-goals` remains documentation-only (P17).
+- `statistics` (P11, real as of this phase) depends only on read models, never on
+  write services, with one real edge: `STAT --> REC`, `exerciseProgression`'s `e1rm`
+  metric reusing `records`' pure `estimated1RM`/`isRecordEligibleSetType` domain
+  calculator (not a call into any write service - a documented, deliberate,
+  cycle-safe addition, the same class of judgment call P8's `records -> exercise-library`
+  edge already established). It does not depend on `workout-logging` - its own
+  repository reads `v_working_set`/`workout_session` directly, the same
+  "read the shared view, don't call the write feature" shape `home` uses.
 
 Thirteen features total: `onboarding`, `profile`, `exercise-library`, `plans`,
 `workout-logging`, `rest-timer`, `records`, `home`, `statistics`, `body-metrics`,

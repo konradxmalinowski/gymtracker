@@ -209,6 +209,35 @@ stops being a scaffold placeholder.
 - `docs/adr/0019-home-dashboard-read-model.md`, recording the decision to
   keep Home on its own lightweight read model rather than pull
   `StatisticsRepository` forward from P11 (P10)
+- `features/statistics/*` (fills the previously-empty P2-era skeleton
+  directory; first phase past the v1.0 MVP line): a read-only
+  `StatisticsRepository`/`SqliteStatisticsRepository` (six
+  methods - `volumeByPeriod`, `sessionFrequency`, `durationTrend`,
+  `muscleGroupVolume`, `exerciseProgression`, `yearlyHeatmap` - no
+  accompanying service, same shape as P8/P10's read models), pure domain
+  calculators (`statRange.ts`, `dateRangeBuckets.ts`,
+  `exerciseProgressionReducer.ts`, `yearlyHeatmapBinning.ts`, `localDate.ts`),
+  a composed `useStatisticsDashboard` hook plus `useExerciseProgression`, and
+  seven cards (`VolumeChartCard`, `FrequencyChartCard`, `DurationTrendCard`,
+  `MuscleVolumeCard`, `YearlyHeatmapCard`, `ExerciseProgressionCard`,
+  `StatRangeSelector`) (P11)
+- `components/charts/*`, the ADR-0010 Victory Native XL adapter - first real
+  implementation (`ChartCard`, `LineChartView`, `BarChartView`,
+  `StackedBarChartView`, `HeatmapView`, `ChartTooltip`, `ChartLegend`,
+  `types.ts`) - replaces the empty `.gitkeep` skeleton declared since P0 (P11)
+- Stats tab restructured into a real nested Stack navigator
+  (`app/(tabs)/stats/`: dashboard -> per-exercise progression), the same P4/P5
+  restructure `exercises`/`plans` already went through - replaces P6's
+  "not built yet" placeholder, the last of the five tabs to do so (P11)
+- `ExerciseDetailScreen`'s third slot (`progressChartSlot`), empty since P4,
+  filled with a compact inline `ExerciseProgressionCard` plus a link to the
+  full `stats/exercise/[exerciseId]` screen (P11)
+- `statisticsRepository` added to `AppContainer`, the eighth feature
+  repository pair after P3-P10's profile/exercise-library/plans/
+  workout-logging/records/exercise-history/home ones (P11)
+- `docs/adr/0019-home-dashboard-read-model.md`'s "P11 resolution": Home keeps
+  its own read model permanently; `StatisticsRepository` never implements
+  `streak()`/`weeklySummary()` at all (P11)
 
 ### Fixed
 
@@ -256,6 +285,22 @@ stops being a scaffold placeholder.
   `accessibilityRole`/label/`busy` state while a start was in flight
   (A11Y-P10-001/A11Y-P10-002); both fixed with real regression tests
   (`reports/accessibility-2026-08-18-p10.md`) (P10)
+- Four of five Statistics dashboard cards (Volume, Frequency, Duration,
+  Exercise Progression) were completely silent for VoiceOver/TalkBack -
+  their `victory-native`/Skia chart content exposes nothing to the
+  accessibility tree and had no textual fallback (A11Y-P11-001, HIGH);
+  fixed with an opt-in `contentAccessibilityLabel` on `ChartCard` plus a new
+  `summarizeSeries()` helper producing real, translated, data-summarizing
+  labels (`reports/accessibility-2026-08-18-p11.md`) (P11)
+- `HeatmapView`'s `accessibilityLabel` was hardcoded, untranslated English
+  describing the chart type rather than its data (A11Y-P11-002, MEDIUM);
+  fixed by making the prop required and having `YearlyHeatmapCard` compute a
+  real, translated, count-aware summary (P11)
+- Stale doc comment on `SqliteStatisticsRepository` incorrectly implied
+  `muscleGroupVolume`'s `exercise` join was filtered on `deleted_at`, when
+  it deliberately is not (a soft-deleted exercise keeps its historical
+  volume attribution); comment corrected, query left as-is
+  (`reports/security-2026-08-18-p11.md`) (P11)
 
 ### Security
 
@@ -282,3 +327,9 @@ stops being a scaffold placeholder.
   `deleted_at IS NULL` filtering in the new `SqliteHomeDashboardRepository`
   queries, additive/non-regressing `useStartWorkout` navigation option, no
   new dependency) (`reports/security-2026-08-18-p10.md`) (P10)
+- Routine security review found zero critical/high/medium/low findings, four
+  informational notes (full parameterization and `deleted_at`/`status`
+  filtering across every new `SqliteStatisticsRepository` query, the
+  `oneRm.formula` resolution reusing an already-reviewed pattern verbatim,
+  no new npm dependency, one stale doc comment)
+  (`reports/security-2026-08-18-p11.md`) (P11)
