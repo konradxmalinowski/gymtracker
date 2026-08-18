@@ -31,6 +31,8 @@ import { SqliteWorkoutSessionRepository } from '@/features/workout-logging/repos
 import type { WorkoutSessionRepository } from '@/features/workout-logging/repository/WorkoutSessionRepository';
 import { SqliteExerciseHistoryRepository } from '@/features/workout-logging/repository/SqliteExerciseHistoryRepository';
 import type { ExerciseHistoryRepository } from '@/features/workout-logging/repository/ExerciseHistoryRepository';
+import { SqliteHomeDashboardRepository } from '@/features/home/repository/SqliteHomeDashboardRepository';
+import type { HomeDashboardRepository } from '@/features/home/repository/HomeDashboardRepository';
 import { PersonalRecordService } from '@/features/records';
 import { SqlitePersonalRecordRepository } from '@/features/records/repository/SqlitePersonalRecordRepository';
 import type { PersonalRecordRepository } from '@/features/records/repository/PersonalRecordRepository';
@@ -70,6 +72,8 @@ export interface AppContainer {
   recordService: PersonalRecordService;
   /** Read model, P8 (workout-logging) - previous/best performance and recent session history for an exercise (ARCHITECTURE.md section 8.3). Read-only, so there is no accompanying service: it returns flat DTOs with nothing to validate, the same "no service layer" shape `StatisticsRepository` (a later phase) is expected to have. */
   exerciseHistoryRepository: ExerciseHistoryRepository;
+  /** Read model, P10 (home) - lightweight, home-owned streak/weekly-summary/last-session/next-plan-day queries, a deliberate stand-in for `StatisticsRepository`'s `streak()`/`weeklySummary()` while that feature is still an empty P11 skeleton (see `docs/adr/0019-home-dashboard-read-model.md`). Read-only, no accompanying service - same shape as `exerciseHistoryRepository`. */
+  homeDashboardRepository: HomeDashboardRepository;
 }
 
 export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer>): AppContainer {
@@ -96,6 +100,8 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
     deps?.recordService ?? new PersonalRecordService({ repository: recordRepository });
   const exerciseHistoryRepository =
     deps?.exerciseHistoryRepository ?? new SqliteExerciseHistoryRepository({ db });
+  const homeDashboardRepository =
+    deps?.homeDashboardRepository ?? new SqliteHomeDashboardRepository({ db });
   const sessionRepository =
     deps?.sessionRepository ??
     new SqliteWorkoutSessionRepository({
@@ -124,6 +130,7 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
     recordRepository,
     recordService,
     exerciseHistoryRepository,
+    homeDashboardRepository,
     sessionRepository,
     sessionService,
   };

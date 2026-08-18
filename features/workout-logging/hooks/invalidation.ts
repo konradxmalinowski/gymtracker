@@ -24,11 +24,12 @@ export const sessionHistoryKeys = {
  * Centralized invalidation (ARCHITECTURE.md section 12.1 / ADR-0008), reproduced
  * from the ADR's own example verbatim. Several of these keys have no active
  * subscriber yet - `sessions`/`stats`/`calendar` all belong to features
- * that don't exist until later phases, and `home` renders a static wordmark
- * until P10 - but invalidating a key nothing has queried is a no-op, not an
- * error, and this keeps `finish()`/`discard()` compliant with the documented
- * rule now instead of requiring a revisit once those phases land and start
- * reading session data for the first time.
+ * that don't exist until later phases - but invalidating a key nothing has
+ * queried is a no-op, not an error, and this keeps `finish()`/`discard()`
+ * compliant with the documented rule now instead of requiring a revisit once
+ * those phases land and start reading session data for the first time.
+ * `home` was one of these dormant keys through P6-P9; it has a real
+ * subscriber (`useHomeDashboard`) as of P10.
  *
  * P9: `sessionHistoryKeys.list` joins this set - a finished workout is a new
  * row `WorkoutHistoryListScreen`'s paginated query needs to see on its next
@@ -55,10 +56,16 @@ export function invalidateAfterWorkoutFinish(queryClient: QueryClient): void {
  * the history list (a delete removes a row; an edit can change a list row's
  * totals), and `records` (a rebuild can promote/demote/clear a PR the
  * records screen or an exercise-detail slot is currently showing).
+ *
+ * P10: `home` joins this set too - an edited/deleted historical session can
+ * change the last-workout card, the streak, the weekly summary, or the
+ * latest-PR card, all read through `useHomeDashboard`'s single
+ * `['home', 'dashboard']` key.
  */
 export function invalidateAfterHistoricalEdit(queryClient: QueryClient, sessionId: string): void {
   void queryClient.invalidateQueries({ queryKey: sessionHistoryKeys.detail(sessionId) });
   void queryClient.invalidateQueries({ queryKey: sessionHistoryKeys.list() });
   void queryClient.invalidateQueries({ queryKey: ['records'] });
   void queryClient.invalidateQueries({ queryKey: ['exercises', 'history'] });
+  void queryClient.invalidateQueries({ queryKey: ['home'] });
 }

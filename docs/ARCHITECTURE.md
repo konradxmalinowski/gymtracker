@@ -1212,6 +1212,19 @@ listHistory(exerciseId, recordType): Promise<PersonalRecord[]>
 rebuild(exerciseIds?, tx?): Promise<void>                   // full recompute from workout_set
 ```
 
+**`HomeDashboardRepository`** (read model, feature: `home`) - no accompanying service,
+same "flat DTOs, nothing to validate" shape as `ExerciseHistoryRepository`
+```
+getTrainingLocalDates(sinceLocalDate): Promise<string[]>           // feeds StreakCalculator
+getWeeklySummary(localDateFrom, localDateTo): Promise<HomeWeeklySummary>   // single-table SQL aggregate
+getLastCompletedSession(): Promise<HomeLastSessionDto | null>
+getMostRecentCompletedPlanDayId(planId): Promise<string | null>    // feeds nextSuggestedPlanDay
+```
+Added in P10 as a deliberate deviation from this section's own `StatisticsRepository`
+entry below (`streak()`/`weeklySummary()`) - see `docs/adr/0019-home-dashboard-read-model.md`
+for the full rationale and the P11 migration note. Every query is parameterized and
+filters `deleted_at IS NULL`.
+
 **`StatisticsRepository`** (read model, feature: `statistics`) - returns DTOs only
 ```
 volumeByPeriod(range, bucket: 'day'|'week'|'month'): Promise<TimeBucket[]>
@@ -1220,8 +1233,11 @@ durationTrend(range, bucket): Promise<TimeBucket[]>
 muscleGroupVolume(range): Promise<MuscleVolumeSlice[]>
 exerciseProgression(exerciseId, range, metric: 'top_set'|'e1rm'|'volume'): Promise<SeriesPoint[]>
 yearlyHeatmap(year): Promise<DayIntensity[]>
-weeklySummary(localDateFrom, localDateTo): Promise<WeeklySummary>
-streak(): Promise<StreakInfo>
+weeklySummary(localDateFrom, localDateTo): Promise<WeeklySummary>  // NOTE: as of P10, Home does
+                                                                     // not call this - it has its own
+                                                                     // HomeDashboardRepository.getWeeklySummary
+                                                                     // instead; see ADR-0019
+streak(): Promise<StreakInfo>                                      // NOTE: same deviation - see ADR-0019
 ```
 
 **`BodyMetricRepository`**, **`ProgressPhotoRepository`**, **`SettingsRepository`**,
@@ -1385,6 +1401,13 @@ GymTracker/
 │   ├── workout-logging/
 │   ├── rest-timer/
 │   ├── records/
+│   ├── home/                             real as of P10 - no services/ folder: its
+│   │   ├── components/                   repository is read-only, flat DTOs with nothing
+│   │   ├── hooks/                        to validate on a read path (mirrors
+│   │   ├── screens/                      ExerciseHistoryRepository's P8 shape, not a gap)
+│   │   ├── domain/
+│   │   ├── repository/
+│   │   └── index.ts
 │   ├── statistics/
 │   ├── body-metrics/
 │   ├── calendar/
@@ -1502,6 +1525,16 @@ Allowed dependency directions, stated explicitly:
   from the P17 brief, not an oversight - a future phase could add an optional link,
   but v1 does not). `home` is its only dependent, rendering a summary card (section
   10).
+- `home` is real as of P10, and its actual dependency edges are `workout-logging`,
+  `plans`, and `records` (read-only, one direction - nothing depends back on `home`),
+  matching three of the five edges this diagram draws. The other two drawn edges,
+  `HOME --> STAT` and `HOME --> DG`, describe planned-but-not-yet-real dependencies:
+  `daily-goals` is still documentation-only (P17), and the `STAT` edge specifically
+  describes the `StatisticsRepository.streak()`/`weeklySummary()` surface P10
+  deliberately routes around with its own `HomeDashboardRepository` instead - see
+  `docs/adr/0019-home-dashboard-read-model.md` and section 8.3's note on the same
+  deviation. Both edges are left in the diagram as intent for their own future phases,
+  not removed.
 
 Cycles are prevented mechanically by `eslint-plugin-import`'s `no-cycle` rule set to
 error, plus the barrel-only rule from section 3.1.
@@ -1562,6 +1595,15 @@ graph TD
     MEAS -.modal.-> MP4["(modals)/body-metric-entry"]
     GOALS -.modal.-> MP5["(modals)/goal-progress-entry"]
 ```
+
+As of P10, the `HOME` node above is `HomeScreen.tsx`'s real dashboard rather than P6's
+placeholder, and three of the edges this diagram already drew ahead of that phase are
+now real, implemented navigation rather than forward-planned intent: `HOME -.modal.->
+MP2["(modals)/plan-day-picker"]` (`ActivePlanCard`'s "change day" action, gated on the
+active plan having more than one day), `HOME --> HIST["history/[sessionId]"]`
+(`LastWorkoutCard`'s tap target), and `HOME -->|Quick Start| ACT` (unchanged since P6).
+`GOALS`/`GMAN`/`GCR`/`GED`/`GREM`/`MP5` and the `HOME -->|Goals card| GOALS` edge remain
+entirely unbuilt (P17, documentation-only - see `CLAUDE.md`'s Status section).
 
 ### 10.2 Navigation rules
 

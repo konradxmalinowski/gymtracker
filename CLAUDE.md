@@ -9,7 +9,8 @@ reference, not a replacement. Section numbers below refer to `docs/ARCHITECTURE.
 P0 (project foundation), P1 (design system and UI primitives), P2 (persistence
 foundation), P3 (onboarding, profile and core settings), P4 (exercise library), P5
 (workout plans), P6 (workout logging), P7 (rest timer), P8 (progressive overload and
-personal records), and P9 (workout summary and history) are complete. P8 (`feat/p8-progressive-overload`) was cut from
+personal records), P9 (workout summary and history), and P10 (home dashboard) are
+complete - `docs/ROADMAP.md`'s MVP line is now closed. P8 (`feat/p8-progressive-overload`) was cut from
 `main` before P7's PR merged - a documented decision made when P8 was kicked off so
 the two phases could be reviewed independently (see
 `plans/2026-08-11-p8-progressive-overload.md`'s "Branch note") - so the two branches'
@@ -18,9 +19,10 @@ overlapping files (`WorkoutSessionRepository.ts`/`SqliteWorkoutSessionRepository
 this file and `docs/architecture-snapshot.md`) needed a merge; that merge is reflected
 throughout this file as of this update, not left as an open branch note. The
 `onboarding`, `profile`, `exercise-library`, `plans`, `workout-logging`, `rest-timer`,
-and `records` features now have real implementations (screens, hooks, services,
+`records`, and `home` features now have real implementations (screens, hooks, services,
 repository where applicable - `rest-timer` itself owns no database table and
-therefore no repository; `records` does, see below); the remaining four features
+therefore no repository; `records` does, see below; `home` has a repository but no
+accompanying service, see below); the remaining four features
 (`statistics`, `body-metrics`, `calendar`, `data-transfer`) are still empty skeleton
 directories (components/hooks/screens/services/domain/repository/types/index.ts
 subfolders, no implementation) awaiting their own phase.
@@ -787,6 +789,155 @@ no `app/goals/` routes, no `services/notifications/` implementation, and no
 `002_daily_goals.ts` migration exist in this repo yet. A future implementing session
 starts from those documents, not from any code.
 
+**Home dashboard (P10):** the Home tab is no longer P6's placeholder (wordmark plus a
+single Quick Start button) - it is a real, composed dashboard, and `docs/ROADMAP.md`'s
+MVP line is now correctly closed. `features/home/` is a new, thirteenth feature
+directory (see "Twelve features total" below, now thirteen), built to the same "read
+model, no accompanying service" shape P8's `ExerciseHistoryRepository` established.
+`features/home/domain/{StreakCalculator.ts,nextSuggestedPlanDay.ts}` are pure
+calculators: `calculateStreak` implements the "today not yet trained doesn't break the
+streak" grace rule (a streak only breaks once a full calendar day passes with zero
+completed sessions), DST-boundary and midnight-boundary tested per the roadmap's own
+acceptance criteria, and now also exports `ONE_DAY_MS`/`parseLocalDate`/
+`formatLocalDate` for `useHomeDashboard.ts` to reuse (see the code-review paragraph
+below); `nextSuggestedPlanDay` is a simple `sort_order` rotation - the day after
+whichever plan day the most recently completed session used, wrapping to the first day
+after the last - with no rest-day or streak awareness, per this phase's own Step 0
+decision (that stays an unchanged backlog item). `features/home/repository/
+{HomeDashboardRepository.ts,SqliteHomeDashboardRepository.ts}`
+(`getTrainingLocalDates`/`getWeeklySummary`/`getLastCompletedSession`/
+`getMostRecentCompletedPlanDayId` - every query parameterized and `deleted_at IS NULL`-
+filtered) is the seventh feature repository pair added to `services/container.ts`
+(`homeDashboardRepository`), after P3-P9's profile/exercise-library/plans/
+workout-logging/records/exercise-history ones. `features/home/hooks/
+useHomeDashboard.ts` composes every piece - its own repository calls plus the active
+plan/plan-days from `plans`' barrel and the latest record from `records`' barrel -
+through one `useQuery` under `['home','dashboard']` (already listed in section 12.1's
+query-key table before this phase implemented it) so the screen sees a single
+`isPending`/`isError`/`refetch` rather than five independent ones, this phase's own
+acceptance criterion; its five dependencies
+(`homeDashboardRepository`/`planService`/`recordService`/`exerciseService`/`clock`) are
+taken as constructor parameters rather than resolved via an internal `useContainer()`
+call, the same DI shape `useStartWorkout(sessionService)`/`useCurrentRecords
+(recordService, ...)` already established to keep `import/no-cycle` satisfied across a
+barrel-exported hook. Five presentational cards
+(`ActivePlanCard`/`LastWorkoutCard`/`StreakCard`/`LatestPRCard`/`WeeklySummaryCard`),
+each with its own real, designed empty state (no active plan, never trained, no PR yet)
+rather than a shared generic placeholder; `HomeScreen.tsx` assembles them plus the
+existing Quick Start button (unchanged behavior - always starts an empty workout, per
+Step 0 decision 3) inside a `Screen scroll` wired to a new `refreshControl` prop on
+`components/layout/Screen.tsx` for pull-to-refresh - the first real caller of that prop,
+which also fixed a pre-existing type bug (`refreshControl` was typed as a bare
+`ReactElement`, which didn't satisfy `ScrollView`'s own prop type, caught only because
+this phase was the first to actually pass one). `features/home/screens/
+PlanDayPickerScreen.tsx`, reached via a new `(modals)/plan-day-picker` route
+(`routes.modals.planDayPicker(planId)`, the same "plain id as a route param" shape
+`restTimerSettings` already used, not `exercisePicker`'s store - the result here is a
+single `planDayId` picked once, not an unbounded list), backs `ActivePlanCard`'s
+"change day" action, shown only when the active plan has more than one day.
+`app/(tabs)/index.tsx` and `app/(modals)/plan-day-picker.tsx` are both thin wrappers,
+per this file's own "`app/` never contains screen bodies" rule. FR-19's crash-recovery
+resume banner needed no new work this phase: `ActiveWorkoutBanner`, built in P6, already
+satisfied the acceptance criterion and was re-confirmed in review rather than
+re-implemented.
+
+A deliberate deviation from `docs/ARCHITECTURE.md` section 8.3, recorded this session as
+`docs/adr/0019-home-dashboard-read-model.md`: `HomeDashboardRepository`'s streak and
+weekly-summary reads are lightweight, home-owned queries rather than the
+`StatisticsRepository.streak()`/`weeklySummary()` methods section 8.3 has named since
+before this feature existed. `statistics` is still an empty P11 skeleton, and pulling it
+forward this phase just to host two methods Home needs today was rejected in favor of a
+small, already-precedented read model - the same "flat DTOs, nothing to validate" shape
+`ExerciseHistoryRepository` established in P8. The ADR's migration note is P11's to act
+on: either keep Home on its own read model permanently, or migrate
+`useHomeDashboard.ts`'s two repository calls onto the real `StatisticsRepository` once it
+exists. Related, and worth stating explicitly rather than leaving implicit:
+`docs/ARCHITECTURE.md` section 9.1's dependency-graph diagram already drew `HOME --> STAT`
+and `HOME --> DG` edges before this phase (planned, forward-looking architecture, not
+code) - as of this phase's real implementation, `home` depends on `workout-logging`,
+`plans`, and `records` only (read-only, one direction, nothing depends back on `home`).
+The `STAT` edge is exactly the deviation this ADR records (Home does not call
+`StatisticsRepository` in v1.0), and the `DG` edge remains wholly unbuilt (`daily-goals`
+is still documentation-only, P17) - both diagram edges describe a future state, not this
+phase's shipped code, and are left in the diagram as intent rather than removed.
+
+A real navigation bug was found and fixed during code review, across two passes -
+documented here with the same technical depth P7's write-up gives its own
+`RestTimerBar`/`SwipeableRow` bug. `PlanDayPickerScreen`'s original design tried to
+`router.push('/workout/active')` on a day tap and then self-pop
+(`router.back()`) once the start settled, to avoid leaving a stale modal on the
+navigation stack. A `/code-review high` pass first found the resume-from-blocked-session
+path never triggered the pop at all (a guard-timing gap) - but deeper investigation,
+reading `node_modules/expo-router`'s actual `goBack` implementation rather than assuming
+its semantics, found the entire push-then-pop design was unsound even on the
+direct-start "happy path": `goBack`'s bubbling semantics target whichever screen is
+_currently focused_ (the just-pushed `workout/active`), not the picker sitting
+underneath it, so calling `router.back()` there would have dismissed the just-started
+workout screen, not the stale picker. Fixed by adding a `{ navigation: 'push' |
+'replace' }` option to `useStartWorkout`'s `startFromPlanDay`/`startEmpty`/
+`resumeBlocked` (default `'push'`, so every other existing caller -
+`PlanDetailScreen`'s day-card "Start" action, Home's own Quick Start - is unchanged) and
+having the picker use `'replace'` for both the direct-start and resume-blocked paths:
+`router.replace` swaps the picker's own stack entry for `workout/active` in one atomic
+action, the same cross-group `replace` mechanism `useFinishDiscardWorkout` already uses
+for `finish()`/`discard()` (ADR-0007 rule 3) - so there is no push-then-pop ordering to
+get right, and no window where both screens are on the stack at once. Verified with a
+real regression test (`__tests__/features/home/screens/PlanDayPickerScreen.test.tsx`)
+covering both the direct-start and resume-from-blocked paths, asserting `router.replace`
+is called and `router.push`/`router.back` are not. The same code-review pass, in the
+same commit-to-be, also fixed: `app/(modals)/plan-day-picker.tsx` originally contained
+the full screen body, violating the "`app/` never contains screen bodies" rule -
+extracted into `features/home/screens/PlanDayPickerScreen.tsx`, `app/` reduced to a thin
+wrapper; `useHomeDashboard.ts`'s two plan-dependent reads (the plan aggregate and its
+most recently completed day) ran sequentially despite no dependency between them - now
+run via `Promise.all`; `useHomeDashboard.ts` duplicated `StreakCalculator.ts`'s
+calendar-math primitives verbatim - `StreakCalculator.ts` now exports
+`ONE_DAY_MS`/`parseLocalDate`/`formatLocalDate` for reuse, its own `calculateStreak`
+behavior and tests unchanged; and `features/home/components/formatHomeDuration.ts`
+duplicated `workout-logging`'s `formatSessionDurationSeconds` byte-for-byte -
+`workout-logging`'s barrel now exports it, `home` delegates instead of reimplementing.
+
+An accessibility review (`reports/accessibility-2026-08-18-p10.md`, general-purpose
+agent standing in for the accessibility-agent role, the same substitution P7/P8/P9
+used) found no BLOCKING finding, explicitly confirming - not assuming - that the
+`SwipeableRow`-collapse bug class that blocked P7 and P8 does not recur:
+`grep -rn "SwipeableRow" features/home` returns zero matches, since `SwipeableRow` is
+never imported anywhere under this feature. Two non-blocking (HIGH) findings were found
+in this phase's genuinely new UI, both fixed within the phase with real regression
+tests (the same "fix non-blocking findings same-phase" precedent P8/P9 used).
+A11Y-P10-001: `PlanDayPickerScreen.tsx` never announced its loading/empty state via
+`AccessibilityInfo.announceForAccessibility`, unlike this same phase's `HomeScreen.tsx`
+in the very same diff - fixed, matching `PersonalRecordsScreen.tsx`'s established
+pattern. A11Y-P10-002: the day-row's `onPress={isStarting ? undefined : ...}` pattern
+took the entire row out of `ListRow`'s accessible branch the instant a start began,
+silently discarding the `accessibilityRole`/label/`busy` state set two lines below -
+confirmed via a real RNTL prop-tree dump (not just static reading) showing empty props
+during that window, fixed by gating on `disabled` alone instead of nulling `onPress`,
+matching `Button.tsx`'s own `loading`-state pattern. A structurally similar,
+pre-existing `onPress`-nulling conditional was noted in
+`features/plans/screens/PlanDetailScreen.tsx:188` (P6, out of scope for this review,
+lower-risk since it conditionally renders the whole button rather than swapping an
+already-visible row's accessible/non-accessible variant) - flagged for awareness only,
+not fixed.
+
+A security review (`reports/security-2026-08-18-p10.md`, security-agent-sonnet, routine
+scope) found zero critical/high/medium/low findings and three informational notes: all
+new SQL in `SqliteHomeDashboardRepository.ts` fully parameterized with consistent
+`deleted_at IS NULL` filtering on every query; the `useStartWorkout` navigation-option
+addition confirmed additive and non-regressing for its two pre-existing callers (every
+public method's new option is optional, defaulting to `'push'`); no injection surface
+in the new route/query-key handling; no new npm dependency. Nothing needed fixing.
+
+P10 verification (all independently re-run by the orchestrator, not just agent-reported):
+`npx tsc --noEmit` clean; `npx eslint .` clean (0 errors repo-wide, only the same class
+of pre-existing `no-require-imports` warnings in test files every prior phase already
+has); full Jest suite: 123 suites, 1132 passed, 1 pre-existing skip; `npx expo export
+--platform ios` bundled successfully, used again as the build-verification proxy - no
+simulator/emulator/dev-client available in this environment, the same constraint every
+phase since P4 has flagged (dev-client build remains deferred per the user's own
+standing preference, noted here for continuity rather than silently repeated without
+comment).
+
 ## Product
 
 Offline-only React Native/Expo workout logging app. No backend, no accounts, no
@@ -886,9 +1037,17 @@ item, non-blocking).
   `workout-logging`, or `exercise-library` - goals are user-defined and must not be
   tied to training days or workout state. `home` is its only dependent, via a summary
   card (P17, documentation-only so far - see "Status" above).
+- `home` (P10, real as of this phase) depends on `workout-logging`, `plans`, and
+  `records` - read-only, one direction, nothing depends back on `home`. It does not
+  depend on `statistics` in practice, despite `docs/ARCHITECTURE.md` section 9.1's
+  diagram drawing a `HOME --> STAT` edge - that edge describes the originally-planned
+  `StatisticsRepository.streak()`/`weeklySummary()` surface, which P10 deliberately
+  routes around with its own lightweight read model instead (see the ADR-0019 note
+  under "Status" above). The diagram's `HOME --> DG` edge is likewise still unbuilt,
+  since `daily-goals` remains documentation-only (P17).
 
-Twelve features total: `onboarding`, `profile`, `exercise-library`, `plans`,
-`workout-logging`, `rest-timer`, `records`, `statistics`, `body-metrics`,
+Thirteen features total: `onboarding`, `profile`, `exercise-library`, `plans`,
+`workout-logging`, `rest-timer`, `records`, `home`, `statistics`, `body-metrics`,
 `calendar`, `data-transfer`, `daily-goals`.
 
 ## Data layer (sections 7-8)
