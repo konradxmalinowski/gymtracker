@@ -19,6 +19,7 @@ const FEATURES = [
   'body-metrics',
   'calendar',
   'data-transfer',
+  'home',
 ];
 
 // Cross-feature imports are only allowed through a feature's public index.ts

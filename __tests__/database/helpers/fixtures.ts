@@ -68,11 +68,18 @@ export async function insertWorkoutSession(
   db: SqlExecutor,
   overrides: Partial<{
     id: string;
+    title: string;
     status: 'in_progress' | 'completed' | 'discarded';
     startedAt: number;
     finishedAt: number | null;
     localDate: string;
     now: number;
+    planId: string | null;
+    planDayId: string | null;
+    totalVolumeKg: number | null;
+    totalSets: number | null;
+    durationSeconds: number | null;
+    deletedAt: number | null;
   }> = {},
 ): Promise<string> {
   const id = overrides.id ?? nextId();
@@ -86,12 +93,46 @@ export async function insertWorkoutSession(
         ? startedAt + 1
         : null;
   const localDate = overrides.localDate ?? new Date(startedAt).toISOString().slice(0, 10);
+  // Denormalized totals: a real `finish()` call always writes all three
+  // together for a completed session - test fixtures default to the same
+  // "populated together" shape rather than leaving them null on a completed
+  // row, since that combination cannot occur in production data.
+  const totalVolumeKg =
+    overrides.totalVolumeKg !== undefined
+      ? overrides.totalVolumeKg
+      : status === 'completed'
+        ? 0
+        : null;
+  const totalSets =
+    overrides.totalSets !== undefined ? overrides.totalSets : status === 'completed' ? 0 : null;
+  const durationSeconds =
+    overrides.durationSeconds !== undefined
+      ? overrides.durationSeconds
+      : status === 'completed'
+        ? 0
+        : null;
 
   await db.run(
     `INSERT INTO workout_session (
-       id, title, status, started_at, finished_at, local_date, tz_offset_minutes, created_at, updated_at
-     ) VALUES (?, 'Session', ?, ?, ?, ?, 0, ?, ?)`,
-    [id, status, startedAt, finishedAt, localDate, now, now],
+       id, plan_id, plan_day_id, title, status, started_at, finished_at, local_date,
+       tz_offset_minutes, total_volume_kg, total_sets, duration_seconds, created_at, updated_at, deleted_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      overrides.planId ?? null,
+      overrides.planDayId ?? null,
+      overrides.title ?? 'Session',
+      status,
+      startedAt,
+      finishedAt,
+      localDate,
+      totalVolumeKg,
+      totalSets,
+      durationSeconds,
+      now,
+      now,
+      overrides.deletedAt ?? null,
+    ],
   );
   return id;
 }
