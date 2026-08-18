@@ -184,6 +184,31 @@ stops being a scaffold placeholder.
 - "Training history" row on `ProfileScreen` and an "Estimated calories"
   `Switch` row on `SettingsScreen` (P9)
 - New dependencies: `react-native-view-shot`, `expo-sharing` (P9)
+- `features/home/*` (13th feature): domain calculators
+  (`StreakCalculator.ts` - consecutive-day streak with a "today not yet
+  trained doesn't break it" grace rule, DST/midnight-boundary tested;
+  `nextSuggestedPlanDay.ts` - `sort_order` rotation), a read-only
+  `HomeDashboardRepository`/`SqliteHomeDashboardRepository` (no accompanying
+  service, same shape as P8's `ExerciseHistoryRepository`), a composed
+  `useHomeDashboard` hook (one `useQuery`), five dashboard cards
+  (`ActivePlanCard`, `LastWorkoutCard`, `StreakCard`, `LatestPRCard`,
+  `WeeklySummaryCard`), and `HomeScreen.tsx` (pull-to-refresh, loading/error/
+  empty states) - replaces P6's placeholder Home tab, closing
+  `docs/ROADMAP.md`'s MVP line (P10)
+- `features/home/screens/PlanDayPickerScreen.tsx`, reached via a new
+  `(modals)/plan-day-picker` route (`routes.modals.planDayPicker(planId)`),
+  for `ActivePlanCard`'s "change day" action (P10)
+- `homeDashboardRepository` added to `AppContainer`, the seventh feature
+  repository pair after P3-P9's profile/exercise-library/plans/
+  workout-logging/records/exercise-history ones (P10)
+- `refreshControl` prop on `components/layout/Screen.tsx`, `HomeScreen.tsx`
+  its first real caller (P10)
+- `{ navigation: 'push' | 'replace' }` option on `useStartWorkout`'s
+  `startFromPlanDay`/`startEmpty`/`resumeBlocked` (default `'push'`,
+  every pre-existing caller unchanged) (P10)
+- `docs/adr/0019-home-dashboard-read-model.md`, recording the decision to
+  keep Home on its own lightweight read model rather than pull
+  `StatisticsRepository` forward from P11 (P10)
 
 ### Fixed
 
@@ -209,6 +234,28 @@ stops being a scaffold placeholder.
   exercise or workout notes (FR-16); surfaced during review and closed
   before commit with `setExerciseNote`/`setSessionNotes` plus their
   `WorkoutSessionService` validation and test coverage (P6)
+- `PlanDayPickerScreen`'s original push-then-self-pop navigation design was
+  unsound (broken on the resume-from-blocked path, and - per
+  `expo-router`'s actual `goBack` bubbling semantics - unsound in principle
+  even on the direct-start path); fixed with the new `useStartWorkout`
+  navigation option and `router.replace` instead of push-then-pop (P10)
+- `app/(modals)/plan-day-picker.tsx` originally contained the full screen
+  body, violating the "`app/` never contains screen bodies" rule; extracted
+  into `features/home/screens/PlanDayPickerScreen.tsx` (P10)
+- `useHomeDashboard.ts`'s two plan-dependent reads ran sequentially despite
+  no dependency between them; now run via `Promise.all` (P10)
+- `useHomeDashboard.ts` duplicated `StreakCalculator.ts`'s calendar-math
+  primitives verbatim; `StreakCalculator.ts` now exports
+  `ONE_DAY_MS`/`parseLocalDate`/`formatLocalDate` for reuse (P10)
+- `features/home/components/formatHomeDuration.ts` duplicated
+  `workout-logging`'s `formatSessionDurationSeconds` byte-for-byte;
+  `workout-logging`'s barrel now exports it and `home` delegates instead of
+  reimplementing (P10)
+- `PlanDayPickerScreen` never announced its loading/empty state, and its
+  day-row's `onPress`-nulling pattern silently discarded its own
+  `accessibilityRole`/label/`busy` state while a start was in flight
+  (A11Y-P10-001/A11Y-P10-002); both fixed with real regression tests
+  (`reports/accessibility-2026-08-18-p10.md`) (P10)
 
 ### Security
 
@@ -230,3 +277,8 @@ stops being a scaffold placeholder.
   (the pre-existing `ConfirmDialog` double-tap gap, now behind the first
   genuinely irreversible hard delete it has ever gated, still non-corrupting),
   one informational note (`reports/security-2026-08-13-p9.md`) (P9)
+- Routine security review found zero critical/high/medium/low findings,
+  three informational notes (full parameterization and consistent
+  `deleted_at IS NULL` filtering in the new `SqliteHomeDashboardRepository`
+  queries, additive/non-regressing `useStartWorkout` navigation option, no
+  new dependency) (`reports/security-2026-08-18-p10.md`) (P10)

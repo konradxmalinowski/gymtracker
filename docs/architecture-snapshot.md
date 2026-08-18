@@ -1,5 +1,5 @@
 ---
-snapshot_commit: "TBD-at-commit-time (P9 / feat/p9-workout-summary-history, cut from main at 5e004cf, not yet committed as of this snapshot update)"
+snapshot_commit: "TBD-at-commit-time (P10 / feat/p10-home-dashboard, cut from main at 5e43904, not yet committed as of this snapshot update)"
 generated_from: CLAUDE.md, docs/ARCHITECTURE.md, docs/ROADMAP.md, docs/adr/*, docs/PRODUCT-BRIEF.md
 ---
 
@@ -20,12 +20,14 @@ historical record of how that merge was resolved, not as an open caveat.
 P0 (project foundation), P1 (design system/UI primitives), P2 (persistence
 foundation), P3 (onboarding, profile and core settings), P4 (exercise library), P5
 (workout plans), P6 (workout logging), P7 (rest timer), P8 (progressive overload
-and personal records), and P9 (workout summary and history) are complete. `onboarding`, `profile`, `exercise-library`,
-`plans`, `workout-logging`, `rest-timer`, and `records` are the seven features with
-real implementations (`rest-timer` owns no database table and therefore no
-repository; `records` does - see "Composition root" below); the remaining four
-(`statistics`, `body-metrics`, `calendar`, `data-transfer`) remain empty skeletons
-awaiting their phase. The app boots for real as of P3, and as of P4 also seeds the
+and personal records), P9 (workout summary and history), and P10 (home dashboard) are
+complete - `docs/ROADMAP.md`'s MVP line is now closed. `onboarding`, `profile`, `exercise-library`,
+`plans`, `workout-logging`, `rest-timer`, `records`, and `home` are the eight features
+with real implementations (`rest-timer` owns no database table and therefore no
+repository; `records` and `home` both have one, `home` with no accompanying service -
+see "Composition root" below); the remaining four (`statistics`, `body-metrics`,
+`calendar`, `data-transfer`) remain empty skeletons awaiting their phase. The app boots
+for real as of P3, and as of P4 also seeds the
 exercise catalog on every boot: `app/_layout.tsx` opens the database, runs
 migrations, runs `database/seed/runSeed()` (idempotent), builds the `AppContainer`,
 holds the splash screen until the profile query resolves, then gates to
@@ -39,7 +41,8 @@ day editor, respectively); `workout-logging` (P6) is not a tab at all but a
 root-level `fullScreenModal` route (`app/workout/active.tsx`) outside `(tabs)`, per
 ADR-0007. As of P7, that screen also mounts a sticky `RestTimerBar` directly under
 its header; as of P8, its `FlashList` cells also render a `PRBadge`/`ProgressionHint`
-per set.
+per set; as of P10, Home is a real, composed dashboard rather than P6's
+wordmark-plus-Quick-Start placeholder (see the P10 paragraph below).
 
 Exercise library (P4): instant, diacritic-folded FTS5 search ("lezac" matches
 "leżąc"), a multi-select filter sheet (muscle/equipment/body part/level/gym-home
@@ -285,6 +288,53 @@ remaining set during a historical edit leaves an empty card instead of auto-remo
 it - a true fix needs a combined set+exercise undo, real new mechanism work, deferred
 to a future pass (see CLAUDE.md's "Known gaps").
 
+Home dashboard (P10): `features/home/` (new, eighth real feature) replaces P6's
+placeholder Home tab with a real dashboard, closing the roadmap's MVP line.
+`features/home/domain/{StreakCalculator,nextSuggestedPlanDay}.ts` are pure
+calculators (streak's "today not yet trained doesn't break it" grace rule, DST/
+midnight tested; simple `sort_order` rotation for the suggested next day, no
+rest-day awareness). `HomeDashboardRepository`/`SqliteHomeDashboardRepository`
+(4 methods, no service - same shape as P8's `ExerciseHistoryRepository`) is the
+seventh feature-repository pair in `AppContainer`. `useHomeDashboard.ts` composes
+everything through one `useQuery` under `['home','dashboard']`, deps injected as
+parameters (not `useContainer()`) per the same `import/no-cycle`-driven pattern
+P6/P8 already used. Five cards, each with a real empty state; `HomeScreen.tsx`
+adds pull-to-refresh via a new `Screen.tsx` `refreshControl` prop; a new
+`(modals)/plan-day-picker` route backs the active-plan card's "change day" action.
+Deliberate deviation, recorded in `docs/adr/0019-home-dashboard-read-model.md`:
+streak/weekly-summary come from this lightweight home-owned repository, not
+`StatisticsRepository` (still an empty P11 skeleton) - section 8.3's
+`streak()`/`weeklySummary()` entries now carry a note pointing at the ADR, and
+section 9.1's `HOME --> STAT`/`HOME --> DG` diagram edges are confirmed
+not-yet-real (planned intent, not shipped code). A real two-pass navigation bug
+was found and fixed in code review: `PlanDayPickerScreen`'s original
+push-then-self-pop design was broken on the resume-from-blocked path, and -
+per `expo-router`'s actual `goBack` bubbling semantics, confirmed by reading its
+source - unsound in principle on the direct-start path too (`goBack` targets the
+just-pushed `workout/active`, not the picker underneath it). Fixed with a new
+`{ navigation: 'push' | 'replace' }` option on `useStartWorkout`'s
+`startFromPlanDay`/`startEmpty`/`resumeBlocked` (default `'push'`, existing callers
+unchanged) and `router.replace` for both the direct-start and resume paths - the
+same cross-group `replace` mechanism `useFinishDiscardWorkout` already uses
+(ADR-0007 rule 3). The same review pass also fixed an `app/`-screen-body rule
+violation (extracted `PlanDayPickerScreen.tsx`), a sequential-await inefficiency
+in `useHomeDashboard.ts` (now `Promise.all`), and two drifted-duplicate
+extractions (`StreakCalculator.ts` now exports its calendar-math primitives for
+`useHomeDashboard.ts` to reuse; `formatHomeDuration.ts` now delegates to
+`workout-logging`'s `formatSessionDurationSeconds`). Verification: typecheck/
+lint/Jest (123 suites, 1132 passed, 1 pre-existing skip) clean, `expo export
+--platform ios` used again as the build-verification proxy, no new npm
+dependency. Security review (`reports/security-2026-08-18-p10.md`) found zero
+critical/high/medium/low findings, three informational notes. Accessibility
+review (`reports/accessibility-2026-08-18-p10.md`) found no BLOCKING finding -
+explicitly confirmed the P7/P8 `SwipeableRow`-collapse class is absent (the
+primitive is never imported under `features/home`) - and fixed two non-blocking
+HIGH findings within the phase: a missing loading/empty announcement on
+`PlanDayPickerScreen` (the same violation class A11Y-P8-003/A11Y-P9-002 already
+named), and a day-row `onPress`-nulling pattern that silently discarded its own
+`accessibilityRole`/label/`busy` state while a start was in flight, fixed by
+gating on `disabled` alone instead (matching `Button.tsx`'s `loading` pattern).
+
 **Merge note:** `feat/p8-progressive-overload` was branched before `feat/p7-rest-timer`
 merged, so both touched `WorkoutSessionRepository.ts`/
 `SqliteWorkoutSessionRepository.ts`, `WorkoutSessionService.ts`, `ActiveWorkoutScreen.tsx`,
@@ -317,7 +367,7 @@ Native SVG + `@expo/vector-icons` (Ionicons - the app's only icon system, chosen
 + `expo-image-picker` (avatar/photo selection) + Expo Notifications + Expo Haptics +
 Expo FileSystem + NativeWind (tailwind.config.js imports theme/tokens.ts, never
 duplicates values). No new dependency through P8; P9 adds `react-native-view-shot`
-and `expo-sharing` (workout-summary share-as-image).
+and `expo-sharing` (workout-summary share-as-image). No new dependency at P10.
 
 ## Architecture (section 3)
 
@@ -348,8 +398,8 @@ Top level: `app/` (routing only, thin wrappers into `features/*/screens` - now
 includes `app/(tabs)/` for the 5-tab layout (`app/(tabs)/exercises/` is a nested
 Stack as of P4: list -> detail -> create/edit), `app/onboarding/`, `app/profile/`
 (settings - `units.tsx`/`timers.tsx` (P7)/`progression.tsx` (P8)/`about.tsx` - plus,
-as of P8, `records.tsx`), and `app/(modals)/` - `exercise-picker.tsx` (P5) and
-`rest-timer-settings.tsx` (P7)), `assets/` (fonts, images, bundled exercise WebP
+as of P8, `records.tsx`), and `app/(modals)/` - `exercise-picker.tsx` (P5),
+`rest-timer-settings.tsx` (P7), and `plan-day-picker.tsx` (P10)), `assets/` (fonts, images, bundled exercise WebP
 images, `exercises.catalog.json`/`exercises.pl.json`/`exercises.videos.json`, plus
 `exercises/imageMap.ts` and `exercises/index.ts` added in P4 for filename ->
 `require()` resolution), `components/` (cross-feature, zero domain knowledge -
@@ -359,18 +409,20 @@ from `app/_layout.tsx`'s boot sequence as of P4, `sql/`), `domain/` (shared
 cross-feature value objects - `Weight.ts`, `Length.ts`, deviation from the original
 section 9 tree, not yet synced back into ARCHITECTURE.md), `features/` (one dir per
 feature: `onboarding`, `profile`, `exercise-library`, `plans`, `workout-logging`,
-`rest-timer`, `records`, `statistics`, `body-metrics`, `calendar`, `data-transfer` -
-each with components/hooks/screens/services/domain/repository/types/index.ts;
+`rest-timer`, `records`, `home`, `statistics`, `body-metrics`, `calendar`, `data-transfer` -
+each with components/hooks/screens/services/domain/repository/types/index.ts (`home`
+has no `services/` - read-only repository, nothing to validate);
 `onboarding` and `profile` populated as of P3, `exercise-library` as of P4, `plans`
 as of P5 (the app's first aggregate-root feature repository - see below),
 `workout-logging` as of P6 (its second, see below), `rest-timer` as of P7 (a leaf
 with no repository - see below), `records` as of P8 (the third, sharing
 `workout-logging`'s own `completeSet` transaction rather than owning a new one - see
-below); `statistics`/`body-metrics`/`calendar`/`data-transfer` are still empty),
+below), `home` as of P10 (its own lightweight read model rather than a pulled-forward
+`StatisticsRepository` - see ADR-0019); `statistics`/`body-metrics`/`calendar`/`data-transfer` are still empty),
 `hooks/` (its first occupant, `useAppState.ts`, landed in P7), `navigation/`
 (`routes.ts` - typed route helpers per section 10.2, added P3, gained
-`profileSettings.timers` in P7 and `profileSettings.progression`/`profile.records`
-in P8), `repositories/` (shared infra: `contracts/`, `base/`, `mapping/`, `query/`,
+`profileSettings.timers` in P7, `profileSettings.progression`/`profile.records`
+in P8, and `modals.planDayPicker` in P10), `repositories/` (shared infra: `contracts/`, `base/`, `mapping/`, `query/`,
 plus the cross-cutting `settings/` sibling), `services/` (`container.ts` composition
 root, `files/`, `notifications/`, `haptics/`, `kv/`, `clock/`, `id/`, `logging/`),
 `stores/` (Zustand, ephemeral UI state only - plus the one named `activeWorkoutStore`
@@ -465,7 +517,9 @@ is injected into `sessionRepository` as a fourth constructor dependency
 transaction, the same "no repository ever `new`s another repository itself"
 discipline every other cross-repository composition in this codebase follows. P9
 added no container entries - `sessionRepository`/`sessionService` already existed
-from P6, and this phase only adds methods to them. The
+from P6, and this phase only adds methods to them. P10 added
+`homeDashboardRepository` (read-only, no matching service, same shape as P8's
+`exerciseHistoryRepository`), the seventh pair overall. The
 rest (`statistics`, `body-metrics`, `calendar`, `data-transfer`) land one at a time
 as each phase merges, each extending `AppContainer` rather than replacing it.
 `SqliteExerciseRepository` is the first real consumer of `BaseSqliteRepository`
@@ -593,8 +647,9 @@ not fixed here), not silently omitted. Testing surfaced a Jest-only gap in P4:
 `expo-asset` isn't hoisted (worked around with a manual mock,
 `__tests__/__mocks__/vectorIconsMock.tsx`; confirmed production-unaffected via
 `expo export`). Suite size by phase: 782 tests at P6, 851 at P7, 914 at P8 (each on
-its own branch before this merge), 1062 tests (112 suites, 1 pre-existing skip) at P9
-- see the repo's own `jest` run for the current total.
+its own branch before this merge), 1062 tests (112 suites, 1 pre-existing skip) at P9,
+1132 tests (123 suites, 1 pre-existing skip) at P10 - see the repo's own `jest` run for
+the current total.
 
 ## What this snapshot deliberately omits
 
