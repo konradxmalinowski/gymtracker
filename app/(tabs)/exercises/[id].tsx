@@ -1,15 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 
 import { Column } from '@/components/layout';
-import { Section, Surface, Text } from '@/components/ui';
+import { Button, Section, Surface, Text } from '@/components/ui';
 import { EmptyState, Skeleton } from '@/components/feedback';
 import { Weight } from '@/domain/Weight';
 import { ExerciseDetailScreen } from '@/features/exercise-library/screens/ExerciseDetailScreen';
 import { formatRecordValue, recordTypeLabel, useCurrentRecords } from '@/features/records';
+import { ExerciseProgressionCard, useExerciseProgression } from '@/features/statistics';
 import { usePreviousPerformance } from '@/features/workout-logging';
 import { t } from '@/i18n';
+import { routes } from '@/navigation/routes';
 import { useContainer } from '@/services/container';
 import { color, space } from '@/theme/tokens';
 
@@ -36,6 +38,7 @@ export default function ExerciseDetail() {
     <ExerciseDetailScreen
       previousPerformanceSlot={<PreviousPerformanceSlot exerciseId={id} />}
       personalRecordsSlot={<PersonalRecordsSlot exerciseId={id} />}
+      progressChartSlot={<ProgressChartSlot exerciseId={id} />}
     />
   );
 }
@@ -88,6 +91,49 @@ function PreviousPerformanceSlot({ exerciseId }: { exerciseId: string | undefine
         )}
       </Surface>
     </Section>
+  );
+}
+
+/**
+ * P11: fills `ExerciseDetailScreen`'s third slot, empty since P4. A compact,
+ * read-only `top_set`-over-3-months inline chart (no metric selector -
+ * `onMetricChange` omitted) plus a link to the dedicated
+ * `stats/exercise/[exerciseId]` screen for range/metric control, mirroring
+ * how a summary card links out to its own full screen elsewhere in this app
+ * (e.g. Home's `LastWorkoutCard` -> `history/[sessionId]`).
+ */
+function ProgressChartSlot({ exerciseId }: { exerciseId: string | undefined }) {
+  const { statisticsRepository, clock } = useContainer();
+  const { data, isPending } = useExerciseProgression(
+    statisticsRepository,
+    clock,
+    exerciseId,
+    '3m',
+    'top_set',
+  );
+
+  return (
+    <Column gap={3}>
+      {/* `ExerciseProgressionCard` already renders its own titled `Section`
+          via `ChartCard` (`statistics.exerciseProgression.screenTitle`) - no
+          second outer `Section` here, unlike the previous-performance/
+          personal-records slots above, which wrap plain untitled `Surface`s
+          and need their own title. */}
+      <ExerciseProgressionCard
+        data={data}
+        isPending={isPending}
+        metric="top_set"
+        testID="exercise-detail-progress-chart"
+      />
+      {exerciseId ? (
+        <Button
+          variant="secondary"
+          label={t('statistics.exerciseProgression.viewFullButtonLabel')}
+          onPress={() => router.push(routes.stats.exercise(exerciseId))}
+          testID="exercise-detail-view-full-progression-button"
+        />
+      ) : null}
+    </Column>
   );
 }
 

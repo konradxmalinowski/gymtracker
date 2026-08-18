@@ -71,7 +71,12 @@ export default function TabsLayout() {
             route within the tab. See `app/(tabs)/exercises/_layout.tsx`'s file
             header for the full reasoning. */}
         <Tabs.Screen name="exercises" options={{ title: t('tabs.exercises') }} />
-        <Tabs.Screen name="stats/index" options={{ title: t('tabs.stats') }} />
+        {/* Points at the folder, not "stats/index" - same P4/P5 restructure
+            reasoning as `plans`/`exercises` above, now applied to P11's own
+            nested Stack (list -> per-exercise progression). See
+            `app/(tabs)/stats/_layout.tsx`'s file header for the full
+            reasoning. */}
+        <Tabs.Screen name="stats" options={{ title: t('tabs.stats') }} />
         <Tabs.Screen name="profile/index" options={{ title: t('tabs.profile') }} />
       </Tabs>
       {/* P6: mounted above the tab bar (ADR-0007), visible whenever a

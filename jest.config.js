@@ -44,6 +44,12 @@ module.exports = {
   moduleNameMapper: {
     '^react-native-worklets$': 'react-native-worklets/lib/module/mock',
     '^react-native-reanimated$': 'react-native-reanimated/mock',
+    // P11 (statistics): `victory-native` renders through `@shopify/react-native-skia`'s
+    // Canvas, which needs a WASM CanvasKit runtime under Jest - see
+    // `__tests__/__mocks__/victoryNativeMock.tsx`'s own header comment for why a
+    // project-owned mock is used instead of the library's official (heavyweight,
+    // testEnvironment-changing) Jest setup.
+    '^victory-native$': '<rootDir>/__tests__/__mocks__/victoryNativeMock.tsx',
   },
 
   collectCoverageFrom: [
