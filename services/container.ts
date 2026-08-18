@@ -33,6 +33,8 @@ import { SqliteExerciseHistoryRepository } from '@/features/workout-logging/repo
 import type { ExerciseHistoryRepository } from '@/features/workout-logging/repository/ExerciseHistoryRepository';
 import { SqliteHomeDashboardRepository } from '@/features/home/repository/SqliteHomeDashboardRepository';
 import type { HomeDashboardRepository } from '@/features/home/repository/HomeDashboardRepository';
+import { SqliteStatisticsRepository } from '@/features/statistics/repository/SqliteStatisticsRepository';
+import type { StatisticsRepository } from '@/features/statistics/repository/StatisticsRepository';
 import { PersonalRecordService } from '@/features/records';
 import { SqlitePersonalRecordRepository } from '@/features/records/repository/SqlitePersonalRecordRepository';
 import type { PersonalRecordRepository } from '@/features/records/repository/PersonalRecordRepository';
@@ -72,8 +74,10 @@ export interface AppContainer {
   recordService: PersonalRecordService;
   /** Read model, P8 (workout-logging) - previous/best performance and recent session history for an exercise (ARCHITECTURE.md section 8.3). Read-only, so there is no accompanying service: it returns flat DTOs with nothing to validate, the same "no service layer" shape `StatisticsRepository` (a later phase) is expected to have. */
   exerciseHistoryRepository: ExerciseHistoryRepository;
-  /** Read model, P10 (home) - lightweight, home-owned streak/weekly-summary/last-session/next-plan-day queries, a deliberate stand-in for `StatisticsRepository`'s `streak()`/`weeklySummary()` while that feature is still an empty P11 skeleton (see `docs/adr/0019-home-dashboard-read-model.md`). Read-only, no accompanying service - same shape as `exerciseHistoryRepository`. */
+  /** Read model, P10 (home) - lightweight, home-owned streak/weekly-summary/last-session/next-plan-day queries. P11 resolved `docs/adr/0019-home-dashboard-read-model.md`'s open migration note: Home keeps this permanently rather than migrating onto `statisticsRepository`, which never implements `streak()`/`weeklySummary()` at all (see that repository's own header comment). Read-only, no accompanying service - same shape as `exerciseHistoryRepository`. */
   homeDashboardRepository: HomeDashboardRepository;
+  /** Read model, P11 (statistics) - volume/frequency/duration time series, muscle-group volume, per-exercise progression and the yearly heatmap, all as flat SQL-aggregated DTOs (ARCHITECTURE.md section 8.3). Read-only, no accompanying service - same shape as `exerciseHistoryRepository`/`homeDashboardRepository`. */
+  statisticsRepository: StatisticsRepository;
 }
 
 export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer>): AppContainer {
@@ -102,6 +106,8 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
     deps?.exerciseHistoryRepository ?? new SqliteExerciseHistoryRepository({ db });
   const homeDashboardRepository =
     deps?.homeDashboardRepository ?? new SqliteHomeDashboardRepository({ db });
+  const statisticsRepository =
+    deps?.statisticsRepository ?? new SqliteStatisticsRepository({ db, settings });
   const sessionRepository =
     deps?.sessionRepository ??
     new SqliteWorkoutSessionRepository({
@@ -131,6 +137,7 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
     recordService,
     exerciseHistoryRepository,
     homeDashboardRepository,
+    statisticsRepository,
     sessionRepository,
     sessionService,
   };

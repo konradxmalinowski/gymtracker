@@ -8,6 +8,8 @@ import {
 } from '@/database/seed/catalogSeeder';
 import { seedLookupTables } from '@/database/seed/lookupSeeder';
 import { SqliteExerciseRepository } from '@/features/exercise-library/repository/SqliteExerciseRepository';
+import { SqliteStatisticsRepository } from '@/features/statistics/repository/SqliteStatisticsRepository';
+import { SqliteSettingsRepository } from '@/repositories/settings';
 import { FixedClock } from '@/services/clock';
 import { Uuid7IdGenerator } from '@/services/id';
 
@@ -238,6 +240,60 @@ describe('CI performance regression guard (ADR-0014)', () => {
     // is a P9 design decision, not something P2's schema alone determines.
     test.skip('full-history JSON export stays under budget - lands in P9 (data-transfer feature)', () => {
       // Intentionally empty - see comment above.
+    });
+  });
+
+  describe('statistics repository (P11)', () => {
+    /**
+     * ADR-0014 / `docs/ROADMAP.md`'s P11 acceptance line: "one year of volume
+     * aggregation completes within the benchmark bound on the 75,000-set
+     * fixture." Through the real `SqliteStatisticsRepository` (a real
+     * `SqliteSettingsRepository` for `settings`, same `db` the rest of this
+     * suite already shares) rather than raw SQL, since - unlike the other
+     * cases in this file, which predate this repository - this is exactly the
+     * production call path a real Statistics-tab load takes. Budget matches
+     * the existing "one-year volume aggregation" case above (150ms): both
+     * scan the same `v_working_set` read model over the same one-year range.
+     */
+    it('aggregates muscle-group volume over one year under budget', async () => {
+      const oneYearAgoMs = Date.now() - 365 * 24 * 60 * 60 * 1000;
+      const localDateFrom = new Date(oneYearAgoMs).toISOString().slice(0, 10);
+      const localDateTo = new Date().toISOString().slice(0, 10);
+      const settings = new SqliteSettingsRepository(db, new FixedClock(Date.now()));
+      const repo = new SqliteStatisticsRepository({ db, settings });
+
+      const startedAt = Date.now();
+      const rows = await repo.muscleGroupVolume(localDateFrom, localDateTo);
+      const elapsedMs = Date.now() - startedAt;
+
+      console.log(
+        `Muscle-group volume aggregation (1 year): ${elapsedMs}ms (${rows.length} body parts)`,
+      );
+      expect(elapsedMs).toBeLessThan(150);
+    });
+
+    it('reduces one exercise’s progression over one year under budget', async () => {
+      const exerciseId = exerciseIds[0]!;
+      const oneYearAgoMs = Date.now() - 365 * 24 * 60 * 60 * 1000;
+      const localDateFrom = new Date(oneYearAgoMs).toISOString().slice(0, 10);
+      const localDateTo = new Date().toISOString().slice(0, 10);
+      const settings = new SqliteSettingsRepository(db, new FixedClock(Date.now()));
+      const repo = new SqliteStatisticsRepository({ db, settings });
+
+      const startedAt = Date.now();
+      const points = await repo.exerciseProgression(
+        exerciseId,
+        localDateFrom,
+        localDateTo,
+        'week',
+        'e1rm',
+      );
+      const elapsedMs = Date.now() - startedAt;
+
+      console.log(
+        `Exercise progression aggregation (1 year, e1rm): ${elapsedMs}ms (${points.length} buckets)`,
+      );
+      expect(elapsedMs).toBeLessThan(150);
     });
   });
 });
