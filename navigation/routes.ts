@@ -44,11 +44,16 @@ export const routes = {
    * it. P9's `profile.history` follows the exact same precedent - see this
    * plan's "Routing gap this plan resolves" for why the history list lives
    * here rather than under a not-yet-built `HOME --> HIST`/`CAL --> HIST`
-   * entry point (P10/P12).
+   * entry point (P10/P12). P12's `profile.calendar` follows the same
+   * precedent again - `docs/ARCHITECTURE.md` section 10.1's route graph
+   * names this route `PR --> CAL[profile/calendar]`, reached from
+   * `ProfileScreen`'s own "Training calendar" row exactly like
+   * `records`/`history`.
    */
   profile: {
     records: (): Href => '/profile/records',
     history: (): Href => '/profile/history',
+    calendar: (): Href => '/profile/calendar',
   },
 
   /**

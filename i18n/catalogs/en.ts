@@ -685,4 +685,55 @@ export const en = {
       },
     },
   },
+  calendar: {
+    screenTitle: 'Training calendar',
+    loadErrorMessage: 'Could not load your training calendar.',
+    view: {
+      month: 'Month',
+      year: 'Year',
+    },
+    month: {
+      previousAccessibilityLabel: 'Previous month',
+      nextAccessibilityLabel: 'Next month',
+      emptyTitle: 'No training this month',
+      emptyMessage: 'Workouts you complete this month will show up here.',
+      weekdayHeaderAccessibilityLabel: 'Days of the week, Monday through Sunday',
+    },
+    weekday: {
+      mon: 'Mon',
+      tue: 'Tue',
+      wed: 'Wed',
+      thu: 'Thu',
+      fri: 'Fri',
+      sat: 'Sat',
+      sun: 'Sun',
+    },
+    dayCell: {
+      trainedTemplate: '{{date}}, {{volume}} kg, {{planDayName}}',
+      trainedNoPlanTemplate: '{{date}}, {{volume}} kg',
+      trainedMultipleSessionsTemplate: '{{date}}, {{volume}} kg, {{count}} workouts',
+      untrainedTemplate: '{{date}}, no training',
+      outsideMonthTemplate: '{{date}}, outside this month',
+    },
+    legend: {
+      title: 'Training intensity',
+      lessLabel: 'Less',
+      moreLabel: 'More',
+    },
+    yearHeatmap: {
+      titleTemplate: '{{year}} training',
+      emptyTitle: 'No training yet',
+      emptyMessage: 'Your training days this year will appear here.',
+      accessibilityLabel: {
+        one: '{{year}} training activity, {{count}} training day',
+        other: '{{year}} training activity, {{count}} training days',
+      },
+    },
+    sessionPicker: {
+      title: 'Choose a workout',
+      subtitleTemplate: 'Logged on {{date}}',
+      quickWorkoutLabel: 'Workout',
+    },
+    profileRowTitle: 'Training calendar',
+  },
 } as const;

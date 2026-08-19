@@ -65,6 +65,12 @@ export function ProfileScreen() {
             testID="profile-history-row"
           />
           <ListRow
+            title={t('calendar.profileRowTitle')}
+            onPress={() => router.push(routes.profile.calendar())}
+            showChevron
+            testID="profile-calendar-row"
+          />
+          <ListRow
             title={t('profile.settingsRowTitle')}
             subtitle={t('profile.settingsRowSubtitle')}
             onPress={() => router.push(routes.profileSettings.index())}
