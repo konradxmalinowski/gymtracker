@@ -35,6 +35,8 @@ import { SqliteHomeDashboardRepository } from '@/features/home/repository/Sqlite
 import type { HomeDashboardRepository } from '@/features/home/repository/HomeDashboardRepository';
 import { SqliteStatisticsRepository } from '@/features/statistics/repository/SqliteStatisticsRepository';
 import type { StatisticsRepository } from '@/features/statistics/repository/StatisticsRepository';
+import { SqliteCalendarRepository } from '@/features/calendar/repository/SqliteCalendarRepository';
+import type { CalendarRepository } from '@/features/calendar/repository/CalendarRepository';
 import { PersonalRecordService } from '@/features/records';
 import { SqlitePersonalRecordRepository } from '@/features/records/repository/SqlitePersonalRecordRepository';
 import type { PersonalRecordRepository } from '@/features/records/repository/PersonalRecordRepository';
@@ -78,6 +80,8 @@ export interface AppContainer {
   homeDashboardRepository: HomeDashboardRepository;
   /** Read model, P11 (statistics) - volume/frequency/duration time series, muscle-group volume, per-exercise progression and the yearly heatmap, all as flat SQL-aggregated DTOs (ARCHITECTURE.md section 8.3). Read-only, no accompanying service - same shape as `exerciseHistoryRepository`/`homeDashboardRepository`. */
   statisticsRepository: StatisticsRepository;
+  /** Read model, P12 (calendar) - month/year `v_session_summary` overviews for the calendar grid and yearly heatmap, as flat DTOs (`features/calendar/repository/CalendarRepository.ts`). Read-only, no accompanying service - same shape as `exerciseHistoryRepository`/`homeDashboardRepository`/`statisticsRepository`. */
+  calendarRepository: CalendarRepository;
 }
 
 export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer>): AppContainer {
@@ -108,6 +112,7 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
     deps?.homeDashboardRepository ?? new SqliteHomeDashboardRepository({ db });
   const statisticsRepository =
     deps?.statisticsRepository ?? new SqliteStatisticsRepository({ db, settings });
+  const calendarRepository = deps?.calendarRepository ?? new SqliteCalendarRepository({ db });
   const sessionRepository =
     deps?.sessionRepository ??
     new SqliteWorkoutSessionRepository({
@@ -138,6 +143,7 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
     exerciseHistoryRepository,
     homeDashboardRepository,
     statisticsRepository,
+    calendarRepository,
     sessionRepository,
     sessionService,
   };

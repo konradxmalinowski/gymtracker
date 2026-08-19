@@ -7,6 +7,7 @@ import {
   type CatalogFile,
 } from '@/database/seed/catalogSeeder';
 import { seedLookupTables } from '@/database/seed/lookupSeeder';
+import { SqliteCalendarRepository } from '@/features/calendar/repository/SqliteCalendarRepository';
 import { SqliteExerciseRepository } from '@/features/exercise-library/repository/SqliteExerciseRepository';
 import { SqliteStatisticsRepository } from '@/features/statistics/repository/SqliteStatisticsRepository';
 import { SqliteSettingsRepository } from '@/repositories/settings';
@@ -292,6 +293,34 @@ describe('CI performance regression guard (ADR-0014)', () => {
 
       console.log(
         `Exercise progression aggregation (1 year, e1rm): ${elapsedMs}ms (${points.length} buckets)`,
+      );
+      expect(elapsedMs).toBeLessThan(150);
+    });
+  });
+
+  describe('calendar repository (P12)', () => {
+    /**
+     * `docs/ROADMAP.md`'s P12 acceptance line: "navigating twelve months is
+     * smooth (no jank, no unbounded query growth)" - treated as a
+     * benchmark-backed NFR per `plans/2026-08-19-p12-calendar.md`'s own NFR
+     * section, the same way P11 turned its own "one year of volume
+     * aggregation" acceptance line into a real assertion above. Through the
+     * real `SqliteCalendarRepository` (a real production call path,
+     * `useCalendarYear`'s own composition), not raw SQL - same `db` this
+     * whole suite shares. Budget matches every other one-year-range case in
+     * this file (150ms): `yearOverview` scans the same `v_session_summary`/
+     * `v_working_set` read model over the same one-year span.
+     */
+    it('aggregates one year of trained days under budget', async () => {
+      const repo = new SqliteCalendarRepository({ db });
+      const year = new Date().getFullYear();
+
+      const startedAt = Date.now();
+      const rows = await repo.yearOverview(year);
+      const elapsedMs = Date.now() - startedAt;
+
+      console.log(
+        `Calendar yearOverview aggregation (1 year): ${elapsedMs}ms (${rows.length} days)`,
       );
       expect(elapsedMs).toBeLessThan(150);
     });

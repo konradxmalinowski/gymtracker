@@ -1,5 +1,5 @@
 ---
-snapshot_commit: 'TBD-at-commit-time (P11 / feat/p11-statistics-and-charts, cut from main at 5834de9 [PR #15, P10 home dashboard merge], not yet committed as of this snapshot update)'
+snapshot_commit: '3c312b2 (main, PR #16 merged feat/p11-statistics-and-charts; feat/p12-calendar cut from here)'
 generated_from: CLAUDE.md, docs/ARCHITECTURE.md, docs/ROADMAP.md, docs/adr/*, docs/PRODUCT-BRIEF.md
 ---
 
@@ -14,24 +14,32 @@ is resolved - PR #12 merged `feat/p8-progressive-overload` (already carrying the
 merge inside it) into `main` at `5e004cf`, so the hash above is now a single linear
 tip, not a two-sided identifier. The "Merge note" subsection below is kept as
 historical record of how that merge was resolved, not as an open caveat. P10's own
-`TBD-at-commit-time` placeholder was never filled in with its real merge hash before
-P11 started (PR #15 merged `feat/p10-home-dashboard` into `main` at `5834de9`) -
-recorded here retroactively rather than silently left stale.
+`TBD-at-commit-time` placeholder was filled retroactively (PR #15 merged
+`feat/p10-home-dashboard` into `main` at `5834de9`), and P11's own equivalent
+placeholder was filled the same way: PR #16 merged `feat/p11-statistics-and-charts`
+into `main` at `3c312b2`, which was this snapshot's real commit at the start of P12.
+P12 (training calendar) follows the same not-yet-merged pattern P11 itself passed
+through before its own PR landed: this file's Status section below is updated to
+reflect P12's real, fully-implemented, reviewed, and tested working-tree state on
+`feat/p12-calendar`, cut from `main` at `3c312b2` - the `snapshot_commit` value above
+is deliberately left unchanged until P12's own PR merges, at which point it gets the
+same retroactive fill-in P10/P11 already received, rather than being guessed at or
+left pointing at a commit that does not yet exist.
 
 ## Status
 
 P0 (project foundation), P1 (design system/UI primitives), P2 (persistence
 foundation), P3 (onboarding, profile and core settings), P4 (exercise library), P5
 (workout plans), P6 (workout logging), P7 (rest timer), P8 (progressive overload
-and personal records), P9 (workout summary and history), P10 (home dashboard), and P11
-(statistics and charts) are complete - `docs/ROADMAP.md`'s MVP line closed at P10, and
-P11 is the first phase past it. `onboarding`, `profile`, `exercise-library`,
-`plans`, `workout-logging`, `rest-timer`, `records`, `home`, and `statistics` are the
-nine features with real implementations (`rest-timer` owns no database table and
-therefore no repository; `records`, `home`, and `statistics` each have one, `home` and
-`statistics` with no accompanying service - see "Composition root" below); the
-remaining three (`body-metrics`, `calendar`, `data-transfer`) remain empty skeletons
-awaiting their phase. The app boots
+and personal records), P9 (workout summary and history), P10 (home dashboard), P11
+(statistics and charts), and P12 (training calendar) are complete - `docs/ROADMAP.md`'s
+MVP line closed at P10, and P11-P12 are the first two phases past it. `onboarding`,
+`profile`, `exercise-library`, `plans`, `workout-logging`, `rest-timer`, `records`,
+`home`, `statistics`, and `calendar` are the ten features with real implementations
+(`rest-timer` owns no database table and therefore no repository; `records`, `home`,
+`statistics`, and `calendar` each have one, all but `records` with no accompanying
+service - see "Composition root" below); the remaining two (`body-metrics`,
+`data-transfer`) remain empty skeletons awaiting their phase. The app boots
 for real as of P3, and as of P4 also seeds the
 exercise catalog on every boot: `app/_layout.tsx` opens the database, runs
 migrations, runs `database/seed/runSeed()` (idempotent), builds the `AppContainer`,
@@ -397,6 +405,46 @@ was hardcoded untranslated English describing the chart type rather than its dat
 (A11Y-P11-002, MEDIUM; fixed by making the prop required with a real computed
 summary).
 
+Training calendar (P12): `features/calendar/` (new, tenth real feature) replaces the
+P2-era empty skeleton with a month/year calendar - per-day intensity from volume,
+plan-day labels, month navigation, tap-through to `history/[sessionId]` (or a
+multi-session picker sheet), reached from a new "Training calendar" row on
+`ProfileScreen`. `CalendarRepository`/`SqliteCalendarRepository` (2 methods,
+`monthOverview`/`yearOverview`, no service - the same shape `HomeDashboardRepository`/
+`StatisticsRepository` established) is the ninth feature-repository pair in
+`AppContainer`. `docs/adr/0020-calendar-read-model.md` resolves the `CAL --> WL`
+diagram edge the same way ADR-0019 resolved `STAT --> WL`: `calendar` reads
+`v_session_summary`/`v_working_set` directly, never calling into
+`workout-logging`'s service layer. A real, two-part performance investigation ran
+this phase: both methods originally read `v_session_summary` and measured over the
+shared 150ms one-year-range budget on the 75,000-set fixture (`yearOverview`
+195-347ms, `monthOverview` ~206-216ms) because that view's own internal aggregation
+never sees a caller's date-range filter; `yearOverview` was rewritten to read
+`v_working_set` directly (mirroring `SqliteStatisticsRepository.yearlyHeatmap`),
+`monthOverview` to a correlated scalar subquery into `v_working_set` (after two
+rejected intermediate approaches - a denormalized-column read that broke test
+fixtures, and a join-then-group that SQLite still planned expensively) - both
+verified via `EXPLAIN QUERY PLAN` to hit `ix_session_local_date` and measured at
+0-2ms post-fix. Domain layer: `generateMonthGrid`/`computeDayIntensities`/
+`localDate.ts` (`features/calendar/domain/`) are pure calculators, the latter two a
+deliberate duplication of `statistics`' equivalent primitives (the dependency graph
+forbids `calendar --> statistics`). A found-and-fixed doc-comment gap: `
+generateMonthGrid`'s comment claimed the grid is always 35 or 42 cells; a non-leap
+February starting on a Monday (1993-02) produces a valid 28-cell grid instead - the
+code was always correct, only the comment was incomplete, corrected in this
+documentation pass (logic untouched). Verification: typecheck/lint/prettier/Jest (144
+suites, 1317 passed, 1 pre-existing skip, +9 suites/+89 tests over P11's 135/1228)
+clean, `expo export --platform ios` used again as the build-verification proxy (dev-
+client deferral re-offered and re-deferred per Step 0, same as every phase since P4),
+no new npm dependency. Security review (`reports/security-2026-08-19-p12.md`) found
+zero critical/high/medium/low findings, three informational notes. Accessibility
+review (`reports/accessibility-2026-08-19-p12.md`) found no BLOCKING finding - the
+`SwipeableRow`-collapse class confirmed absent - and fixed two non-blocking findings
+within the phase: `CalendarMonth`'s weekday header row leaked seven context-free
+swipe stops (A11Y-P12-001, MEDIUM), and `CalendarScreen` announced the month view's
+empty state but not the year view's (A11Y-P12-002, HIGH, the same "sibling screen in
+the same diff" class P9/P10 already established).
+
 **Merge note:** `feat/p8-progressive-overload` was branched before `feat/p7-rest-timer`
 merged, so both touched `WorkoutSessionRepository.ts`/
 `SqliteWorkoutSessionRepository.ts`, `WorkoutSessionService.ts`, `ActiveWorkoutScreen.tsx`,
@@ -584,8 +632,9 @@ from P6, and this phase only adds methods to them. P10 added
 `homeDashboardRepository` (read-only, no matching service, same shape as P8's
 `exerciseHistoryRepository`), the seventh pair overall. P11 added
 `statisticsRepository` (read-only, no matching service, same shape), the eighth pair
-overall. The
-rest (`body-metrics`, `calendar`, `data-transfer`) land one at a time
+overall. P12 added `calendarRepository` (read-only, no matching service, same
+shape), the ninth pair overall. The
+rest (`body-metrics`, `data-transfer`) land one at a time
 as each phase merges, each extending `AppContainer` rather than replacing it.
 `SqliteExerciseRepository` is the first real consumer of `BaseSqliteRepository`
 beyond `SqliteProfileRepository`, and maintains the `exercise_fts` FTS5 index
@@ -714,8 +763,9 @@ not fixed here), not silently omitted. Testing surfaced a Jest-only gap in P4:
 `__tests__/__mocks__/vectorIconsMock.tsx`; confirmed production-unaffected via
 `expo export`). Suite size by phase: 782 tests at P6, 851 at P7, 914 at P8 (each on
 its own branch before this merge), 1062 tests (112 suites, 1 pre-existing skip) at P9,
-1132 tests (123 suites, 1 pre-existing skip) at P10 - see the repo's own `jest` run for
-the current total.
+1132 tests (123 suites, 1 pre-existing skip) at P10, 1228 tests (135 suites, 1
+pre-existing skip) at P11, 1317 tests (144 suites, 1 pre-existing skip) at P12 - see
+the repo's own `jest` run for the current total.
 
 ## What this snapshot deliberately omits
 
