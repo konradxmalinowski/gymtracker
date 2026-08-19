@@ -682,8 +682,15 @@ dependencies installed through `expo install` - `react-native-view-shot@5.1.0`
 (captures an off-screen `ShareableSummaryCard` built purely from the session's own
 already-displayed totals) and `expo-sharing@~57.0.11` (hands the resulting PNG to the
 native share sheet); `expo-sharing`'s auto-registered config plugin is a genuine
-no-op, confirmed by reading its source during the security pass, and is deliberately
-left unregistered in `app.config.ts` rather than added for nothing.
+no-op, confirmed by reading its source during the security pass, and was left
+unregistered in `app.config.ts` at the time - a later bug-fix pass diagnosing a
+`Cannot find native module 'ExpoSharing'` crash (root cause: a stale dev-client build
+missing the compiled native module, unrelated to plugin registration - a fresh
+dev-client build fixes the actual crash) added `'expo-sharing'` to `app.config.ts`'s
+`plugins` array as a defensive step; re-reading `node_modules/expo-sharing/plugin`
+at that point reconfirmed it remains a no-op with no share-extension options passed,
+so registering it changes nothing functionally, it is just no longer literally
+absent from the plugins list.
 `WorkoutHistoryListScreen` (`app/profile/history.tsx`) is a paginated, month-grouped
 `FlashList` - `useSessionHistoryList`'s `useInfiniteQuery` fetches `HISTORY_PAGE_SIZE
 = 50` rows per page (well inside `repositories/query`'s 100-row clamp) via
