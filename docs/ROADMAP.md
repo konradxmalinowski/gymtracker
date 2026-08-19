@@ -437,6 +437,10 @@ Commit: `feat: add statistics dashboard with volume, frequency and progression c
 
 ## P12 - Calendar
 
+**Status: complete** (`feat/p12-calendar`, 2026-08-19) - see `CLAUDE.md`'s Status
+section for the full write-up and `docs/adr/0020-calendar-read-model.md` for the
+`CalendarRepository` read-model decision.
+
 Scope: monthly calendar with per-day intensity from volume; day cells showing which plan
 day was used; tapping a day opens the session; month navigation; a compact year view.
 

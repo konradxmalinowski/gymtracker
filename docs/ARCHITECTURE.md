@@ -1260,6 +1260,28 @@ at P11 kickoff:
   `HomeDashboardRepository`'s equivalents permanently, since neither method is
   actually needed by anything P11 built.
 
+**`CalendarRepository`** (read model, feature: `calendar`, real as of P12) - no
+accompanying service, the same "flat DTOs, nothing to validate" shape
+`ExerciseHistoryRepository`/`HomeDashboardRepository`/`StatisticsRepository` already
+established
+
+```
+monthOverview(year, month, tx?): Promise<CalendarDayDto[]>   // one entry per day-with-activity in the month; month is 1-12
+yearOverview(year, tx?): Promise<CalendarYearDayDto[]>        // one entry per trained day in the year, feeds the compact year view's binning
+```
+
+Added in P12 as a deliberate deviation from the same shape this section's own
+`StatisticsRepository`/`HomeDashboardRepository` entries already established a
+precedent for - see `docs/adr/0020-calendar-read-model.md` for the full rationale,
+including a real performance investigation that shaped the shipped query shape:
+`monthOverview` reads `workout_session` directly (a correlated scalar subquery into
+`v_working_set` for per-session volume) rather than the aggregate `v_session_summary`
+view, and `yearOverview` reads `v_working_set` directly (mirroring
+`StatisticsRepository.yearlyHeatmap`'s own query shape) - both changes made after the
+original `v_session_summary`-backed implementation measured over its shared 150ms
+one-year-range budget on the 75,000-set fixture. Every query is parameterized and
+filters `deleted_at IS NULL`/`status = 'completed'`.
+
 **`BodyMetricRepository`**, **`ProgressPhotoRepository`**, **`SettingsRepository`**,
 **`ProfileRepository`**, **`DataTransferRepository`** follow the same shape and are
 specified in the feature sections of `docs/ROADMAP.md`.
@@ -1560,6 +1582,20 @@ Allowed dependency directions, stated explicitly:
   which does not implement `streak()`/`weeklySummary()` at all), and `daily-goals`
   remains documentation-only (P17). Both edges are left in the diagram as historical
   intent rather than removed, exactly as ADR-0019 itself instructs.
+- `calendar` is real as of P12, and the `CAL --> WL` edge this diagram draws is
+  likewise now known to never become real, resolved the same way ADR-0019 already
+  resolved `STAT --> WL`: `docs/adr/0020-calendar-read-model.md` records that
+  `CalendarRepository` reads `v_session_summary`/`v_working_set` directly through its
+  own repository rather than calling `WorkoutSessionService`, the identical "read the
+  shared view, don't call the write feature" pattern `statistics` and `home` both
+  already use. `calendar` has no real edge to `statistics` or `home` either - its own
+  `features/calendar/domain/{localDate.ts,intensityBinning.ts}` are a deliberate,
+  small duplication of `statistics`' equivalent calendar-math and quantile-binning
+  primitives, the same "duplicate rather than create a cross-feature dependency"
+  precedent `statistics`' own `localDate.ts` set for `home`'s `StreakCalculator.ts`
+  primitives one phase earlier. The `CAL --> WL` edge is left in the diagram as
+  historical intent rather than removed, matching how `HOME --> STAT`/`HOME --> DG`
+  were handled above.
 
 Cycles are prevented mechanically by `eslint-plugin-import`'s `no-cycle` rule set to
 error, plus the barrel-only rule from section 3.1.
@@ -2031,6 +2067,14 @@ rather than left to implementation.
 ['stats', metric, rangeKey]               ['body', metric, rangeKey]
 ['calendar', year, month]                 ['home', 'dashboard']
 ```
+
+As shipped in P12, `calendarKeys.month(year, month)` matches this table's
+`['calendar', year, month]` entry verbatim; `calendarKeys.year(year)` is
+`['calendar', 'year', year]`, a small, deliberate extension beyond the table's
+literal single entry (needed to keep the month- and year-scoped queries from
+colliding under the same key shape) rather than a deviation from it - both key
+families still start with the literal `'calendar'` segment the `finishWorkout`
+invalidation row below already matches via TanStack Query's own prefix matching.
 
 Invalidation is centralized in `features/*/hooks/invalidation.ts` rather than scattered
 across mutations:

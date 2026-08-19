@@ -9,10 +9,11 @@ reference, not a replacement. Section numbers below refer to `docs/ARCHITECTURE.
 P0 (project foundation), P1 (design system and UI primitives), P2 (persistence
 foundation), P3 (onboarding, profile and core settings), P4 (exercise library), P5
 (workout plans), P6 (workout logging), P7 (rest timer), P8 (progressive overload and
-personal records), P9 (workout summary and history), P10 (home dashboard), and P11
-(statistics and charts) are complete - `docs/ROADMAP.md`'s MVP line closed at P10, and
-P11 is the first phase past it (v1.1-v1.3, "Statistics, calendar, body metrics, data
-transfer"). P8 (`feat/p8-progressive-overload`) was cut from
+personal records), P9 (workout summary and history), P10 (home dashboard), P11
+(statistics and charts), and P12 (training calendar) are complete - `docs/ROADMAP.md`'s
+MVP line closed at P10, and P11-P12 are the first two phases past it (v1.1-v1.3,
+"Statistics, calendar, body metrics, data transfer"). P8
+(`feat/p8-progressive-overload`) was cut from
 `main` before P7's PR merged - a documented decision made when P8 was kicked off so
 the two phases could be reviewed independently (see
 `plans/2026-08-11-p8-progressive-overload.md`'s "Branch note") - so the two branches'
@@ -21,13 +22,13 @@ overlapping files (`WorkoutSessionRepository.ts`/`SqliteWorkoutSessionRepository
 this file and `docs/architecture-snapshot.md`) needed a merge; that merge is reflected
 throughout this file as of this update, not left as an open branch note. The
 `onboarding`, `profile`, `exercise-library`, `plans`, `workout-logging`, `rest-timer`,
-`records`, `home`, and `statistics` features now have real implementations (screens,
-hooks, services, repository where applicable - `rest-timer` itself owns no database
-table and therefore no repository; `records` does, see below; `home` and `statistics`
-each have a repository but no accompanying service, see below); the remaining three
-features (`body-metrics`, `calendar`, `data-transfer`) are still empty skeleton
-directories (components/hooks/screens/services/domain/repository/types/index.ts
-subfolders, no implementation) awaiting their own phase.
+`records`, `home`, `statistics`, and `calendar` features now have real implementations
+(screens, hooks, services, repository where applicable - `rest-timer` itself owns no
+database table and therefore no repository; `records` does, see below; `home`,
+`statistics`, and `calendar` each have a repository but no accompanying service, see
+below); the remaining two features (`body-metrics`, `data-transfer`) are still empty
+skeleton directories (components/hooks/screens/services/domain/repository/types/
+index.ts subfolders, no implementation) awaiting their own phase.
 
 The app now boots for real: `app/_layout.tsx` opens the database, runs migrations,
 seeds the exercise catalog (`database/seed/runSeed()`, idempotent - a P2 gap fixed in
@@ -1099,6 +1100,204 @@ volume aggregation case - directly satisfying `docs/ROADMAP.md`'s P11 acceptance
 ("one year of volume aggregation completes within the benchmark bound on the
 75,000-set fixture").
 
+**Training calendar (P12):** `features/calendar/` fills the P2-era empty skeleton
+directory - the same "empty skeleton to real implementation" framing P11 used for
+`statistics` - and is the tenth real feature. It ships a monthly calendar with
+per-day training intensity derived from volume, day cells showing which plan day was
+used, month navigation, and a compact year heatmap view, reached from a new
+"Training calendar" row on `ProfileScreen`.
+
+`features/calendar/repository/{CalendarRepository.ts,SqliteCalendarRepository.ts}`
+is a read model with no accompanying service - the same "flat DTOs, nothing to
+validate" shape P10's `HomeDashboardRepository` and P11's `StatisticsRepository`
+already established - exposing exactly two methods, `monthOverview(year, month)` and
+`yearOverview(year)`. This resolves the `calendar --> workout-logging` edge
+`docs/ARCHITECTURE.md` section 9.1 had drawn as real since before this feature
+existed, the same way `docs/adr/0019-home-dashboard-read-model.md` already resolved
+the equivalent `statistics --> workout-logging` edge: `calendar` never calls
+`workout-logging`'s service layer, and instead reads `v_session_summary`/
+`v_working_set` directly through its own repository. This decision - and the real
+performance investigation that shaped its final query shape (below) - is recorded in
+a new ADR, `docs/adr/0020-calendar-read-model.md`. `services/container.ts` gained
+`calendarRepository` with no matching service, the ninth feature-repository pair
+after P3-P11's profile/exercise-library/plans/workout-logging/records/
+exercise-history/home/statistics ones.
+
+The domain layer (`features/calendar/domain/`) is three pure calculators plus a
+calendar-math primitives file, the same "duplicate, don't import" shape `statistics`'
+own `localDate.ts` already established for the same structural reason (the
+dependency graph forbids `calendar` from depending on `home` or `statistics`):
+`generateMonthGrid(year, month)` gap-fills a full, Monday-anchored week grid in JS
+over already-day-level data (`dateRangeBuckets.ts`'s "never a second hand-written SQL
+date-bucket expression" precedent, applied here rather than imported, since
+`CalendarRepository.monthOverview` only ever returns days that actually have a
+session); `computeDayIntensities(rows, allLocalDates)` is a calendar-scoped
+transcription of `yearlyHeatmapBinning.ts`'s quartile-binning math, generalized to
+take an explicit date list so one function serves both the month and year views; and
+`features/calendar/domain/localDate.ts` duplicates `statistics`' own calendar-math
+primitives (`endOfMonth`, `addMonthsToLocalDate`, `isSameYearMonth`,
+`generateDateRange` beyond what that file needed). A real, found-not-fixed-by-the-
+finder gap surfaced in `generateMonthGrid`'s own doc comment during test-agent's
+property-testing pass: the comment claimed the grid is "always... 35 or 42 cells,"
+but a non-leap February whose 1st falls on a Monday (confirmed via 1993-02) needs
+zero leading and zero trailing filler days and produces a valid, gap-free, correctly-
+ordered 28-cell (4-week) grid - the code was never wrong, only the documented
+invariant was incomplete, and it was off-limits for the implementing agents to touch
+(the doc comment lives in a file the accessibility/test agents were not permitted to
+edit that phase). Fixed as part of this documentation pass, not left as a follow-up:
+`generateMonthGrid`'s doc comment now states the true invariant ("4 to 6 Monday-
+anchored weeks, i.e. 28 to 42 cells") with the 1993-02 case named as the reason - a
+trivial, logic-untouched doc-comment edit, the narrow exception this docs pass was
+permitted. The property test itself was already corrected by test-agent (asserting
+the true invariant plus a named regression case pinning 1993-02) before this pass
+ever started.
+
+A real, two-part performance investigation, in the same class of depth this
+codebase's other phases' own technical write-ups already carry (P9's navigation-bug
+investigation, P11's `victory-native` Jest-mock reasoning): both `yearOverview` and
+`monthOverview` originally read `v_session_summary` and measured over budget against
+the 75,000-set fixture - `yearOverview` 195-347ms, `monthOverview` (not separately
+benchmarked, but manually timed once the same root cause was suspected) ~206-216ms,
+both against the shared `< 150ms` one-year-range budget P11's own year-range queries
+established. Root cause: `v_session_summary` is itself already a `GROUP BY s.id`
+aggregate view over the entire `workout_session` table, so a caller's own
+`WHERE local_date BETWEEN ? AND ?` filter never reaches the view's internal
+aggregation - SQLite materializes/aggregates the whole fixture on every call
+regardless of the requested range. `yearOverview`'s fix was a straightforward swap:
+read `v_working_set` directly instead, the exact query shape
+`SqliteStatisticsRepository.yearlyHeatmap` already uses one call away - measured
+post-fix at 1-2ms. `monthOverview` could not take the same swap verbatim, since its
+DTO needs per-session `plan_day_name_snapshot`, data that lives only on
+`workout_session`, not on the per-working-set `v_working_set` view. Two approaches
+were tried and rejected before the shipped one: reading `workout_session.
+total_volume_kg` directly (the cheapest possible read, no aggregation at all) was
+rejected because that denormalized column is only ever populated by a real `finish()`
+call, and the repository's own test fixtures construct `completed` sessions directly
+without going through `finish()` - it broke 2 of 16 repository tests with a `0`
+volume where a real one was expected, and fixing the live-volume convention to match
+a test shortcut (rather than the other way around) was rejected as the wrong
+direction to bend; a `LEFT JOIN v_working_set ... GROUP BY ws.id` (structurally the
+same computation `v_session_summary`'s own view definition already does, just
+written directly) measured ~145-155ms, barely inside budget and failing on some
+runs - `EXPLAIN QUERY PLAN` showed SQLite choosing to fully materialize
+`v_working_set` before ever applying the outer `local_date` filter, since joining it
+a second time against `workout_session` gave the planner two copies of that table to
+reconcile. The shipped fix is a correlated scalar subquery into `v_working_set`,
+evaluated per outer `workout_session` row rather than joined-then-grouped:
+`SELECT ws.id, ws.local_date, ws.plan_day_name_snapshot, (SELECT COALESCE(SUM(vws.volume_kg), 0) FROM v_working_set vws WHERE vws.session_id = ws.id) AS total_volume_kg FROM workout_session ws WHERE ws.status = 'completed' AND ws.deleted_at IS NULL AND ws.local_date BETWEEN ? AND ? ORDER BY ws.local_date ASC`
+
+- `EXPLAIN QUERY PLAN` confirmed `SEARCH ws USING INDEX ix_session_local_date` as the
+  first step (the partial index `database/schema.sql` already built for "History list,
+  calendar, streaks, weekly summary"), filtering `workout_session` down to the handful
+  of in-range sessions before `workout_set` is ever touched, then a per-matched-session
+  indexed subquery search. Measured post-fix: 0ms on the fixture. No production
+  behavior change beyond query source - both methods' DTO shapes, filtering semantics,
+  and volume-derivation formula are unchanged; only the SQL query source and join/
+  subquery shape changed, re-verified by the unchanged repository test suite passing
+  against both the before and after query.
+
+The UI layer: `CalendarScreen` (`features/calendar/screens/CalendarScreen.tsx`) is a
+month/year `SegmentedControl` toggle with prev/next-month navigation via
+`addMonthsToLocalDate` (local component state seeded from the injected `Clock`, not a
+route param - this screen has exactly one entry point and nothing deep-links into a
+specific month yet); the gap-filled grid always renders, per `generateMonthGrid`'s
+own "renders cleanly even with an empty repository result" contract, with a real
+`EmptyState` block rendered additively alongside it (never replacing it) when a month
+has zero trained days - satisfying the roadmap's "a month with no workouts renders
+cleanly" acceptance line without a blank-grid special case. Day-tap routes straight
+to `history/[sessionId]` for a single-session day, or opens
+`CalendarDaySessionPicker` (an in-place sheet on the existing `SheetHost`/
+`BottomSheet`/`sheetStore`, no new sheet mechanism) for the rare multi-session day.
+The components (`CalendarMonth`, `CalendarDayCell`, `CalendarLegend`,
+`CalendarDaySessionPicker`, `CalendarYearHeatmapCard`) are new; the last one reuses
+`components/charts/HeatmapView` verbatim for the compact year view rather than a
+second heatmap renderer, mirroring `YearlyHeatmapCard.tsx`'s P11 wiring almost
+exactly. Navigation wiring: `app/profile/calendar.tsx` (a thin wrapper, matching
+`app/profile/history.tsx`'s exact shape), `routes.profile.calendar()` in
+`navigation/routes.ts`, and a new "Training calendar" `ListRow` on `ProfileScreen`
+between "Training history" and "Settings." The `['calendar', year, month]`/
+`['calendar', 'year', year]` query-key family `docs/ARCHITECTURE.md` section 12.1
+already anticipated needed no new invalidation wiring - `finishWorkout`'s
+`['calendar']`-prefixed invalidation was already present since P9, in anticipation of
+this feature, confirmed by reading the file rather than assumed.
+
+Two small, mechanical findings were caught and fixed in a coordinator diff review
+before handoff to test-agent, the same "pre-commit catch-and-fix" precedent P9's own
+`/code-review high` paragraph established: `CalendarScreen.tsx`'s month-anchor
+initializer called `new Date()` directly instead of going through the injected
+`Clock`, fixed to `startOfMonth(clock.localDate())` (matching `useStatisticsDashboard`/
+`useHomeDashboard`'s existing convention); and a 5-entry intensity color ramp was
+duplicated verbatim across `CalendarDayCell.tsx` and `CalendarLegend.tsx`, extracted
+to a shared `features/calendar/components/calendarIntensityColors.ts`.
+
+An accessibility review (`reports/accessibility-2026-08-19-p12.md`, general-purpose
+agent standing in for the accessibility-agent role, the same substitution P7-P11 used)
+found no BLOCKING finding - the `SwipeableRow`-collapse bug class that blocked P7/P8
+is confirmed absent (`grep -rn "SwipeableRow" features/calendar
+app/profile/calendar.tsx` returns zero matches; the primitive is never imported
+anywhere in this feature, and every interactive control is already the outermost
+accessible node in its own subtree with nothing composed underneath it that could be
+swallowed). Two real, non-blocking findings were found and fixed within the same
+pass: `CalendarMonth`'s weekday header row exposed seven individually-focusable,
+context-free "Mon"/"Tue"/... swipe stops instead of one meaningful summary
+(A11Y-P12-001, MEDIUM - fixed by making the header row's container `accessible` with
+a real, translated `accessibilityLabel`, "Days of the week, Monday through Sunday");
+and `CalendarScreen` announced the month view's empty state but never the year view's
+
+- an asymmetry within the same file/diff, the same recurring "one screen announces,
+  its sibling in the same diff doesn't" class A11Y-P9-*/A11Y-P10-001 already established
+  (A11Y-P12-002, HIGH - fixed by adding a third `useEffect` branch announcing
+  `t('calendar.yearHeatmap.emptyTitle')` when the year view resolves empty). Both fixes
+  were verified with a real before/after RNTL mount, not just a code re-read; both
+  regression tests were added afterward by test-agent once free (the accessibility
+  review was explicitly told not to touch `__tests__/` while test-agent was
+  concurrently active there). One LOW/informational note was recorded, not fixed:
+  `CalendarDaySessionPicker`'s rows are titled only by plan-day name (or a generic
+  "Workout" fallback) with no time-of-day disambiguator, so two same-day sessions using
+  the same plan day render two identically-labeled rows - both fully reachable and
+  correctly labeled with the information the component has, but a real data/UX gap
+  (`CalendarDayDto` carries no session start time today) left for a future product
+  decision rather than a mechanical accessibility fix. A second, unrelated minor
+  finding surfaced by test-agent rather than the accessibility review:
+  `monthOverview`'s post-fix query has no secondary tiebreaker for two sessions sharing
+  a `local_date`, so a same-day multi-session picker's row order is SQL-implementation-
+  defined rather than guaranteed - resolved by reworking the affected repository test
+  to assert the actually-documented invariant (each `sessionIds[i]` pairs with the
+  correct `planDayNames[i]`) independent of ordering, rather than by adding an
+  `ORDER BY` tiebreaker the repository's own DTO contract never promised; a future pass
+  touching `features/calendar/` can add a deterministic `ORDER BY started_at ASC` if
+  picker-row order ever needs to stop being incidental.
+
+A security review (`reports/security-2026-08-19-p12.md`, security-agent-sonnet,
+routine scope) found zero critical/high/medium/low findings and three informational
+notes: both repository methods are fully parameterized with no template-literal
+interpolation of `year`/`month` (or any derived date string) into SQL text anywhere in
+the file; `deleted_at`/`status = 'completed'` filtering is fully inherited from
+`v_session_summary`'s own `WHERE` clause with no redundant re-filtering or bypass path
+in the pre-fix queries the report reviewed (the post-fix `monthOverview` query moved
+to querying `workout_session` directly with its own explicit `status`/`deleted_at`
+filter, carrying the same guarantee forward - re-confirmed by the unchanged repository
+test suite, not a fresh review pass); and `year`/`month` are traced end-to-end as
+locally-derived calendar-navigation state (never a route param, form field, or deep
+link), with the SQL binding staying parameterized regardless of the input's
+trustworthiness either way. `services/container.ts`'s new `calendarRepository` member
+is additive-only, no existing line modified. Nothing blocked commit.
+
+P12 verification (all independently re-run by the orchestrator, not just
+agent-reported): `npx tsc --noEmit` clean; `npx eslint .` clean (0 errors repo-wide,
+only the same class of pre-existing `no-require-imports` warnings in test files every
+prior phase already has); `npx prettier --check` clean; full Jest suite: 144 suites,
+1317 passed, 1 pre-existing skip (up from P11's 135/1228 baseline by exactly 9 new
+suites and 89 new tests: 5 domain, 1 repository, 4 component/screen suites, plus one
+new benchmark case inside the pre-existing `benchmarks.perf.test.ts`); `npx expo
+export --platform ios` bundled successfully, used again as the build-verification
+proxy - no simulator/emulator/dev-client available in this environment, the same
+standing constraint every phase since P4 has flagged. Per Step 0, the dev-client
+build-verification question was re-offered to the user this phase (per the
+`feedback_build_verification` memory) and re-deferred again, the same decision made
+every phase since P4 - EAS cloud build stays available but unused. No new npm
+dependency this phase.
+
 ## Product
 
 Offline-only React Native/Expo workout logging app. No backend, no accounts, no
@@ -1214,10 +1413,18 @@ item, non-blocking).
   edge already established). It does not depend on `workout-logging` - its own
   repository reads `v_working_set`/`workout_session` directly, the same
   "read the shared view, don't call the write feature" shape `home` uses.
+- `calendar` (P12, real as of this phase) likewise does not depend on
+  `workout-logging` in practice, despite `docs/ARCHITECTURE.md` section 9.1's diagram
+  drawing a `CAL --> WL` edge - `docs/adr/0020-calendar-read-model.md` resolves this
+  permanently, the same way ADR-0019 already resolved the equivalent edge for
+  `statistics`: `CalendarRepository` reads `v_session_summary`/`v_working_set`
+  directly, never calling `WorkoutSessionService`. It has no edge to `statistics` or
+  `home` either - its own intensity-binning and calendar-math primitives are a
+  deliberate, small duplication of `statistics`' equivalents, not an import.
 
 Thirteen features total: `onboarding`, `profile`, `exercise-library`, `plans`,
-`workout-logging`, `rest-timer`, `records`, `home`, `statistics`, `body-metrics`,
-`calendar`, `data-transfer`, `daily-goals`.
+`workout-logging`, `rest-timer`, `records`, `home`, `statistics`, `calendar`,
+`body-metrics`, `data-transfer`, `daily-goals`.
 
 ## Data layer (sections 7-8)
 
