@@ -63,6 +63,24 @@ export function SwipeableRow({
     }
   }
 
+  // The Pan gesture's `.onUpdate`/`.onEnd` callbacks are Worklets - anything
+  // they reference gets captured into a closure that Worklets must serialize
+  // to copy across to the UI thread. `leftAction`/`rightAction` are
+  // caller-supplied `SwipeableRowAction` objects that carry a `ReactNode
+  // icon` field (a JSX element, which can hold dev-mode fiber/owner
+  // references Worklets cannot serialize) - referencing the objects
+  // themselves anywhere inside a worklet, even just for an existence check,
+  // pulls that whole unserializable object into the closure and crashes.
+  // Derived plain primitives/functions below are what the worklets actually
+  // reference instead - a boolean and a bare function reference are both
+  // trivially safe for Worklets/`runOnJS` to handle, and neither needs the
+  // parent action object (or its `icon` field) to ever cross into the
+  // worklet's closure at all.
+  const hasLeftAction = leftAction !== undefined;
+  const hasRightAction = rightAction !== undefined;
+  const leftOnTrigger = leftAction?.onTrigger;
+  const rightOnTrigger = rightAction?.onTrigger;
+
   const pan = Gesture.Pan()
     .activeOffsetX([-10, 10])
     .failOffsetY([-10, 10])
@@ -70,7 +88,7 @@ export function SwipeableRow({
       // Only allow horizontal movement toward a side that has an action
       // configured - dragging into a side with no action just resists.
       const draggingLeft = event.translationX < 0;
-      const hasAction = draggingLeft ? rightAction !== undefined : leftAction !== undefined;
+      const hasAction = draggingLeft ? hasRightAction : hasLeftAction;
       translateX.value = hasAction ? event.translationX : event.translationX * 0.15;
 
       const crossed = Math.abs(translateX.value) > threshold;
@@ -82,15 +100,15 @@ export function SwipeableRow({
       }
     })
     .onEnd(() => {
-      const crossedRight = translateX.value > threshold && leftAction !== undefined;
-      const crossedLeft = translateX.value < -threshold && rightAction !== undefined;
+      const crossedRight = translateX.value > threshold && hasLeftAction;
+      const crossedLeft = translateX.value < -threshold && hasRightAction;
 
-      if (crossedRight && leftAction) {
+      if (crossedRight && leftOnTrigger) {
         translateX.value = withTiming(0, { duration: motion.duration.fast });
-        runOnJS(leftAction.onTrigger)();
-      } else if (crossedLeft && rightAction) {
+        runOnJS(leftOnTrigger)();
+      } else if (crossedLeft && rightOnTrigger) {
         translateX.value = withTiming(0, { duration: motion.duration.fast });
-        runOnJS(rightAction.onTrigger)();
+        runOnJS(rightOnTrigger)();
       } else {
         translateX.value = withSpring(0, motion.spring.snappy);
       }
