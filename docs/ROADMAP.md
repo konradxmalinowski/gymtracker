@@ -449,6 +449,27 @@ workouts renders cleanly; navigating twelve months is smooth.
 
 Commit: `feat: add training calendar with monthly workout overview`
 
+**Post-P12 bugfix pass note (2026-08-20):** a full on-device Android QA sweep (see
+`CLAUDE.md`'s Status section for the full write-up) found and fixed 13 real bugs beyond
+this phase's own scope, including a native SQLite crash and a Reanimated Worklets
+crash that broke the core "log a set" flow entirely. Per explicit user instruction,
+this pass deferred test-writing as a policy decision rather than an oversight - two of
+the ten code fixes picked up real regression coverage anyway, as a side effect of their
+own implementing agents verifying the fix (`useDebouncedFieldCommit.test.ts` plus new
+`SetRow.test.tsx` cases for the set-completion data-loss race; `PlanListScreen.test.tsx`/
+`PlanDetailScreen.test.tsx` updates for the `sheetStore` migration). Seven fixes still
+have no dedicated regression test and should get real coverage in a future pass: the
+SQLite `finalizeUnusedStatementsBeforeClosing` fix (`database/client.ts`), the
+`BottomSheet` Modal-removal keyboard fix (`components/feedback/BottomSheet.tsx`), the
+profile tab icon fix (`app/(tabs)/_layout.tsx`), the Quick Start crypto polyfill fix
+(`services/id/Uuid7IdGenerator.ts`), the `WorkoutHeader` safe-area fix
+(`features/workout-logging/components/WorkoutHeader.tsx`), the add-exercise
+sequential-await fix (`features/workout-logging/screens/ActiveWorkoutScreen.tsx`), and
+the exercise-picker double-`GO_BACK` fix (`app/(modals)/exercise-picker.tsx`) - the
+same "found and fixed live, tests deferred" gap this project has already precedented
+(see CLAUDE.md's P4/P5 write-ups for the same class of documented, non-silent
+deferral).
+
 ## P13 - Body measurements and progress photos
 
 Scope: `BodyMetricRepository` and `ProgressPhotoRepository`; measurements list with the
