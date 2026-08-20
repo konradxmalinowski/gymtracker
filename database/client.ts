@@ -16,8 +16,27 @@ const CONNECTION_PRAGMAS: readonly string[] = [
   'PRAGMA temp_store = MEMORY',
 ];
 
+/**
+ * `finalizeUnusedStatementsBeforeClosing: false` works around a native crash
+ * (`Scudo ERROR: invalid chunk state when deallocating` inside
+ * `exsqlite3_finalize`) confirmed on real Android hardware -
+ * https://github.com/expo/expo/issues/38168. This app never calls
+ * `closeAsync()` itself, so this only matters for `expo-sqlite`'s own
+ * reload-time cleanup (Metro Fast Refresh / dev-client reload), which caches
+ * an open connection by database name and tears it down on reload. That
+ * default (`true`) close path walks every open statement via
+ * `sqlite3_next_stmt` and finalizes it directly; this schema's FTS5 virtual
+ * table (`exercise_fts`, see `database/schema.sql`) finalizes its own
+ * internally-owned statements as part of its own `sqlite3_close()` cleanup,
+ * and the double finalize is the double-free. Setting this option to `false`
+ * skips that pre-close finalization pass and leaves cleanup to SQLite's own
+ * `sqlite3_close()`, which does not double-finalize the virtual table's
+ * statements.
+ */
 export async function openDatabase(name: string = DATABASE_NAME): Promise<SQLite.SQLiteDatabase> {
-  const db = await SQLite.openDatabaseAsync(name);
+  const db = await SQLite.openDatabaseAsync(name, {
+    finalizeUnusedStatementsBeforeClosing: false,
+  });
   for (const pragma of CONNECTION_PRAGMAS) {
     await db.execAsync(pragma);
   }
