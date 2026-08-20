@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 
 import { assignSetDisplayNumbers } from '@/features/workout-logging';
 import type { WorkoutSet } from '@/features/workout-logging';
@@ -136,10 +136,15 @@ describe('SetRow', () => {
     expect(await findByTestId('set-row-reps')).toBeTruthy();
   });
 
-  it('tapping the incomplete checkbox calls onComplete with the current set', async () => {
+  it('tapping the incomplete checkbox calls onComplete with the current set and its on-screen weight/reps', async () => {
     const { findByTestId, onComplete, workoutSet } = await renderRow();
     fireEvent.press(await findByTestId('set-row-complete'));
-    expect(onComplete).toHaveBeenCalledWith(workoutSet);
+    expect(onComplete).toHaveBeenCalledWith(workoutSet, {
+      weightKg: workoutSet.weightKg,
+      reps: workoutSet.reps,
+      rpe: workoutSet.rpe,
+      note: workoutSet.note,
+    });
   });
 
   it('tapping a completed checkbox calls onUncomplete with the set id', async () => {
@@ -182,6 +187,46 @@ describe('SetRow', () => {
     // drop's label is "1.1" (see that function's own doc comment).
     expect(await findByText('1.1')).toBeTruthy();
     expect(await findByText('Drop')).toBeTruthy();
+  });
+
+  describe('regression: completing a set carries its current on-screen values', () => {
+    // Reproduces the real bug (confirmed on a real Android device): typing a
+    // weight and reps value, then completing the set before either field's
+    // own 400ms debounce has fired, used to call `onComplete(set)` with no
+    // values at all - the completion write raced each field's own
+    // independent, still-in-flight `updateSet` write, and whichever
+    // resolved last could stomp the other's field with a stale
+    // full-object-replace response. `onComplete` must now carry the row's
+    // current draft values itself, not depend on that race resolving in the
+    // right order. (The companion guarantee - that each field's now-redundant
+    // pending debounce is actually cancelled, not just ignored - is covered
+    // at the hook level in `useDebouncedFieldCommit.test.ts`, in isolation
+    // from `SwipeableRow`'s gesture-handler tree.)
+    it('sends the just-typed weight/reps through onComplete before their own debounce fires', async () => {
+      const { findByTestId, onComplete, workoutSet } = await renderRow();
+
+      const weightField = await findByTestId('set-row-weight');
+      const repsField = await findByTestId('set-row-reps');
+
+      await act(async () => {
+        fireEvent.changeText(weightField, '20');
+      });
+      await act(async () => {
+        fireEvent.changeText(repsField, '10');
+      });
+
+      // No time elapsed - both fields' debounced commits are still pending.
+      await act(async () => {
+        fireEvent.press(await findByTestId('set-row-complete'));
+      });
+
+      expect(onComplete).toHaveBeenCalledWith(workoutSet, {
+        weightKg: 20,
+        reps: 10,
+        rpe: workoutSet.rpe,
+        note: workoutSet.note,
+      });
+    });
   });
 
   describe('P8: PR badge', () => {

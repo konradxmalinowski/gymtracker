@@ -10,6 +10,7 @@ import type {
 import { t } from '@/i18n';
 import { routes } from '@/navigation/routes';
 import { kv } from '@/services/kv';
+import { createLogger } from '@/services/logging';
 import { useActiveWorkoutStore } from '@/stores/activeWorkoutStore';
 import { useToastStore } from '@/stores/toastStore';
 
@@ -96,7 +97,9 @@ export function useStartWorkout(sessionService: WorkoutSessionService): UseStart
           return;
         }
         enterWorkout(result.session, navigation);
-      } catch {
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        createLogger().error('workout.start.failed', { message });
         useToastStore.getState().show({ message: t('workoutLogging.start.genericErrorMessage') });
       } finally {
         setIsStarting(false);

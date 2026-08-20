@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { BackHandler, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Column } from '@/components/layout';
 import { ConfirmDialog, EmptyState, Skeleton } from '@/components/feedback';
@@ -89,6 +90,7 @@ function findSet(exercises: readonly SessionExercise[], setId: string | null): W
 export function ActiveWorkoutScreen() {
   useActiveSessionHydration();
 
+  const insets = useSafeAreaInsets();
   const { sessionService, clock } = useContainer();
   const session = useActiveWorkoutStore((state) => state.session);
   const isHydrated = useActiveWorkoutStore((state) => state.isHydrated);
@@ -335,12 +337,26 @@ export function ActiveWorkoutScreen() {
         testID="quick-adjust-bar"
       />
 
-      <View style={{ padding: space[4], paddingTop: 0 }}>
+      <View
+        style={{
+          paddingHorizontal: space[4],
+          paddingBottom: insets.bottom + space[4],
+        }}
+      >
         <AddExerciseButton
           alreadySelectedIds={alreadySelectedIds}
-          onSelect={(exerciseIds) =>
-            exerciseIds.forEach((exerciseId) => void addExercise(activeSession.id, exerciseId))
-          }
+          onSelect={(exerciseIds) => {
+            // Sequential, not `Promise.all`/unawaited `forEach` - concurrent
+            // `addExercise` calls race on the same session's `sort_order`
+            // write, the exact bug class already found and fixed once in
+            // `PlanDayEditorScreen`'s own multi-select add handler (see
+            // CLAUDE.md's P9 code-review history).
+            void (async () => {
+              for (const exerciseId of exerciseIds) {
+                await addExercise(activeSession.id, exerciseId);
+              }
+            })();
+          }}
           testID="active-workout-add-exercise-button"
         />
       </View>

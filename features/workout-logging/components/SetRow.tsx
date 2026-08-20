@@ -6,7 +6,12 @@ import { Column, Row } from '@/components/layout';
 import { Checkbox, Chip, NumberField, Text, TextField } from '@/components/ui';
 import { SwipeableRow, type SwipeableRowAction } from '@/components/gestures/SwipeableRow';
 import { PressScale } from '@/components/gestures/PressScale';
-import type { SetDisplayNumber, UpdateSetPatch, WorkoutSet } from '@/features/workout-logging';
+import type {
+  CompleteSetValues,
+  SetDisplayNumber,
+  UpdateSetPatch,
+  WorkoutSet,
+} from '@/features/workout-logging';
 import { PRBadge, type PersonalRecord } from '@/features/records';
 import { t } from '@/i18n';
 import { color, radius, space } from '@/theme/tokens';
@@ -21,7 +26,14 @@ export interface SetRowProps {
   /** P8: this set's newly-earned PRs (`SessionExerciseCard`'s `latestPR` prop, matched by set id), `undefined` when this isn't the set that just earned one. */
   prRecords?: readonly PersonalRecord[] | undefined;
   onFocus: (setId: string) => void;
-  onComplete: (set: WorkoutSet) => void;
+  /**
+   * `values` is optional only for signature compatibility with older
+   * callers - `SetRow` itself always passes the row's current on-screen
+   * weight/reps/rpe/note (see the completion handler below), per
+   * `CompleteSetValues`'s own "the values the user had on screen when they
+   * tapped the checkbox" contract.
+   */
+  onComplete: (set: WorkoutSet, values?: CompleteSetValues) => void;
   onUncomplete: (setId: string) => void;
   onUpdate: (setId: string, patch: UpdateSetPatch) => void;
   onDelete: (set: WorkoutSet) => void;
@@ -64,18 +76,47 @@ export function SetRow({
   const [expanded, setExpanded] = useState(false);
   const isDropSegment = displayNumber.isDropSegment;
 
-  const [weightDraft, setWeightDraft] = useDebouncedFieldCommit(set.weightKg, (weightKg) =>
-    onUpdate(set.id, { weightKg }),
+  const [weightDraft, setWeightDraft, cancelWeightCommit] = useDebouncedFieldCommit(
+    set.weightKg,
+    (weightKg) => onUpdate(set.id, { weightKg }),
   );
-  const [repsDraft, setRepsDraft] = useDebouncedFieldCommit(set.reps, (reps) =>
+  const [repsDraft, setRepsDraft, cancelRepsCommit] = useDebouncedFieldCommit(set.reps, (reps) =>
     onUpdate(set.id, { reps }),
   );
-  const [rpeDraft, setRpeDraft] = useDebouncedFieldCommit(set.rpe, (rpe) =>
+  const [rpeDraft, setRpeDraft, cancelRpeCommit] = useDebouncedFieldCommit(set.rpe, (rpe) =>
     onUpdate(set.id, { rpe }),
   );
-  const [noteDraft, setNoteDraft] = useDebouncedFieldCommit(set.note ?? '', (note) =>
-    onUpdate(set.id, { note: note.trim() === '' ? null : note }),
+  const [noteDraft, setNoteDraft, cancelNoteCommit] = useDebouncedFieldCommit(
+    set.note ?? '',
+    (note) => onUpdate(set.id, { note: note.trim() === '' ? null : note }),
   );
+
+  // Completing a set used to call `onComplete(set)` with no values, relying
+  // on each field's own independent debounced `updateSet` write to have
+  // already landed - a real race (not just a theoretical one; confirmed on
+  // a real Android device) between that write and `completeSet`'s own write,
+  // where either could resolve last and its full-object-replace response
+  // stomp the other's field. `handleComplete` instead reads whatever this
+  // row currently has on screen - including an edit still sitting in its
+  // debounce window, not yet committed anywhere - and sends it straight
+  // through `completeSet`'s own `CompleteSetValues`, the one write that then
+  // atomically carries weight/reps/rpe/note *and* completion together.
+  // `cancel*Commit` drops each field's now-redundant pending timer so it
+  // can't fire a second, independent write afterward and reopen the same
+  // race.
+  function handleComplete() {
+    cancelWeightCommit();
+    cancelRepsCommit();
+    cancelRpeCommit();
+    cancelNoteCommit();
+    const values: CompleteSetValues = {
+      weightKg: weightDraft,
+      reps: repsDraft,
+      rpe: rpeDraft,
+      note: noteDraft.trim() === '' ? null : noteDraft,
+    };
+    onComplete(set, values);
+  }
 
   const leftAction: SwipeableRowAction = {
     icon: <Ionicons name="trash-outline" size={20} color={color.textInverse} />,
@@ -179,7 +220,7 @@ export function SetRow({
             <View style={{ marginLeft: 'auto' }}>
               <Checkbox
                 value={set.isCompleted}
-                onValueChange={(next) => (next ? onComplete(set) : onUncomplete(set.id))}
+                onValueChange={(next) => (next ? handleComplete() : onUncomplete(set.id))}
                 accessibilityLabel={completeLabel}
                 testID={testID ? `${testID}-complete` : undefined}
               />
