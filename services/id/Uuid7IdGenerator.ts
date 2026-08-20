@@ -19,9 +19,27 @@ import type { IdGenerator } from './IdGenerator';
  * fully deterministic (ARCHITECTURE.md section 8.4: "injectable: makes fixtures
  * reproducible").
  *
- * `crypto.getRandomValues` is available globally both on device (Hermes has
- * shipped it since React Native 0.72) and under Node/Jest (Node's Web Crypto
- * global, stable since Node 19) - no extra polyfill dependency needed.
+ * `crypto.getRandomValues` is used when the runtime exposes it - true under
+ * Node/Jest (Node's Web Crypto global, stable since Node 19), which is why
+ * every prior phase's Jest-only verification never caught the gap below.
+ *
+ * On a real Android device it is **not** guaranteed: this project has no
+ * `crypto.getRandomValues` polyfill anywhere in its dependency tree (no
+ * `expo-crypto`/`react-native-get-random-values`/equivalent installed), and
+ * this generator's `generate()` was, until the P12 Android bring-up session
+ * that found this, the only production code path in the entire app that ever
+ * called it - every other write path either uses a fixed literal id
+ * (`user_profile`, see `SqliteProfileRepository`) or `database/ids/uuidv7.ts`'s
+ * own separate `Math.random()`-based helper (catalog seeding). Confirmed via
+ * static analysis (no such package installed, no polyfill import anywhere) as
+ * the leading hypothesis for a 100%-reproducible "Could not start a workout"
+ * failure on a fresh install's first "Quick Start" tap - the first moment
+ * this method is ever called on-device - though this could not be confirmed
+ * with a real device stack trace within this pass; see the P12 Android
+ * bring-up notes. `getSecureRandomBytes` below now feature-detects and falls
+ * back to `fillWithInsecureRandomBytes` rather than throwing either way, so
+ * this is fixed regardless of whether that hypothesis turns out to be the
+ * actual root cause.
  */
 export class Uuid7IdGenerator implements IdGenerator {
   constructor(
@@ -60,6 +78,33 @@ function formatAsUuid(bytes: Uint8Array): string {
 
 function getSecureRandomBytes(length: number): Uint8Array {
   const bytes = new Uint8Array(length);
-  crypto.getRandomValues(bytes);
+  // Read through `globalThis` rather than the bare `crypto` identifier -
+  // referencing an undeclared global identifier directly throws a
+  // `ReferenceError` (uncatchable by an `?.` on the identifier itself),
+  // whereas a property read off `globalThis` safely evaluates to `undefined`
+  // whether or not the runtime ever declared a `crypto` global at all.
+  const webCrypto = (
+    globalThis as { crypto?: { getRandomValues?: (array: Uint8Array) => Uint8Array } }
+  ).crypto;
+  if (webCrypto?.getRandomValues) {
+    webCrypto.getRandomValues(bytes);
+    return bytes;
+  }
+  fillWithInsecureRandomBytes(bytes);
   return bytes;
+}
+
+/**
+ * Fallback random source for a runtime with no Web Crypto global - see this
+ * file's header comment for why this gap exists and why it is safe here.
+ * Not cryptographically secure, deliberately: UUIDv7's leading 48 bits
+ * already carry the id's required time-ordering (ADR-0002 decision 1), the
+ * remaining bits only need to be collision-resistant, not unpredictable, and
+ * this app is offline/single-local-user with these ids used purely as opaque
+ * primary keys, never as security tokens.
+ */
+function fillWithInsecureRandomBytes(bytes: Uint8Array): void {
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = Math.floor(Math.random() * 256);
+  }
 }

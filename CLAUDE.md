@@ -1305,6 +1305,279 @@ build-verification question was re-offered to the user this phase (per the
 every phase since P4 - EAS cloud build stays available but unused. No new npm
 dependency this phase.
 
+**Post-P12 bugfix pass (2026-08-19/20):** the first time this project has had real
+on-device verification of any kind - every phase's own verification note since P4 has
+flagged "no simulator/emulator available in this environment" and fallen back to
+`npx expo export --platform ios` bundling as a proxy, which only proves the bundle
+builds, not that it runs. This pass closes that gap, at least for Android: a
+lightweight Android SDK (`android-commandlinetools` cask, one arm64-v8a API 34 system
+image, `gymtracker_test` AVD) was installed locally, the existing EAS dev-client APK
+(build `84c9c4cc-ecc6-49bf-8840-0e70c4fcef86`, from the prior `fix/expo-doctor-sdk-sync`
+session) was run against a live Metro dev server on the emulator, and a full manual
+A-to-Z walkthrough of every screen and flow - triggered by a user bug report that
+started as three items (keyboard covers a text input, "something went wrong" after
+typing a plan name, crooked icons/buttons) and was explicitly widened by the user
+mid-session to a full sweep - surfaced 13 real bugs, several severe enough that no
+amount of static review or mocked-Reanimated Jest testing could have caught them. iOS
+remains unverified; this pass is Android-only. No feature work, no roadmap phase, no
+architectural change - a pure bugfix pass, and per explicit user instruction this pass
+wrote no new tests as a matter of policy (see the roadmap backlog note below), though
+two of the ten fixes below picked up real regression coverage anyway, as a side effect
+of the implementing agents verifying their own fix rather than a deliberate test-writing
+step.
+
+`database/client.ts`'s `openDatabase()` was the first and highest-priority fix, found
+before the emulator was even running: the app suffers a native crash (SIGABRT, heap
+corruption - `adb logcat` tombstones showed `Scudo ERROR: invalid chunk state when
+deallocating`, crashing inside `exsqlite3_finalize` called from
+`SQLiteModule.closeDatabase`) on Android whenever `expo-sqlite`'s native module closes
+a database connection while the schema's `exercise_fts` FTS5 virtual table exists. This
+app's own code never calls `closeAsync()` (confirmed via `grep -rn "closeAsync"`
+returning nothing) - the close is triggered by `expo-sqlite`'s own internal connection
+cache tearing down and reopening on a Metro Fast Refresh / dev-client JS-context reload,
+independent of app code. This is a confirmed, documented upstream bug,
+[expo/expo#38168](https://github.com/expo/expo/issues/38168): the default close path
+walks every open statement via `sqlite3_next_stmt` and finalizes it directly, but an
+FTS5 virtual table finalizes its own internally-owned statements as part of its own
+`sqlite3_close()` cleanup, so the walk's finalize and the virtual table's own finalize
+double-free the same statement. Reproduced locally at 100% across multiple clean
+force-stop-then-single-launch-then-reload cycles. Fixed per the upstream issue's own
+documented workaround - `SQLite.openDatabaseAsync(name, { finalizeUnusedStatementsBeforeClosing: false })`
+
+- which skips the pre-close finalization walk and leaves cleanup entirely to SQLite's
+  own `sqlite3_close()`, which does not re-finalize the virtual table's statements. This
+  is very likely the actual root cause of the user's originally-reported "something went
+  wrong after typing a plan name" - allocator/GC-timing-dependent per the same GitHub
+  issue's comments, so on a real device the same double-free could plausibly corrupt heap
+  state silently rather than crash immediately, surfacing later as a generic error on an
+  unrelated SQLite operation. Dev-mode/Fast-Refresh-specific; should not affect a shipped
+  production build the same way, since no JS reload happens there after initial launch.
+
+`components/feedback/BottomSheet.tsx`'s keyboard-covers-content bug (the user's other
+original report) took three attempts to actually fix, each verified live rather than
+assumed - worth recording at the same depth this file's other multi-attempt
+investigations (P9's `PlanDayPickerScreen` navigation bug) already get. The component
+had zero keyboard-avoidance code to begin with: it rendered a raw RN `Modal` with a
+bottom-pinned `Animated.View`, and `components/layout/KeyboardAvoider.tsx` (dead code,
+never imported anywhere) would not have helped regardless, since it wraps content
+_outside_ a `Modal`'s tree, which has no effect on content rendered _inside_ one.
+Attempt 1 wired `useAnimatedKeyboard` directly and failed live: on Android, `Modal`
+renders into its own native window (`ReactModalHostView.kt`'s own `Window`/
+`DialogRootViewGroup`), while `useAnimatedKeyboard`'s Android implementation
+(`WindowInsetsManager.kt`) attaches its listener to `currentActivity.window.decorView`
+
+- the main Activity window, not the Modal's separate Dialog window - so it never
+  observed this sheet's real keyboard animation at all. Attempt 2 tried measuring the
+  sheet's own `onLayout` against `Dimensions.get('window').height` instead, on the theory
+  that the Dialog window's `SOFT_INPUT_ADJUST_RESIZE` would resize it by the keyboard's
+  full height; verified live to only shift by ~100-150px against a keyboard needing
+  ~900px - the Dialog window did not reliably resize by the assumed amount. A working
+  control case, `OnboardingScreen`'s nickname field (not inside any `Modal`, correctly
+  avoids the keyboard with zero special handling), confirmed the defect was specifically
+  RN `Modal`'s separate window, not Reanimated or this app's general keyboard setup.
+  Attempt 3, the one that shipped: remove `Modal` entirely and render the sheet as a
+  plain absolutely-positioned overlay inline in the same Activity window as the rest of
+  the screen, the same window `OnboardingScreen`'s already-working field lives in - which
+  makes `useAnimatedKeyboard` trustworthy on both platforms (it was never actually broken
+  on iOS; `REAKeyboardEventObserver.mm` listens to app-wide `UIKeyboard*` notifications
+  with no window affinity). Because `Modal` no longer provides three things for free,
+  `BottomSheet.tsx` now provides them explicitly: a `BackHandler` listener (armed only
+  while `visible`) replaces `Modal`'s own `onRequestClose` for the Android hardware back
+  button; an explicit `zIndex: 1000` plus, Android-only, `elevation: 24` (above every
+  other `elevation.*` token in `theme/tokens.ts`, including `elevation.sheet`'s own 12
+  used on the sheet surface itself) replaces the automatic stacking a separate native
+  window used to provide; and `accessibilityViewIsModal` stays on the sheet's own
+  `Animated.View`, which iOS still honors with no `Modal` wrapper needed, while Android
+  has no equivalent and is left as a documented, known gap (touch is still blocked by the
+  full-screen backdrop `Pressable`, only TalkBack's explore-by-touch could in principle
+  still reach hidden content underneath - flagged for a future accessibility pass, not
+  silently dropped). This is the single BottomSheet implementation every consumer app-wide
+  shares (rest-timer-settings, exercise-picker, `CalendarDaySessionPicker`, plan create/
+  rename), so the fix landed once and fixed the keyboard behavior everywhere, verified
+  live end to end: `PlanListScreen`'s create sheet fully visible above the keyboard, plan
+  created successfully.
+
+`app/(tabs)/_layout.tsx`'s Profile tab showed Home's house icon instead of a person
+icon - a `TAB_ICONS` key mismatch. `app/(tabs)/profile/` has no nested `_layout.tsx` of
+its own (still a single flat screen, unlike `plans`/`exercises`/`stats`, each of which
+became a real nested Stack navigator in its own phase), so Expo Router resolves its
+`route.name` to the literal leaf path `"profile/index"`, not the bare `"profile"` the
+lookup table was keyed on - falling through to the icon map's own `?? TAB_ICONS['index']`
+fallback and silently rendering Home's icon instead. Fixed by keying the entry
+`'profile/index'` instead, with a comment flagging that a future nested layout for
+Profile would need the plain `'profile'` key added back alongside it.
+
+`services/id/Uuid7IdGenerator.ts` crashed Home's "Quick Start" button 100% of the time
+on a fresh install - the fifth bug found, and only reachable once the SQLite crash
+above was fixed. `generate()` called `crypto.getRandomValues` with no polyfill anywhere
+in the project's dependency tree (no `expo-crypto`, no `react-native-get-random-values`,
+nothing). This was never exercised by Jest, since Node's own Web Crypto global (stable
+since Node 19) is always present under `node:sqlite`-backed tests - masking the gap
+through every prior phase's verification. On real Android/Hermes it is not guaranteed,
+and `Uuid7IdGenerator.generate()` was, until this pass, the only production code path
+in the app that ever called `crypto.getRandomValues` at all (every other write path
+either uses a fixed literal id, like `user_profile`, or `database/ids/uuidv7.ts`'s own
+separate `Math.random()`-based helper for catalog seeding). Fixed by reading `crypto`
+off `globalThis` (a direct bare `crypto` reference would throw a `ReferenceError` on a
+runtime with no such global at all, uncatchable by an optional-chain on the identifier
+itself) and falling back to a `Math.random()`-based `fillWithInsecureRandomBytes` when
+`getRandomValues` is absent - deliberately not cryptographically secure, since
+UUIDv7's leading 48 bits already carry the id's required time-ordering (ADR-0002) and
+the remaining bits only need collision-resistance, not unpredictability, for an
+offline, single-local-user app using these ids purely as opaque primary keys. Verified
+live: Quick Start now successfully creates and enters a workout session on-device.
+
+`features/workout-logging/components/WorkoutHeader.tsx` had its content overlapping
+the Android status bar on `ActiveWorkoutScreen` - reachable, and found, only once the
+Quick Start fix above let the sweep reach this screen at all. Root cause:
+`ActiveWorkoutScreen.tsx` deliberately does not render through `components/layout/Screen`
+(its `RestTimerBar`/`FlashList` rely on edge-to-edge layout `Screen`'s padding
+behavior would disturb), so nothing on this one root-level route (`app/workout/`,
+outside `(tabs)`, per ADR-0007) ever cleared the status bar the way every tab screen
+does automatically through `Screen`. Fixed by having `WorkoutHeader` read
+`useSafeAreaInsets()` directly and fold `insets.top` into its own top padding - the
+same pattern `BottomSheet.tsx` already uses - scoped to this one component rather than
+a shared-primitive change. `ActiveWorkoutScreen.tsx` itself picked up the same
+treatment at its bottom edge in the same pass, folding `insets.bottom` into the
+padding around its "add exercise" button so that control clears the Android
+gesture-navigation bar rather than sitting flush against it.
+
+Migrating three Plans screens off inline `BottomSheet` and onto the existing
+`sheetStore`/`SheetHost` mechanism fixed a sixth bug, found only after the third
+`BottomSheet` fix above landed: with a workout minimized (`ActiveWorkoutBanner` docked
+above the tab bar), opening a sheet from a tab screen rendered it _behind_ the banner -
+confirmed via screenshot, the sheet's own label visibly peeking out from underneath.
+`ActiveWorkoutBanner` mounts as a sibling of the entire `<Tabs>` navigator in
+`app/(tabs)/_layout.tsx`, outside and after whatever tree a tab screen's own inline
+`<BottomSheet>` render lived in - `zIndex`/`elevation` only reorder siblings sharing the
+same parent, so no `zIndex` on the sheet itself could ever win across that tree
+boundary (a real `Modal`'s separate native window used to sidestep this for free; the
+Modal-removal fix above closed the keyboard bug but reopened this one). Fixed not by
+patching around the symptom but by routing through the mechanism the app already had
+for exactly this - `sheetStore.present()`/`SheetHost`, already used by
+`exercise-library`'s filter sheet and `calendar`'s `CalendarDaySessionPicker`, mounted
+at the true app root above `ActiveWorkoutBanner` in the tree. `PlanListScreen.tsx`
+(create/rename), `PlanDetailScreen.tsx` (rename), and `PlanDayEditorScreen.tsx`
+(exercise edit) all previously owned their sheet's open/closed state and form fields
+directly; each now calls `useSheetStore.getState().present({ id, content, snapPoints })`
+with a new, self-contained content component instead - `PlanNameSheetContent.tsx`
+(shared by both create and rename, mode-switched via a `mode: 'create' | 'rename'`
+prop), `PlanDetailNameSheetContent.tsx`, and `PlanDayExerciseEditSheetContent.tsx`, all
+three new files under `features/plans/components/`. Each owns its own local form state
+and calls its own mutation hook directly rather than reading them from the presenting
+screen, the same "sheet content owns whatever can change while it's open" shape
+`CalendarDaySessionPicker` already established - necessary because `sheetStore`'s
+`content` is a `ReactNode` frozen at `present()` call time, so a screen-level `useState`
+update after that point would never reach an already-rendered sheet element. Verified
+live: opening the plan create sheet with a workout minimized now renders correctly
+above the banner.
+
+`features/workout-logging/screens/ActiveWorkoutScreen.tsx`'s multi-select "add
+exercise" during a live workout only ever added one exercise, the seventh bug found -
+the exact same bug class this file's own P9 write-up already documents as fixed once
+before, in `PlanDayEditorScreen`'s equivalent flow, just never caught in
+`ActiveWorkoutScreen`'s own copy of the same pattern: `AddExerciseButton`'s
+`onSelect` called `exerciseIds.forEach((exerciseId) => void addExercise(...))`, an
+unawaited `forEach` racing N concurrent transactions against the same session's
+`sort_order` column. Fixed the same way P9 fixed it the first time - sequential
+`await`s in a `for...of` loop instead of an unawaited `forEach` - so N exercises added
+at once land as N ordered writes, not a race. Verified live: a 4-exercise multi-select
+add landed all four, in order.
+
+`components/gestures/SwipeableRow.tsx` was the single most severe finding this pass: a
+`[Worklets] Cannot copy value of type FiberNode` render crash, reproduced on a clean
+cold boot (not a Fast Refresh artifact, so this was not merely dev-mode-adjacent the
+way the SQLite crash above was) that broke every one of `SwipeableRow`'s three real
+consumers - `SetRow` (the core "log a set" row, i.e. the app's central workout-logging
+interaction), `RestTimerBar`, and `SupersetGroupEditor` - and had sat latent through
+P6-P12 undetected, since no prior phase ever had a device to catch it on. Root cause:
+the `Gesture.Pan()` worklet's `.onUpdate`/`.onEnd` callbacks referenced the full
+caller-supplied `leftAction`/`rightAction` objects directly, even just for a bare
+`!== undefined` existence check - and referencing an object anywhere inside a worklet
+body forces Reanimated's Worklets runtime to serialize the _entire_ object into its
+UI-thread closure, not just the field actually read. `SetRow`'s own `leftAction`/
+`rightAction` carry an `icon: <Ionicons .../>` field - a JSX `ReactNode` element
+carrying unserializable dev-mode fiber/owner references - so any worklet touching the
+action object at all pulled that unserializable icon along with it and crashed. Fixed
+by deriving plain, worklet-safe values outside the worklet - `hasLeftAction`/
+`hasRightAction` (booleans) and `leftOnTrigger`/`rightOnTrigger` (bare function
+references pulled off the objects once, outside the worklet) - and referencing only
+those inside `.onUpdate`/`.onEnd`, so the worklet closure never captures the action
+object or any `ReactNode` again. Worth stating plainly: this is exactly the class of
+bug only a real device/emulator run could have caught - every existing
+`SwipeableRow`-related Jest test mocks Reanimated entirely, so none of them ever
+exercised the real Worklets serialization path this crash lived in. Verified live: a
+cold-boot resume into a session with a real exercise and set rendered `SetRow` with no
+crash, the swipe gesture worked, and a 4-exercise multi-select add (verifying the
+bug-7 fix above in the same pass) landed correctly.
+
+`app/(modals)/exercise-picker.tsx` produced a dev-only "GO_BACK was not handled by any
+navigator" warning - non-data-corrupting (the mutation always succeeded and the screen
+did visually return) but a real navigation-stack bug, the ninth found. It only
+reproduced when the picker was opened from `ActiveWorkoutScreen` (a root-level
+`fullScreenModal` route) rather than `PlanDayEditorScreen` (its only previously-
+documented caller, per a since-corrected stale comment in the same file). Root cause:
+a mount-time defensive `useEffect` (originally there only to back out if this route
+were ever reached with no pending picker `request`, e.g. a stale deep link) depended
+on `request` itself - and `onConfirm`'s own `close()` call nulls that same store field
+right before its own `router.back()`, re-arming the effect's dependency and firing a
+_second_, redundant `router.back()` immediately after the legitimate one. Harmless when
+reached from a tab-nested screen (a second GO_BACK still finds a route to bubble to
+above it), but a genuine failure when reached from a root modal route with nothing left
+to pop once the first `back()` had already returned here. Fixed by gating the mount
+effect on a `useRef` so it runs exactly once at mount, plus a defense-in-depth
+`router.canGoBack()` guard on the confirm handler's own `back()` call, matching the
+guard the mount effect already used.
+
+`features/workout-logging/components/SetRow.tsx` and `features/workout-logging/hooks/
+useDebouncedFieldCommit.ts` held the second most severe finding: typing a weight value,
+then reps, then completing the set via its checkbox could silently lose the weight (or
+any other field) entirely, reverting it to 0/default after completion while a
+later-edited field correctly kept its own typed value - a real data-loss race, not a
+cosmetic bug, in the app's core "log a set" flow. Root cause: `SetRow`'s checkbox
+called `onComplete(set)` with no explicit values, so `CompleteSetValues` defaulted to
+`{}` - the completion write never carried weight/reps/rpe/note at all, relying entirely
+on each field's own independent 400ms-debounced `useDebouncedFieldCommit`-driven
+`updateSet` write to have already landed. Both `useCompleteSet` and `useUpdateSet`
+finish with a full-object-replace (`upsertSet`), not a merge, so two or more
+independent async writes to the same row could resolve out of order and stomp each
+other - a race only visible on-device, where real SQLite write latency lets the writes
+genuinely overlap; invisible under Jest's synchronous/fake-timer execution. Fixed by
+having `SetRow`'s completion handler (`handleComplete`) cancel each field's pending
+debounce timer and pass the row's _current_ on-screen draft values (`weightDraft`/
+`repsDraft`/`rpeDraft`/`noteDraft`) straight into `completeSet`'s own
+`CompleteSetValues` - the one write that then atomically carries every field plus
+completion together, rather than trusting four independent in-flight writes to land in
+the right order. `useDebouncedFieldCommit` gained a third return value,
+`cancelPending`, for this purpose - it clears the pending timer and drops
+`hasPendingEdit` but deliberately leaves `lastSyncedValue` untouched (snapping it to
+`draft` was tried first and found wrong: `lastSyncedValue` means "the last value we
+actually observed `currentValue` hold," and the not-yet-committed `draft` was never
+observed there - forcing them equal creates a false "the prop changed externally"
+mismatch against the real, still-unchanged `currentValue` on the very next render,
+snapping `draft` straight back down to the stale value it was supposed to escape; this
+was caught by the hook's own test suite before it ever reached `SetRow` again). Verified
+live: weight and reps both persisted correctly through completion, with the PR badge
+firing correctly on the same pass.
+
+Two additional findings were investigated but deliberately left as documented,
+non-blocking known gaps rather than fixed this pass - see "Known gaps" below for both
+(a dev-only unmounted-component warning with no screen-attributable root cause yet, and
+`ActiveWorkoutBanner` not appearing on two of Profile's nested screens while minimized).
+
+Verification for this pass (independently re-run, not just agent-reported):
+`npx tsc --noEmit` clean; `npx eslint .` clean (0 errors repo-wide, 32 pre-existing
+`no-require-imports` warnings, test files only, the same class every prior phase has
+had); full Jest suite: 145 suites, 1321 passed, 1 pre-existing skip, 1322 total - up
+from the P12 baseline (144 suites, 1317 passed) by exactly one new suite
+(`useDebouncedFieldCommit.test.ts`) and 4 new/changed tests, picked up as a side effect
+of the completion-race and BottomSheet-migration fixes being verified by their own
+implementing agents, not a deliberate test-writing pass (see the roadmap backlog note
+this pass adds). Every fix above was verified live on the `gymtracker_test` Android
+emulator (arm64-v8a, API 34), not only by static analysis or mocked tests - this closes
+the "no simulator/emulator available" gap every phase since P4 has flagged, at least
+for Android; iOS remains unverified.
+
 ## Product
 
 Offline-only React Native/Expo workout logging app. No backend, no accounts, no
@@ -1668,6 +1941,31 @@ ActiveWorkoutScreen.tsx`) is an inline arrow function defined inside the
   gap-fill entry, `reports/security-2026-08-13-p9.md`/
   `reports/accessibility-2026-08-13-p9.md` do not cover this (it is a
   correctness/UX gap, not a security or accessibility one).
+
+- **A dev-only console warning - "Can't perform a React state update on a
+  component that hasn't mounted yet" - surfaced twice during the post-P12
+  bugfix pass's own navigation-heavy manual sweep.** The component stack
+  named in the warning is rooted at `ContextNavigator`/`ExpoRoot`/`App` -
+  framework-level, not a leaf screen - so it is not attributable to one
+  specific screen without deeper investigation than this pass's own scope
+  covered. Never blocked functionality, self-clears or is dismissible, and
+  per React's own warning text will not appear at all in a production build.
+  Not fixed this pass; a candidate for a future static sweep of
+  setState-in-async-callback-without-a-mounted-check across the app root/
+  navigation layer, rather than a targeted one-line fix, since the actual
+  call site was never isolated. Source: this bugfix pass's own
+  investigation, `plans/2026-08-19-postp12-bugfixes-state.md`.
+
+- **`ActiveWorkoutBanner` did not appear on Profile's nested "Training
+  calendar"/"Training history" screens while a workout was minimized,
+  despite appearing correctly on Plans' nested screens
+  (`PlanDetailScreen`).** Found during the post-P12 bugfix pass's full A-to-Z
+  sweep. Not confirmed as a real bug versus an intentional difference in how
+  Profile's stack is composed relative to Plans' - not investigated further
+  this pass, since `ActiveWorkoutBanner` stays reachable via Home and every
+  other tab regardless, making this low severity rather than a blocking
+  finding. Source: this bugfix pass's own investigation,
+  `plans/2026-08-19-postp12-bugfixes-state.md`.
 
 **Resolved**: the icon library gap tracked here through P0-P2 is closed as of P3 -
 `@expo/vector-icons` (Ionicons) is the app's icon system, first used in the

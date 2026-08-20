@@ -4,77 +4,49 @@ import { View } from 'react-native';
 import { router } from 'expo-router';
 
 import { Column, Row, Screen } from '@/components/layout';
-import { Button, TextField } from '@/components/ui';
-import { BottomSheet, EmptyState, ErrorState, Skeleton, ConfirmDialog } from '@/components/feedback';
+import { Button } from '@/components/ui';
+import { EmptyState, ErrorState, Skeleton, ConfirmDialog } from '@/components/feedback';
 import { DraggableList } from '@/components/gestures/DraggableList';
 import type { PlanListItem } from '@/features/plans';
-import { PlanValidationError } from '@/features/plans';
 import { haptics } from '@/services/haptics';
 import { t } from '@/i18n';
 import { routes } from '@/navigation/routes';
+import { useSheetStore } from '@/stores/sheetStore';
 import { color, space } from '@/theme/tokens';
 
 import { PlanCard } from '../components/PlanCard';
-import { useCreatePlan, useDeletePlan, useDuplicatePlan, useRenamePlan, useSetActivePlan } from '../hooks/usePlanMutations';
+import { PlanNameSheetContent } from '../components/PlanNameSheetContent';
+import { useDeletePlan, useDuplicatePlan, useSetActivePlan } from '../hooks/usePlanMutations';
 import { usePlans } from '../hooks/usePlans';
 import { useReorderPlans } from '../hooks/useReorderPlans';
 
 const ROW_HEIGHT = 72;
-
-type SheetState =
-  | { kind: 'closed' }
-  | { kind: 'create' }
-  | { kind: 'rename'; plan: PlanListItem };
+const PLAN_NAME_SHEET_ID = 'plan-name';
 
 /** `app/(tabs)/plans/index.tsx`'s screen body. */
 export function PlanListScreen() {
   const { data, isPending, isError, refetch } = usePlans();
   const reorderPlans = useReorderPlans();
   const setActivePlan = useSetActivePlan();
-  const createPlan = useCreatePlan();
-  const renamePlan = useRenamePlan();
   const duplicatePlan = useDuplicatePlan();
   const deletePlan = useDeletePlan();
 
-  const [sheet, setSheet] = useState<SheetState>({ kind: 'closed' });
-  const [nameInput, setNameInput] = useState('');
-  const [formError, setFormError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PlanListItem | null>(null);
 
   function openCreateSheet() {
-    setNameInput('');
-    setFormError(null);
-    setSheet({ kind: 'create' });
+    useSheetStore.getState().present({
+      id: PLAN_NAME_SHEET_ID,
+      content: <PlanNameSheetContent mode="create" />,
+      snapPoints: [0.4],
+    });
   }
 
   function openRenameSheet(plan: PlanListItem) {
-    setNameInput(plan.name);
-    setFormError(null);
-    setSheet({ kind: 'rename', plan });
-  }
-
-  function closeSheet() {
-    setSheet({ kind: 'closed' });
-  }
-
-  async function handleSubmitSheet() {
-    setFormError(null);
-    try {
-      if (sheet.kind === 'create') {
-        const created = await createPlan.mutateAsync({ name: nameInput });
-        closeSheet();
-        router.push(routes.plans.detail(created.id));
-      } else if (sheet.kind === 'rename') {
-        await renamePlan.mutateAsync({ id: sheet.plan.id, name: nameInput });
-        closeSheet();
-      }
-    } catch (error) {
-      if (error instanceof PlanValidationError) {
-        setFormError(error.issues[0]?.message ?? t('plans.list.genericErrorMessage'));
-      } else {
-        setFormError(t('plans.list.genericErrorMessage'));
-      }
-    }
+    useSheetStore.getState().present({
+      id: PLAN_NAME_SHEET_ID,
+      content: <PlanNameSheetContent mode="rename" planId={plan.id} initialName={plan.name} />,
+      snapPoints: [0.4],
+    });
   }
 
   function handleToggleActive(plan: PlanListItem) {
@@ -155,29 +127,6 @@ export function PlanListScreen() {
           </View>
         ) : null}
       </Column>
-
-      <BottomSheet visible={sheet.kind !== 'closed'} onDismiss={closeSheet} snapPoints={[0.4]}>
-        <Column gap={4} style={{ paddingTop: space[2] }}>
-          <TextField
-            label={
-              sheet.kind === 'rename' ? t('plans.list.renameDialogTitle') : t('plans.list.createDialogTitle')
-            }
-            value={nameInput}
-            onChangeText={setNameInput}
-            placeholder={t('plans.list.namePlaceholder')}
-            error={formError ?? undefined}
-            testID="plan-name-sheet-field"
-          />
-          <Button
-            variant="primary"
-            label={t('common.save')}
-            onPress={() => void handleSubmitSheet()}
-            loading={createPlan.isPending || renamePlan.isPending}
-            fullWidth
-            testID="plan-name-sheet-save"
-          />
-        </Column>
-      </BottomSheet>
 
       <ConfirmDialog
         visible={deleteTarget !== null}

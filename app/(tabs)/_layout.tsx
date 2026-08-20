@@ -21,7 +21,14 @@ const TAB_ICONS: Record<string, { active: IoniconName; inactive: IoniconName }> 
   plans: { active: 'clipboard', inactive: 'clipboard-outline' },
   exercises: { active: 'barbell', inactive: 'barbell-outline' },
   stats: { active: 'stats-chart', inactive: 'stats-chart-outline' },
-  profile: { active: 'person', inactive: 'person-outline' },
+  // `app/(tabs)/profile/` has no nested `_layout.tsx` of its own (still a
+  // single flat screen, unlike `plans`/`exercises`/`stats`), so it's
+  // registered below by its literal leaf path, `"profile/index"` - which is
+  // exactly what `route.name` resolves to here. Keying only `profile` (with
+  // no nested Stack to produce that bare route name) silently fell through
+  // to the `?? TAB_ICONS['index']` fallback, showing Home's icon on this
+  // tab. Add the folder-nested-Stack key too if `profile` ever gets one.
+  'profile/index': { active: 'person', inactive: 'person-outline' },
 };
 
 export default function TabsLayout() {

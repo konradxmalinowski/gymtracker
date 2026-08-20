@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { router, Stack } from 'expo-router';
 
 import { ExercisePickerScreen } from '@/features/exercise-library/screens/ExercisePickerScreen';
@@ -33,14 +33,34 @@ export default function ExercisePicker() {
   const request = useExercisePickerStore((state) => state.request);
   const close = useExercisePickerStore((state) => state.close);
 
-  // Defensive only: this route is never navigated to except immediately
-  // after `useExercisePickerStore.getState().open(...)` (see
-  // `features/plans/screens/PlanDayEditorScreen.tsx`'s "Add exercise"
-  // handler), so `request` is always populated in the real app. A `null`
-  // request means this screen was reached some other way (e.g. a stale deep
-  // link) - there is nothing useful to render, so it backs out immediately
-  // rather than showing a broken picker.
+  // Defensive only, checked once at mount: this route is never navigated to
+  // except immediately after `useExercisePickerStore.getState().open(...)`
+  // (see `features/plans/screens/PlanDayEditorScreen.tsx`'s and
+  // `features/workout-logging/components/AddExerciseButton.tsx`'s "Add
+  // exercise" handlers), so `request` is always populated in the real app. A
+  // `null` request at mount means this screen was reached some other way
+  // (e.g. a stale deep link) - there is nothing useful to render, so it
+  // backs out immediately rather than showing a broken picker.
+  //
+  // Deliberately gated on a ref rather than re-running on every `request`
+  // change: `onConfirm` below calls `close()` (which nulls `request`) right
+  // before its own `router.back()`. A dependency on `request` re-armed this
+  // check on that same transition and fired a *second*, redundant
+  // `router.back()` immediately after the legitimate one - harmless when
+  // reached from `PlanDayEditorScreen` (nested under `(tabs)`, where a
+  // second GO_BACK still finds a route to bubble to), but a genuine
+  // `GO_BACK was not handled by any navigator` failure when reached from
+  // `ActiveWorkoutScreen` (a root-level `(fullScreenModal)` route with
+  // nothing further for a second pop to bubble to once the first has
+  // already returned here). Running this once, at mount, preserves the
+  // original stale-request defense without re-triggering on a state change
+  // this screen's own confirm flow caused.
+  const hasCheckedInitialRequestRef = useRef(false);
   useEffect(() => {
+    if (hasCheckedInitialRequestRef.current) {
+      return;
+    }
+    hasCheckedInitialRequestRef.current = true;
     if (!request && router.canGoBack()) {
       router.back();
     }
@@ -58,7 +78,19 @@ export default function ExercisePicker() {
         onConfirm={(selectedIds) => {
           request.onConfirm(selectedIds);
           close();
-          router.back();
+          // Guarded the same way the mount effect above guards its own
+          // `router.back()` - this route is always reached via a real
+          // `router.push()` from its caller (see the mount effect's comment
+          // above for the two known callers), so `canGoBack()` is expected
+          // to be true here in practice; the guard is defense in depth, not
+          // a silent no-op risk - `canGoBack()` reflects the whole
+          // navigation tree (it bubbles through parent navigators, not just
+          // this screen's own stack), so a `false` result means there is
+          // genuinely nowhere to go back to, in which case an unguarded
+          // `back()` would have failed identically.
+          if (router.canGoBack()) {
+            router.back();
+          }
         }}
       />
     </>

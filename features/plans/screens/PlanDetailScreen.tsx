@@ -1,14 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
 import { View } from 'react-native';
 import { router, Stack } from 'expo-router';
 
 import { Column, Screen } from '@/components/layout';
-import { Button, TextField } from '@/components/ui';
-import { BottomSheet, ConfirmDialog, EmptyState, ErrorState, Skeleton } from '@/components/feedback';
+import { Button } from '@/components/ui';
+import { ConfirmDialog, EmptyState, ErrorState, Skeleton } from '@/components/feedback';
 import { DraggableList } from '@/components/gestures/DraggableList';
 import type { PlanDay } from '@/features/plans';
-import { PlanValidationError } from '@/features/plans';
 // P6: `useStartWorkout` is this barrel's one deliberate presentation-layer
 // export (see its own doc comment in `features/workout-logging/index.ts`) -
 // `plans` stays within the cross-feature-barrel-only rule (ARCHITECTURE.md
@@ -19,23 +17,20 @@ import { haptics } from '@/services/haptics';
 import { t } from '@/i18n';
 import { routes } from '@/navigation/routes';
 import { useContainer } from '@/services/container';
+import { useSheetStore } from '@/stores/sheetStore';
 import { useToastStore } from '@/stores/toastStore';
 import { color, space } from '@/theme/tokens';
 
 import { PlanDayCard } from '../components/PlanDayCard';
+import { PlanDetailNameSheetContent } from '../components/PlanDetailNameSheetContent';
 import { PlanEditorHeader } from '../components/PlanEditorHeader';
-import { useAddDay, useDeleteDay, useDuplicateDay, useRenameDay, useRestoreDay } from '../hooks/useDayMutations';
+import { useDeleteDay, useDuplicateDay, useRestoreDay } from '../hooks/useDayMutations';
 import { usePlan } from '../hooks/usePlan';
-import { useRenamePlan, useSetActivePlan } from '../hooks/usePlanMutations';
+import { useSetActivePlan } from '../hooks/usePlanMutations';
 import { useReorderDays } from '../hooks/useReorderDays';
 
 const ROW_HEIGHT = 72;
-
-type SheetState =
-  | { kind: 'closed' }
-  | { kind: 'renamePlan' }
-  | { kind: 'addDay' }
-  | { kind: 'renameDay'; day: PlanDay };
+const PLAN_DETAIL_NAME_SHEET_ID = 'plan-detail-name';
 
 export interface PlanDetailScreenProps {
   planId: string | undefined;
@@ -44,10 +39,7 @@ export interface PlanDetailScreenProps {
 /** `app/(tabs)/plans/[planId].tsx`'s screen body. */
 export function PlanDetailScreen({ planId }: PlanDetailScreenProps) {
   const { data: plan, isPending, isError, refetch } = usePlan(planId);
-  const renamePlan = useRenamePlan();
   const setActivePlan = useSetActivePlan();
-  const addDay = useAddDay();
-  const renameDay = useRenameDay();
   const duplicateDay = useDuplicateDay();
   const deleteDay = useDeleteDay();
   const restoreDay = useRestoreDay();
@@ -56,52 +48,38 @@ export function PlanDetailScreen({ planId }: PlanDetailScreenProps) {
   const { startFromPlanDay, isStarting, blockedSession, dismissBlocked, resumeBlocked } =
     useStartWorkout(sessionService);
 
-  const [sheet, setSheet] = useState<SheetState>({ kind: 'closed' });
-  const [nameInput, setNameInput] = useState('');
-  const [formError, setFormError] = useState<string | null>(null);
-
-  function closeSheet() {
-    setSheet({ kind: 'closed' });
-  }
-
   function openRenamePlanSheet() {
     if (!plan) return;
-    setNameInput(plan.name);
-    setFormError(null);
-    setSheet({ kind: 'renamePlan' });
+    useSheetStore.getState().present({
+      id: PLAN_DETAIL_NAME_SHEET_ID,
+      content: <PlanDetailNameSheetContent kind="renamePlan" planId={plan.id} initialName={plan.name} />,
+      snapPoints: [0.4],
+    });
   }
 
   function openAddDaySheet() {
-    setNameInput('');
-    setFormError(null);
-    setSheet({ kind: 'addDay' });
+    if (!plan) return;
+    useSheetStore.getState().present({
+      id: PLAN_DETAIL_NAME_SHEET_ID,
+      content: <PlanDetailNameSheetContent kind="addDay" planId={plan.id} />,
+      snapPoints: [0.4],
+    });
   }
 
   function openRenameDaySheet(day: PlanDay) {
-    setNameInput(day.name);
-    setFormError(null);
-    setSheet({ kind: 'renameDay', day });
-  }
-
-  async function handleSubmitSheet() {
     if (!plan) return;
-    setFormError(null);
-    try {
-      if (sheet.kind === 'renamePlan') {
-        await renamePlan.mutateAsync({ id: plan.id, name: nameInput });
-      } else if (sheet.kind === 'addDay') {
-        await addDay.mutateAsync({ planId: plan.id, input: { name: nameInput } });
-      } else if (sheet.kind === 'renameDay') {
-        await renameDay.mutateAsync({ dayId: sheet.day.id, name: nameInput });
-      }
-      closeSheet();
-    } catch (error) {
-      if (error instanceof PlanValidationError) {
-        setFormError(error.issues[0]?.message ?? t('plans.detail.genericErrorMessage'));
-      } else {
-        setFormError(t('plans.detail.genericErrorMessage'));
-      }
-    }
+    useSheetStore.getState().present({
+      id: PLAN_DETAIL_NAME_SHEET_ID,
+      content: (
+        <PlanDetailNameSheetContent
+          kind="renameDay"
+          planId={plan.id}
+          dayId={day.id}
+          initialName={day.name}
+        />
+      ),
+      snapPoints: [0.4],
+    });
   }
 
   function handleDuplicateDay(day: PlanDay) {
@@ -206,37 +184,6 @@ export function PlanDetailScreen({ planId }: PlanDetailScreenProps) {
           </View>
         ) : null}
       </Column>
-
-      <BottomSheet visible={sheet.kind !== 'closed'} onDismiss={closeSheet} snapPoints={[0.4]}>
-        <Column gap={4} style={{ paddingTop: space[2] }}>
-          <TextField
-            label={
-              sheet.kind === 'renamePlan'
-                ? t('plans.list.renameDialogTitle')
-                : sheet.kind === 'renameDay'
-                  ? t('plans.detail.renameDayDialogTitle')
-                  : t('plans.detail.addDayDialogTitle')
-            }
-            value={nameInput}
-            onChangeText={setNameInput}
-            placeholder={
-              sheet.kind === 'addDay' || sheet.kind === 'renameDay'
-                ? t('plans.detail.dayNamePlaceholder')
-                : t('plans.list.namePlaceholder')
-            }
-            error={formError ?? undefined}
-            testID="plan-detail-name-sheet-field"
-          />
-          <Button
-            variant="primary"
-            label={t('common.save')}
-            onPress={() => void handleSubmitSheet()}
-            loading={renamePlan.isPending || addDay.isPending || renameDay.isPending}
-            fullWidth
-            testID="plan-detail-name-sheet-save"
-          />
-        </Column>
-      </BottomSheet>
 
       {/* P6: `startFromPlanDay`'s `outcome: 'blocked'` result - a workout is
           already in progress, so this offers Resume (jumps into it) or

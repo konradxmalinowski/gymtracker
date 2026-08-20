@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Column, Row } from '@/components/layout';
 import { BottomSheet, Button, IconButton, Text, TextField } from '@/components/ui';
@@ -53,6 +54,15 @@ const TICK_MS = 1000;
  * by `activeWorkoutStore` - a ticking value re-rendering this header every
  * second must never re-render the exercise list beneath it, which is exactly
  * what ADR-0008 rule 5 (selector-only store consumption) exists to prevent.
+ *
+ * Top safe-area handling: `ActiveWorkoutScreen` deliberately does not render
+ * through `components/layout/Screen` (its `RestTimerBar`/`FlashList` rely on
+ * edge-to-edge layout `Screen`'s `padded`/horizontal-padding behavior would
+ * disturb), so this header - the one element that actually sits flush
+ * against the top edge - reads `useSafeAreaInsets()` directly and folds
+ * `insets.top` into its own top padding, the same pattern
+ * `components/feedback/BottomSheet.tsx` already uses. Scoped to this
+ * component alone; no other screen or shared primitive is touched.
  */
 export function WorkoutHeader({
   title,
@@ -67,6 +77,7 @@ export function WorkoutHeader({
   testID,
 }: WorkoutHeaderProps) {
   const { clock } = useContainer();
+  const insets = useSafeAreaInsets();
   const [now, setNow] = useState(() => clock.now());
   const [notesSheetVisible, setNotesSheetVisible] = useState(false);
   const [notesDraft, setNotesDraft] = useState(notes ?? '');
@@ -95,7 +106,8 @@ export function WorkoutHeader({
         align="center"
         style={{
           paddingHorizontal: space[4],
-          paddingVertical: space[3],
+          paddingTop: insets.top + space[3],
+          paddingBottom: space[3],
           borderBottomWidth: 1,
           borderBottomColor: color.border,
         }}
