@@ -4,9 +4,11 @@ import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { SheetHost } from '@/components/feedback/SheetHost';
 import { createTestDatabase } from '@/database/node/createTestDatabase';
 import { PlanDetailScreen } from '@/features/plans/screens/PlanDetailScreen';
 import { ContainerProvider, createContainer, type AppContainer } from '@/services/container';
+import { useSheetStore } from '@/stores/sheetStore';
 import { useToastStore } from '@/stores/toastStore';
 
 jest.mock('expo-router', () => ({
@@ -45,6 +47,7 @@ afterEach(() => {
   activeQueryClient?.unmount();
   activeQueryClient = undefined;
   useToastStore.setState({ current: null });
+  useSheetStore.setState({ current: null, queue: [] });
   jest.clearAllMocks();
 });
 
@@ -68,7 +71,13 @@ async function renderPlanDetailScreen(planId: string, container?: AppContainer) 
     );
   }
 
-  const view = await render(<PlanDetailScreen planId={planId} />, { wrapper: Wrapper });
+  const view = await render(
+    <>
+      <PlanDetailScreen planId={planId} />
+      <SheetHost />
+    </>,
+    { wrapper: Wrapper },
+  );
   return { ...view, container: resolvedContainer };
 }
 

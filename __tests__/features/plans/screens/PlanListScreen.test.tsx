@@ -4,15 +4,21 @@ import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { SheetHost } from '@/components/feedback/SheetHost';
 import { createTestDatabase } from '@/database/node/createTestDatabase';
 import { PlanListScreen } from '@/features/plans/screens/PlanListScreen';
 import { ContainerProvider, createContainer, type AppContainer } from '@/services/container';
+import { useSheetStore } from '@/stores/sheetStore';
 
-// `BottomSheet` (mounted unconditionally by `PlanListScreen`, just
-// `visible={false}` until a sheet is opened) reads `useSafeAreaInsets`
-// unconditionally, which throws without a `SafeAreaProvider` ancestor -
-// `initialMetrics` skips the native measurement round trip Jest has no
-// native side for.
+// `BottomSheet` (mounted by the app-root `SheetHost`, just `visible={false}`
+// until a sheet is `present()`d - see `PlanListScreen`'s own `openCreateSheet`/
+// `openRenameSheet`) reads `useSafeAreaInsets` unconditionally, which throws
+// without a `SafeAreaProvider` ancestor - `initialMetrics` skips the native
+// measurement round trip Jest has no native side for. `SheetHost` itself is
+// mounted alongside the screen here, the same as the app root mounts it once
+// for every real screen - `PlanListScreen` only calls
+// `useSheetStore.getState().present(...)`, it does not render `BottomSheet`
+// directly.
 const SAFE_AREA_METRICS = {
   insets: { top: 0, left: 0, right: 0, bottom: 0 },
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -47,6 +53,7 @@ afterEach(() => {
   activeQueryClient?.clear();
   activeQueryClient?.unmount();
   activeQueryClient = undefined;
+  useSheetStore.setState({ current: null, queue: [] });
   jest.clearAllMocks();
 });
 
@@ -70,7 +77,13 @@ async function renderPlanListScreen(options?: { container?: AppContainer }) {
     );
   }
 
-  const view = await render(<PlanListScreen />, { wrapper: Wrapper });
+  const view = await render(
+    <>
+      <PlanListScreen />
+      <SheetHost />
+    </>,
+    { wrapper: Wrapper },
+  );
   return { ...view, container };
 }
 
