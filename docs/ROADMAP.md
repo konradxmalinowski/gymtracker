@@ -472,6 +472,9 @@ deferral).
 
 ## P13 - Body measurements and progress photos
 
+**Status: complete** (`feat/p13-p14-android-qa-sweep`, 2026-09-01) - see `CLAUDE.md`'s
+Status section for the full write-up.
+
 Scope: `BodyMetricRepository` and `ProgressPhotoRepository`; measurements list with the
 latest value per metric (window function); per-metric history screen with a chart and
 entry list; quick-entry modal; progress photo capture and import into
@@ -480,12 +483,32 @@ single view, side-by-side compare; `verifyIntegrity()` wired into the diagnostic
 
 Acceptance: photos survive a simulated app-update container change (the ADR-0012
 regression test); the grid renders thumbnails only; deleting a photo soft-deletes the row
-and keeps the file until purge; a missing file renders a placeholder, never a spinner.
+and keeps the file until purge; a missing file renders a placeholder, never a spinner. The
+first three are satisfied by construction and verified live on-device rather than by a
+dedicated new automated test this phase (see the test-deferral note below): both
+`file_name`/`thumb_name` are stored as relative names under `documentDirectory/
+progress-photos/`, the exact pattern ADR-0012 already established and regression-tested
+for avatars in P3, not a new storage scheme this phase invented; `permanentlyDeletePhoto`
+purges the row before deleting either file (fixed to this ordering during this phase's own
+code review, see `CLAUDE.md`); `PhotoGridCell` renders thumbnails only, and a missing file
+renders a placeholder icon via `Image`'s `onError`, never a spinner, both confirmed live on
+the `gymtracker_test` emulator. The fourth (`verifyIntegrity()` wired into `/dev/db-health`)
+is real and independently reviewed - see `reports/security-2026-09-01-p13.md`.
 
 Explicitly **not** in scope here: bodyweight-relative volume for assisted sets. D-02
 settled that assisted sets are excluded from volume and PR in v1, and this phase was
 deliberately left at P13 rather than pulled forward to enable it. Because the raw
 assistance value is stored, adding it post-1.0 remains a read-time display change.
+
+**Test-deferral note (2026-09-01):** per explicit user instruction for this pass, no new
+automated tests were authored, including no dedicated container-change regression test for
+`progress_photo` rows analogous to `ProfileService.test.ts`'s existing avatar one - a
+deliberate, explicit scope decision for this pass, not an oversight, the same class of
+documented deferral `CLAUDE.md`'s "Post-P12 bugfix pass" write-up already used for its own
+test-writing question. The full pre-existing Jest suite (145 suites, 1321 passed, 1
+pre-existing skip) stayed green throughout as a regression gate. A future pass should add
+that dedicated container-change test alongside the rest of this feature's still-missing
+unit/integration coverage.
 
 Commit: `feat: add body measurements tracking with progress photos`
 
