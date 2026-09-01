@@ -55,4 +55,12 @@ export interface FileStorage {
 
   /** Creates the directory (and any missing intermediate directories) if it does not already exist. */
   ensureDirectory(relativePath: string): Promise<void>;
+
+  /**
+   * File names (not full paths, not subdirectories) directly inside
+   * `relativePath` under this storage's root - P13's `ProgressPhotoRepository
+   * .verifyIntegrity()` diagnostic scan. `[]` when the directory does not
+   * exist (a fresh install with no photos yet is not an error).
+   */
+  list(relativePath: string): Promise<string[]>;
 }
