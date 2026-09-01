@@ -20,6 +20,7 @@ import {
   type LastMigration,
   type TableRowCount,
 } from '@/database/diagnostics';
+import type { ProgressPhotoIntegrityReport } from '@/features/body-metrics';
 import { useContainer } from '@/services/container';
 import { t } from '@/i18n';
 import { space } from '@/theme/tokens';
@@ -47,10 +48,23 @@ type LoadState =
   | { status: 'error'; message: string }
   | { status: 'ready'; diagnostics: DatabaseDiagnostics };
 
+/**
+ * P13's photo-integrity check - a second, independent load: a failure here
+ * (or a slow disk scan) must never block the schema/storage/engine sections
+ * above from rendering, and vice versa, so it gets its own state machine and
+ * its own retry rather than folding into `LoadState`.
+ */
+type PhotoIntegrityState =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'ready'; report: ProgressPhotoIntegrityReport };
+
 function DbHealthContent() {
   const container = useContainer();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
+  const [photoState, setPhotoState] = useState<PhotoIntegrityState>({ status: 'loading' });
+  const [photoAttempt, setPhotoAttempt] = useState(0);
 
   const load = useCallback(() => {
     let cancelled = false;
@@ -80,15 +94,52 @@ function DbHealthContent() {
 
   useEffect(() => load(), [load, attempt]);
 
+  const loadPhotoIntegrity = useCallback(() => {
+    let cancelled = false;
+
+    container.progressPhotoService
+      .verifyIntegrity()
+      .then((report) => {
+        if (!cancelled) {
+          setPhotoState({ status: 'ready', report });
+        }
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        container.logging.error('dbHealth.photoIntegrityLoadFailed', { error: message });
+        setPhotoState({ status: 'error', message });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [container]);
+
+  useEffect(() => loadPhotoIntegrity(), [loadPhotoIntegrity, photoAttempt]);
+
   useEffect(() => {
     if (state.status === 'loading') {
       AccessibilityInfo.announceForAccessibility(t('dbHealth.loadingLabel'));
     }
   }, [state.status]);
 
+  useEffect(() => {
+    if (photoState.status === 'loading') {
+      AccessibilityInfo.announceForAccessibility(t('dbHealth.photoIntegrityLoadingLabel'));
+    }
+  }, [photoState.status]);
+
   const handleRetry = useCallback(() => {
     setState({ status: 'loading' });
     setAttempt((value) => value + 1);
+  }, []);
+
+  const handlePhotoIntegrityRetry = useCallback(() => {
+    setPhotoState({ status: 'loading' });
+    setPhotoAttempt((value) => value + 1);
   }, []);
 
   return (
@@ -114,8 +165,81 @@ function DbHealthContent() {
         ) : null}
 
         {state.status === 'ready' ? <DiagnosticsSections diagnostics={state.diagnostics} /> : null}
+
+        <PhotoIntegritySection state={photoState} onRetry={handlePhotoIntegrityRetry} />
       </Column>
     </Screen>
+  );
+}
+
+function PhotoIntegritySection({
+  state,
+  onRetry,
+}: {
+  state: PhotoIntegrityState;
+  onRetry: () => void;
+}) {
+  return (
+    <Section title={t('dbHealth.photoIntegritySection')}>
+      {state.status === 'loading' ? <Skeleton width="100%" height={72} radius="lg" /> : null}
+
+      {state.status === 'error' ? (
+        <Surface level={1} radius="lg">
+          <ErrorState
+            error={t('dbHealth.photoIntegrityErrorMessage', { detail: state.message })}
+            onRetry={onRetry}
+            testID="db-health-photo-integrity-error"
+          />
+        </Surface>
+      ) : null}
+
+      {state.status === 'ready' ? (
+        <Card variant="outlined">
+          <Column gap={3}>
+            <PhotoIntegrityRow
+              label={t('dbHealth.orphanFilesLabel')}
+              okLabel={t('dbHealth.orphanFilesOk')}
+              count={state.report.orphanFiles.length}
+            />
+            <Divider />
+            <PhotoIntegrityRow
+              label={t('dbHealth.danglingRowsLabel')}
+              okLabel={t('dbHealth.danglingRowsOk')}
+              count={state.report.danglingRows.length}
+            />
+          </Column>
+        </Card>
+      ) : null}
+    </Section>
+  );
+}
+
+function PhotoIntegrityRow({
+  label,
+  okLabel,
+  count,
+}: {
+  label: string;
+  okLabel: string;
+  count: number;
+}) {
+  const ok = count === 0;
+  const statusLabel = ok ? okLabel : String(count);
+  const accessibilityLabel = `${label}: ${statusLabel}`;
+
+  return (
+    <View
+      accessible
+      accessibilityRole={ok ? 'text' : 'alert'}
+      accessibilityLabel={accessibilityLabel}
+    >
+      <Row justify="space-between" align="center">
+        <Text variant="body" color="secondary">
+          {label}
+        </Text>
+        <Badge label={statusLabel} tone={ok ? 'success' : 'danger'} />
+      </Row>
+    </View>
   );
 }
 

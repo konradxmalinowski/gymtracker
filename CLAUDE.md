@@ -10,9 +10,10 @@ P0 (project foundation), P1 (design system and UI primitives), P2 (persistence
 foundation), P3 (onboarding, profile and core settings), P4 (exercise library), P5
 (workout plans), P6 (workout logging), P7 (rest timer), P8 (progressive overload and
 personal records), P9 (workout summary and history), P10 (home dashboard), P11
-(statistics and charts), and P12 (training calendar) are complete - `docs/ROADMAP.md`'s
-MVP line closed at P10, and P11-P12 are the first two phases past it (v1.1-v1.3,
-"Statistics, calendar, body metrics, data transfer"). P8
+(statistics and charts), P12 (training calendar), and P13 (body measurements and
+progress photos) are complete - `docs/ROADMAP.md`'s MVP line closed at P10, and
+P11-P13 are the first three phases past it (v1.1-v1.3, "Statistics, calendar, body
+metrics, data transfer"). P8
 (`feat/p8-progressive-overload`) was cut from
 `main` before P7's PR merged - a documented decision made when P8 was kicked off so
 the two phases could be reviewed independently (see
@@ -22,13 +23,14 @@ overlapping files (`WorkoutSessionRepository.ts`/`SqliteWorkoutSessionRepository
 this file and `docs/architecture-snapshot.md`) needed a merge; that merge is reflected
 throughout this file as of this update, not left as an open branch note. The
 `onboarding`, `profile`, `exercise-library`, `plans`, `workout-logging`, `rest-timer`,
-`records`, `home`, `statistics`, and `calendar` features now have real implementations
-(screens, hooks, services, repository where applicable - `rest-timer` itself owns no
-database table and therefore no repository; `records` does, see below; `home`,
-`statistics`, and `calendar` each have a repository but no accompanying service, see
-below); the remaining two features (`body-metrics`, `data-transfer`) are still empty
-skeleton directories (components/hooks/screens/services/domain/repository/types/
-index.ts subfolders, no implementation) awaiting their own phase.
+`records`, `home`, `statistics`, `calendar`, and `body-metrics` features now have real
+implementations (screens, hooks, services, repository where applicable - `rest-timer`
+itself owns no database table and therefore no repository; `records` does, see below;
+`home`, `statistics`, and `calendar` each have a repository but no accompanying
+service, see below; `body-metrics` has two repositories, each with its own service,
+see below); the remaining feature (`data-transfer`) is still an empty skeleton
+directory (components/hooks/screens/services/domain/repository/types/index.ts
+subfolders, no implementation) awaiting its own phase.
 
 The app now boots for real: `app/_layout.tsx` opens the database, runs migrations,
 seeds the exercise catalog (`database/seed/runSeed()`, idempotent - a P2 gap fixed in
@@ -1577,6 +1579,147 @@ this pass adds). Every fix above was verified live on the `gymtracker_test` Andr
 emulator (arm64-v8a, API 34), not only by static analysis or mocked tests - this closes
 the "no simulator/emulator available" gap every phase since P4 has flagged, at least
 for Android; iOS remains unverified.
+
+**Body measurements and progress photos (P13):** `features/body-metrics/` fills the
+P2-era empty skeleton directory - the same "empty skeleton to real implementation"
+framing P11/P12 already used for `statistics`/`calendar` - and is the eleventh real
+feature. It ships bodyweight/circumference/body-fat measurement logging with a
+latest-value list, per-metric history, a quick-entry sheet, and progress-photo
+capture/import with thumbnailing, a photo grid, single-photo detail with an editable
+note, and a side-by-side compare screen.
+
+`features/body-metrics/repository/{BodyMetricRepository,SqliteBodyMetricRepository}.ts`
+and `{ProgressPhotoRepository,SqliteProgressPhotoRepository}.ts` both extend
+`BaseSqliteRepository`, backed by the `body_metric_entry`/`progress_photo` tables P2's
+schema already shipped - no new migration this phase. `SqliteBodyMetricRepository
+.listLatestPerMetric()` is the app's first `ROW_NUMBER() OVER (PARTITION BY metric
+ORDER BY measured_at DESC)` window-function query - one bounded read for "the most
+recent value of every metric the user has ever logged," rather than N separate
+per-metric queries or a load-all-then-reduce-in-JS pass, the same CQRS-lite discipline
+this codebase's read models already enforce elsewhere. `SqliteProgressPhotoRepository
+.verifyIntegrity()` is the one method on either repository that needs `FileStorage` at
+all (injected via the constructor for that single method only, since every other
+method - `create`/`update`/`listAll` - is pure SQL, mirroring exactly how
+`ProfileService.writeAvatar()` already keeps file I/O one layer above its repository):
+it cross-references the `progress-photos` directory's real file listing against every
+row's `file_name`/`thumb_name`, returning `orphanFiles` (files with no referencing row)
+and `danglingRows` (live rows - `deleted_at IS NULL` - missing one or both of their
+files; a soft-deleted row is deliberately excluded, since it is expected to still
+reference a file until a real purge). `BodyMetricService`/`ProgressPhotoService` are
+Zod-validated and are the only door into their respective repositories, per the "no
+direct repository access" rule; `features/body-metrics/domain/metrics.ts` is a
+domain-pure (no React/RN/Expo import) constant list of the 15 metric types mirroring
+`body_metric_entry.metric`'s own CHECK constraint verbatim, plus a `metricUnit()`
+mapper (`body_weight` -> kg, `body_fat_pct` -> percent, every circumference metric ->
+cm) that the presentation layer reads to route through `domain/Weight.ts`/`Length.ts`
+for display conversion - the same two shared value objects this file's "Deviation from
+the section 9 tree" paragraph above already names `body-metrics` as one of three
+intended consumers of, now a real one rather than an anticipated one.
+`features/body-metrics/index.ts`'s own barrel keeps this a leaf feature exactly like
+`exercise-library`: no dependency on `plans`, `workout-logging`, `records`, or any
+other feature, confirmed by the barrel's own header comment and re-confirmed by
+`features/body-metrics/hooks/useDisplayUnits.ts`, which reads `units.weight`/
+`units.length` directly off the shared `settings` container member (root-level infra,
+the same class `db`/`clock`/`files` already are) rather than importing `profile`'s
+`useUnitsSettings` - not barrel-exported there and would have crossed a feature
+boundary rule 4 forbids regardless - deliberately sharing that hook's exact TanStack
+Query cache keys instead, so a units change made from Profile's settings screen
+invalidates this feature's own displayed values with no cross-feature subscription
+needed.
+
+`services/images/` is new - `ImageProcessor`/`ExpoImageProcessor`, an abstraction over
+the newly-installed `expo-image-manipulator` (`~57.0.12`) that confines that dependency
+to a single implementation, mirroring exactly how `services/files` already confines
+`expo-file-system`. `ExpoImageProcessor` targets SDK 57's chainable, context-based
+`ImageManipulator.manipulate(uri).<action>().renderAsync()` API rather than the
+deprecated free-function `manipulateAsync()`, and - since that API has no separate
+"read image dimensions" call - loads the source once via a zero-action `renderAsync()`
+to read the real width/height a correct resize/crop rectangle needs, then
+`.reset()`s the same loaded context back to the source rather than reloading the URI a
+second time. Per ADR-0012's byte budget: `resizeToFit()` produces the full image
+(1600px long edge, JPEG quality 0.8) and `cropToSquareThumbnail()` produces a
+center-cropped 240x240 thumbnail (JPEG quality 0.7). `services/files/{FileStorage.ts,
+ExpoFileStorage.ts}` gained one additive method, `list()` (file names, not full paths
+or subdirectories, directly inside a given relative directory, `[]` when the directory
+doesn't exist yet) - `verifyIntegrity()`'s only caller, reusing `ExpoFileStorage`'s
+existing `pathSegments()` traversal guard rather than adding a second one.
+`services/container.ts` gained `bodyMetricRepository`/`bodyMetricService`/
+`progressPhotoRepository`/`progressPhotoService` plus a shared, non-feature-specific
+`imageProcessor` member - the tenth and eleventh feature-repository pairs after
+P3-P12's profile/exercise-library/plans/workout-logging/records/exercise-history/home/
+statistics/calendar ones.
+
+The app's own root-level Stack for this feature, `app/body-metrics/` (`_layout.tsx`,
+`index.tsx` the measurements list, `[metric].tsx` the per-metric history screen,
+`photos/index.tsx` the photo grid, `photos/[photoId].tsx` the detail/edit screen,
+`photos/compare.tsx` the side-by-side view), is reached via a new "Body measurements"
+row on `ProfileScreen` - the same `profile.records`/`profile.history`/
+`profile.calendar` precedent, just with its own dedicated Stack rather than a single
+flat route, since this flow has materially more screens than any of those
+single-screen entry points. `navigation/routes.ts` gained `routes.bodyMetrics.*`
+(`list`/`history`/`photos`/`photoDetail`/`compare`); `compare` takes both photo ids as
+plain route params rather than a Zustand store, the same "cheap round trip through the
+route itself" reasoning `modals.restTimerSettings`/`modals.planDayPicker` already use
+(unlike `modals.exercisePicker`'s unbounded-list store, per P5's write-up above) -
+exactly two ids, known up front, nothing to accumulate.
+
+`app/dev/db-health.tsx` gained an independent "Progress photo integrity" section
+showing `orphanFiles.length`/`danglingRows.length` from `progressPhotoService
+.verifyIntegrity()`, with its own load/retry state machine (`PhotoIntegrityState`,
+separate `useState`/`useEffect`/retry-attempt counter from the pre-existing schema/
+storage/engine diagnostics) rather than folding into the existing `LoadState` - a
+slow disk scan or a failure reading it must never block the sections above it from
+rendering, and vice versa.
+
+Two real findings surfaced during code review and were fixed before commit, not left
+for a later pass: `ProgressPhotoService.permanentlyDeletePhoto()` originally deleted
+both files from disk before purging the database row - the reverse of ADR-0012's
+mandated deletion ordering ("the row is soft-deleted first, and the file is removed
+only by purge()," extended here to the hard-delete case: purge the row first, so a
+failure partway through the subsequent file deletes leaves only a safe orphan file,
+never a dangling row pointing at nothing) - fixed by reordering purge before both
+`files.delete()` calls. Separately, `ProgressPhotoService.addPhoto()` ran its
+independent image-processing pair (full resize, thumbnail crop) and its independent
+file-copy pair sequentially rather than via `Promise.all`, fixed for real latency on a
+mid-range Android device rather than as a style cleanup - both pairs are genuinely
+independent work with nothing for the second to wait on from the first.
+
+A security review (`reports/security-2026-09-01-p13.md`, security-agent-sonnet,
+routine scope) found zero critical/high/medium/low findings and four informational
+notes: both new repositories are fully parameterized with no template-literal SQL
+interpolation anywhere, `metric`/`pose` closed-enum-validated a layer above at the
+service; `ExpoFileStorage.list()` inherits the same `pathSegments()` traversal guard
+every other method already uses, and every photo file name is generated from an
+`IdGenerator` UUID, never user-supplied text; `addPhoto`/`permanentlyDeletePhoto`
+re-confirmed correct against ADR-0012's write-then-commit/delete ordering (the second
+finding above, re-verified fixed by this pass rather than taken on faith); and one
+finding that was fixed same-session rather than left informational -
+`PhotoDetailScreen.handleSaveEdit()` had no `try/catch` around its mutation, so an
+over-length note (no client-side cap; the service layer's own Zod schema enforces
+`PHOTO_NOTE_MAX_LENGTH = 1000`) would throw with no visible error and leave the screen
+stuck in edit mode - fixed by adding a `saveError` state and an inline error message,
+matching `MeasurementQuickEntrySheetContent`'s existing error-display pattern.
+
+On-device verification needed a fresh build, not just a fresh Metro bundle: this
+phase's new `expo-image-manipulator` native dependency was not present in the EAS
+dev-client APK the post-P12 bugfix pass had used, so a local `npx expo run:android`
+build was required this session (`package.json`'s `android`/`ios` scripts moved from
+`expo start --android`/`--ios` to `expo run:android`/`run:ios` accordingly) - the same
+`gymtracker_test` Android SDK/emulator setup the post-P12 pass installed was reused,
+not rebuilt from scratch. Verified live: quick-entry measurement logging; the photo
+capture/library-pick -> resize + thumbnail (`expo-image-manipulator`) -> save -> grid
+-> detail -> edit-note flow end to end; and the db-health photo-integrity section
+correctly reporting zero orphans and zero dangling rows after a real sequence of
+writes and edits. No crashes, no regressions against the post-P12 bugfix pass's own
+fixes.
+
+Per explicit user instruction for this pass, no new tests were authored this phase -
+a deliberate scope decision, not an oversight, the same kind of explicit,
+user-approved deferral this file's "Post-P12 bugfix pass" write-up above already
+documents for its own test-writing question. The full Jest suite stayed the
+regression gate rather than the target of new coverage: typecheck, lint, and the full
+suite (145 suites, 1321 passed, 1 pre-existing skip, 1322 total - unchanged from the
+post-P12 bugfix pass's own count, since this phase added no new test files) are clean.
 
 ## Product
 

@@ -168,4 +168,37 @@ export const routes = {
       params: { exerciseId },
     }),
   },
+
+  /**
+   * P13: the body-metrics feature's own root-level Stack
+   * (`app/body-metrics/_layout.tsx`) - not nested under `(tabs)`, since this
+   * feature isn't one of the 5 tabs; reached via `ProfileScreen`'s
+   * "Body measurements" row, the same `profile.records`/`profile.history`/
+   * `profile.calendar` precedent, just with its own dedicated Stack rather
+   * than a single flat route, since this flow has materially more screens
+   * (list, per-metric history, photo grid, photo detail, compare) than any
+   * of those single-screen entry points. `list`/`photos` mirror
+   * `exercises.library`/`plans.library`'s alias naming for a tab/feature
+   * root; `compare` takes both photo ids as route params rather than a
+   * store, the same "cheap round trip through the route itself" reasoning
+   * `modals.restTimerSettings`/`modals.planDayPicker` already use (unlike
+   * `modals.exercisePicker`'s unbounded-list store) - exactly two ids, known
+   * up front, nothing to accumulate.
+   */
+  bodyMetrics: {
+    list: (): Href => '/body-metrics',
+    history: (metric: string): Href => ({
+      pathname: '/body-metrics/[metric]',
+      params: { metric },
+    }),
+    photos: (): Href => '/body-metrics/photos',
+    photoDetail: (photoId: string): Href => ({
+      pathname: '/body-metrics/photos/[photoId]',
+      params: { photoId },
+    }),
+    compare: (photoIdA: string, photoIdB: string): Href => ({
+      pathname: '/body-metrics/photos/compare',
+      params: { photoIdA, photoIdB },
+    }),
+  },
 } as const;

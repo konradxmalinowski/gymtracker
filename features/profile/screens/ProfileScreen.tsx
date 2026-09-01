@@ -71,6 +71,12 @@ export function ProfileScreen() {
             testID="profile-calendar-row"
           />
           <ListRow
+            title={t('bodyMetrics.profileRowTitle')}
+            onPress={() => router.push(routes.bodyMetrics.list())}
+            showChevron
+            testID="profile-body-metrics-row"
+          />
+          <ListRow
             title={t('profile.settingsRowTitle')}
             subtitle={t('profile.settingsRowSubtitle')}
             onPress={() => router.push(routes.profileSettings.index())}

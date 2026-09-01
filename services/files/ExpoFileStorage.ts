@@ -127,6 +127,17 @@ export class ExpoFileStorage implements FileStorage {
       dir.create({ intermediates: true });
     }
   }
+
+  async list(relativePath: string): Promise<string[]> {
+    const dir = this.directory(relativePath);
+    if (!dir.exists) {
+      return [];
+    }
+    return dir
+      .list()
+      .filter((entry): entry is File => entry instanceof File)
+      .map((file) => file.name);
+  }
 }
 
 export function createFileStorage(root: FileStorageRoot = 'document'): FileStorage {

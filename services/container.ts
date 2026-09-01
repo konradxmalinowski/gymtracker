@@ -40,11 +40,17 @@ import type { CalendarRepository } from '@/features/calendar/repository/Calendar
 import { PersonalRecordService } from '@/features/records';
 import { SqlitePersonalRecordRepository } from '@/features/records/repository/SqlitePersonalRecordRepository';
 import type { PersonalRecordRepository } from '@/features/records/repository/PersonalRecordRepository';
+import { BodyMetricService, ProgressPhotoService } from '@/features/body-metrics';
+import { SqliteBodyMetricRepository } from '@/features/body-metrics/repository/SqliteBodyMetricRepository';
+import type { BodyMetricRepository } from '@/features/body-metrics/repository/BodyMetricRepository';
+import { SqliteProgressPhotoRepository } from '@/features/body-metrics/repository/SqliteProgressPhotoRepository';
+import type { ProgressPhotoRepository } from '@/features/body-metrics/repository/ProgressPhotoRepository';
 import type { DatabaseContext } from '@/repositories/contracts/database';
 import { SqliteSettingsRepository, type SettingsRepository } from '@/repositories/settings';
 import { SystemClock, type Clock } from '@/services/clock';
 import { createFileStorage, type FileStorage } from '@/services/files';
 import { Uuid7IdGenerator, type IdGenerator } from '@/services/id';
+import { createImageProcessor, type ImageProcessor } from '@/services/images';
 import { createLogger, type Logger } from '@/services/logging';
 
 export interface AppContainer {
@@ -54,6 +60,8 @@ export interface AppContainer {
   logging: Logger;
   clock: Clock;
   idGenerator: IdGenerator;
+  /** Image resize/crop abstraction, P13 (body-metrics) - confines `expo-image-manipulator` to a single implementation, mirroring how `files` confines `expo-file-system`. Not feature-specific: a future feature could reuse it. */
+  imageProcessor: ImageProcessor;
   /** Feature repository, P3 (onboarding/profile/settings). Not re-exported for presentation use - go through `profileService`. */
   profileRepository: ProfileRepository;
   /** ARCHITECTURE.md section 3.1 rule 3: the only door into `profileRepository` for hooks/screens. */
@@ -82,12 +90,21 @@ export interface AppContainer {
   statisticsRepository: StatisticsRepository;
   /** Read model, P12 (calendar) - month/year `v_session_summary` overviews for the calendar grid and yearly heatmap, as flat DTOs (`features/calendar/repository/CalendarRepository.ts`). Read-only, no accompanying service - same shape as `exerciseHistoryRepository`/`homeDashboardRepository`/`statisticsRepository`. */
   calendarRepository: CalendarRepository;
+  /** Feature repository, P13 (body-metrics) - `body_metric_entry` (schema already shipped in P2). Not re-exported for presentation use - go through `bodyMetricService`. */
+  bodyMetricRepository: BodyMetricRepository;
+  /** ARCHITECTURE.md section 3.1 rule 3: the only door into `bodyMetricRepository` for hooks/screens. */
+  bodyMetricService: BodyMetricService;
+  /** Feature repository, P13 (body-metrics) - `progress_photo` (schema already shipped in P2). Not re-exported for presentation use - go through `progressPhotoService`. */
+  progressPhotoRepository: ProgressPhotoRepository;
+  /** ARCHITECTURE.md section 3.1 rule 3: the only door into `progressPhotoRepository` for hooks/screens. */
+  progressPhotoService: ProgressPhotoService;
 }
 
 export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer>): AppContainer {
   const clock = deps?.clock ?? new SystemClock();
   const idGenerator = deps?.idGenerator ?? new Uuid7IdGenerator(clock);
   const files = deps?.files ?? createFileStorage('document');
+  const imageProcessor = deps?.imageProcessor ?? createImageProcessor();
   const logging = deps?.logging ?? createLogger({ fileStorage: createFileStorage('cache') });
   const settings = deps?.settings ?? new SqliteSettingsRepository(db, clock);
   const profileRepository = deps?.profileRepository ?? new SqliteProfileRepository(db, clock);
@@ -113,6 +130,22 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
   const statisticsRepository =
     deps?.statisticsRepository ?? new SqliteStatisticsRepository({ db, settings });
   const calendarRepository = deps?.calendarRepository ?? new SqliteCalendarRepository({ db });
+  const bodyMetricRepository =
+    deps?.bodyMetricRepository ?? new SqliteBodyMetricRepository({ db, clock, idGenerator });
+  const bodyMetricService =
+    deps?.bodyMetricService ?? new BodyMetricService({ repository: bodyMetricRepository });
+  const progressPhotoRepository =
+    deps?.progressPhotoRepository ??
+    new SqliteProgressPhotoRepository({ db, clock, idGenerator, files });
+  const progressPhotoService =
+    deps?.progressPhotoService ??
+    new ProgressPhotoService({
+      repository: progressPhotoRepository,
+      files,
+      imageProcessor,
+      idGenerator,
+      logging,
+    });
   const sessionRepository =
     deps?.sessionRepository ??
     new SqliteWorkoutSessionRepository({
@@ -130,6 +163,7 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
     clock,
     idGenerator,
     files,
+    imageProcessor,
     logging,
     settings,
     profileRepository,
@@ -144,6 +178,10 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
     homeDashboardRepository,
     statisticsRepository,
     calendarRepository,
+    bodyMetricRepository,
+    bodyMetricService,
+    progressPhotoRepository,
+    progressPhotoService,
     sessionRepository,
     sessionService,
   };
