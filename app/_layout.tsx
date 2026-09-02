@@ -17,6 +17,7 @@ import { ExpoSqlExecutor, openDatabase } from '@/database/client';
 import { runMigrations } from '@/database/migrations';
 import { loadCatalogAsset, runSeed } from '@/database/seed';
 import { REST_TIMER_DEEP_LINK } from '@/features/rest-timer';
+import { ActiveWorkoutBanner } from '@/features/workout-logging/components/ActiveWorkoutBanner';
 import type { ActiveSessionSnapshot } from '@/features/workout-logging';
 import { routes } from '@/navigation/routes';
 import {
@@ -353,6 +354,17 @@ export function RootNavigationGate() {
           stores/sheetStore.ts rather than mounting its own. */}
       <ToastHost />
       <SheetHost />
+      {/* P6/ADR-0007, moved up from `app/(tabs)/_layout.tsx` during the
+          post-P12 bugfix pass: mounted at the true app root, not just above
+          the tab bar, so it stays docked whenever a workout is minimized -
+          on every one of the 5 tabs *and* on every root-level route outside
+          `(tabs)` (`profile/records`, `profile/history`, `profile/calendar`,
+          `body-metrics/*`, etc.), all of which unmount `(tabs)/_layout.tsx`
+          entirely since they live outside that route group. The banner's own
+          `pathname === '/workout/active'` check (see its file header) is
+          what keeps it from rendering while the user is actually inside the
+          active workout screen - unchanged by this move. */}
+      <ActiveWorkoutBanner />
       {sessionGate.status === 'stale' ? (
         <ConfirmDialog
           visible={showStaleDialog}
