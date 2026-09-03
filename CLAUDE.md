@@ -801,8 +801,11 @@ architecture-planned in `docs/ARCHITECTURE.md` section 2.1 (FR-27..FR-30), secti
 `docs/adr/0017-daily-goal-reminder-scheduling.md`. As of this update it is
 documentation and architecture planning only - no `features/daily-goals/` directory,
 no `app/goals/` routes, no `services/notifications/` implementation, and no
-`002_daily_goals.ts` migration exist in this repo yet. A future implementing session
-starts from those documents, not from any code.
+`003_daily_goals.ts` migration exist in this repo yet (numbered `003`, not `002` -
+`002` was claimed by the sleep/height metrics follow-up below before this feature was
+ever implemented, so a future implementing session should author its own migration as
+the next number in sequence rather than assuming `002` is still free). A future
+implementing session starts from those documents, not from any code.
 
 **Home dashboard (P10):** the Home tab is no longer P6's placeholder (wordmark plus a
 single Quick Start button) - it is a real, composed dashboard, and `docs/ROADMAP.md`'s
@@ -1723,6 +1726,37 @@ documents for its own test-writing question. The full Jest suite stayed the
 regression gate rather than the target of new coverage: typecheck, lint, and the full
 suite (145 suites, 1321 passed, 1 pre-existing skip, 1322 total - unchanged from the
 post-P12 bugfix pass's own count, since this phase added no new test files) are clean.
+
+**Sleep and height metrics (post-P13 follow-up, 2026-09-03):** two metric types were
+added to `BODY_METRIC_TYPES` (`features/body-metrics/domain/metrics.ts`), widening it
+from 15 to 17: `sleep_hours` (a new `'hours'` `MetricUnit`, displayed as `h` with no
+display-unit conversion - there's no second unit system for hours to convert to/from,
+the same treatment `percent` already gets) and `height` (no new unit at all - it's just
+another linear measurement, so it reuses the existing cm/in conversion every
+circumference metric already has).
+
+This is the app's **first real schema migration since P2**'s original
+`001_initial.ts` - `database/migrations/002_add_sleep_and_height_metrics.ts`. SQLite
+has no `ALTER TABLE ... ALTER COLUMN` for a CHECK constraint, so it uses the standard
+rebuild pattern: create `body_metric_entry_new` with the widened constraint, copy every
+row across, drop the old table, rename the new one into place, then recreate
+`ix_body_metric`. Verified live on the `gymtracker_test` Android emulator that this
+preserves existing data - a real plan and a real logged body-weight entry both survived
+the migration intact.
+
+No screen-level changes were needed: `MeasurementsListScreen` and `MetricHistoryScreen`
+(both from P13) already iterate `BODY_METRIC_TYPES` generically, so the two new metrics
+automatically got list rows, quick-entry sheets, and per-metric history/chart screens
+for free. Verified live end to end: logging a sleep value through quick-entry, seeing
+it in the list with the correct "h" unit, and seeing it appear in its own history
+screen.
+
+This was scoped as an extension of `body-metrics` rather than the much larger,
+differently-shaped `daily-goals` (P17, still documentation-only - see above) feature: the
+actual need (log a value against a user-picked category, chart it over time) is exactly
+what `body-metrics` already does, a deliberate scope decision rather than a shortcut.
+Per `docs/ARCHITECTURE.md` section 7.8, kept in sync with `schema.sql` the same way this
+file always keeps that section in sync.
 
 **Data export and import (P14):** `features/data-transfer/` fills the last remaining
 P2-era empty skeleton directory - the same "empty skeleton to real implementation"
