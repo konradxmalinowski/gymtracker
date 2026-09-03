@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 
 import type { Exercise, ExerciseListItem } from '@/features/exercise-library';
 import { useContainer } from '@/services/container';
@@ -10,8 +10,16 @@ interface ToggleFavoriteVariables {
   value: boolean;
 }
 
+/**
+ * `useExerciseSearch`'s cache holds `InfiniteData<ExerciseListItem[]>` (post-P12
+ * bugfix pass: the search hook itself became `useInfiniteQuery`-backed, see its own
+ * doc comment) - `pages` is the array of already-fetched pages, each a flat
+ * `ExerciseListItem[]`, not one flat list.
+ */
+type SearchCacheData = InfiniteData<ExerciseListItem[]>;
+
 interface ToggleFavoriteContext {
-  previousSearches: [readonly unknown[], ExerciseListItem[] | undefined][];
+  previousSearches: [readonly unknown[], SearchCacheData | undefined][];
   previousDetail: Exercise | null | undefined;
 }
 
@@ -33,14 +41,20 @@ export function useToggleExerciseFavorite() {
       await queryClient.cancelQueries({ queryKey: exerciseKeys.searchAll });
       await queryClient.cancelQueries({ queryKey: exerciseKeys.detail(id) });
 
-      const previousSearches = queryClient.getQueriesData<ExerciseListItem[]>({
+      const previousSearches = queryClient.getQueriesData<SearchCacheData>({
         queryKey: exerciseKeys.searchAll,
       });
       const previousDetail = queryClient.getQueryData<Exercise | null>(exerciseKeys.detail(id));
 
-      queryClient.setQueriesData<ExerciseListItem[]>(
-        { queryKey: exerciseKeys.searchAll },
-        (items) => items?.map((item) => (item.id === id ? { ...item, isFavorite: value } : item)),
+      queryClient.setQueriesData<SearchCacheData>({ queryKey: exerciseKeys.searchAll }, (cached) =>
+        cached
+          ? {
+              ...cached,
+              pages: cached.pages.map((page) =>
+                page.map((item) => (item.id === id ? { ...item, isFavorite: value } : item)),
+              ),
+            }
+          : cached,
       );
 
       if (previousDetail) {

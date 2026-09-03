@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AccessibilityInfo, Image, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 
@@ -43,10 +43,10 @@ export function ExercisePickerScreen({ alreadySelectedIds, onConfirm }: Exercise
   const [searchText, setSearchText] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const { data, isPending, isError, refetch } = useExerciseSearch(
-    searchText,
-    DEFAULT_EXERCISE_FILTERS,
-  );
+  const { data, isPending, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useExerciseSearch(searchText, DEFAULT_EXERCISE_FILTERS);
+
+  const items = useMemo(() => data?.pages.flat() ?? [], [data]);
 
   const alreadySelectedSet = new Set(alreadySelectedIds);
 
@@ -94,7 +94,7 @@ export function ExercisePickerScreen({ alreadySelectedIds, onConfirm }: Exercise
             <ExercisePickerSkeleton />
           ) : isError ? (
             <ErrorState error={t('exerciseLibrary.loadErrorMessage')} onRetry={() => refetch()} />
-          ) : !data || data.length === 0 ? (
+          ) : items.length === 0 ? (
             <EmptyState
               illustration={<Ionicons name="search-outline" size={48} color={color.textTertiary} />}
               title={t('exerciseLibrary.emptyResultsTitle')}
@@ -103,7 +103,7 @@ export function ExercisePickerScreen({ alreadySelectedIds, onConfirm }: Exercise
             />
           ) : (
             <FlashList
-              data={data}
+              data={items}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
                 <ExercisePickerRow
@@ -114,6 +114,13 @@ export function ExercisePickerScreen({ alreadySelectedIds, onConfirm }: Exercise
                   testID={`exercise-picker-row-${item.id}`}
                 />
               )}
+              onEndReached={() => {
+                if (hasNextPage && !isFetchingNextPage) {
+                  void fetchNextPage();
+                }
+              }}
+              onEndReachedThreshold={0.5}
+              ListFooterComponent={isFetchingNextPage ? <ExercisePickerFooterSkeleton /> : null}
               contentContainerStyle={{ paddingBottom: space[20] }}
               testID="exercise-picker-list"
             />
@@ -246,5 +253,18 @@ function ExercisePickerSkeleton() {
         </Row>
       ))}
     </Column>
+  );
+}
+
+/** `WorkoutHistoryListScreen`'s `HistoryListFooterSkeleton` precedent, applied here for the same "loading the next page" state. */
+function ExercisePickerFooterSkeleton() {
+  return (
+    <Row gap={3} align="center" style={{ padding: space[4] }}>
+      <Skeleton width={24} height={24} radius="sm" />
+      <Skeleton width={40} height={40} radius="md" />
+      <Column gap={2} style={{ flex: 1 }}>
+        <Skeleton width="70%" height={16} />
+      </Column>
+    </Row>
   );
 }

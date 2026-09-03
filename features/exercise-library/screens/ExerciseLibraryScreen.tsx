@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
@@ -28,15 +28,18 @@ export function ExerciseLibraryScreen() {
   const filters = useExerciseFilterStore((state) => state.filters);
   const activeFilterCount = countActiveFilterCategories(filters);
 
-  const { data, isPending, isError, refetch } = useExerciseSearch(searchText, filters);
+  const { data, isPending, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useExerciseSearch(searchText, filters);
   const toggleFavorite = useToggleExerciseFavorite();
+
+  const items = useMemo(() => data?.pages.flat() ?? [], [data]);
 
   const isUnfilteredEmptyCatalog =
     searchText.trim() === '' &&
     activeFilterCount === 0 &&
     !isPending &&
     !isError &&
-    data?.length === 0;
+    items.length === 0;
 
   // Search/filter results replace the list silently under a VoiceOver/TalkBack
   // user with no other cue - the visible "N exercises" line already updates,
@@ -54,9 +57,9 @@ export function ExerciseLibraryScreen() {
       return;
     }
     AccessibilityInfo.announceForAccessibility(
-      t('exerciseLibrary.resultCount', { count: data?.length ?? 0 }),
+      t('exerciseLibrary.resultCount', { count: items.length }),
     );
-  }, [data, isPending, isError]);
+  }, [items, isPending, isError]);
 
   function openFilterSheet() {
     useSheetStore.getState().present({
@@ -116,7 +119,7 @@ export function ExerciseLibraryScreen() {
             accessibilityLiveRegion="polite"
             testID="exercise-result-count"
           >
-            {t('exerciseLibrary.resultCount', { count: data?.length ?? 0 })}
+            {t('exerciseLibrary.resultCount', { count: items.length })}
           </Text>
         ) : null}
 
@@ -125,7 +128,7 @@ export function ExerciseLibraryScreen() {
             <ExerciseListSkeleton />
           ) : isError ? (
             <ErrorState error={t('exerciseLibrary.loadErrorMessage')} onRetry={() => refetch()} />
-          ) : !data || data.length === 0 ? (
+          ) : items.length === 0 ? (
             <EmptyState
               illustration={<Ionicons name="search-outline" size={48} color={color.textTertiary} />}
               title={
@@ -142,7 +145,7 @@ export function ExerciseLibraryScreen() {
             />
           ) : (
             <FlashList
-              data={data}
+              data={items}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
                 <ExerciseListItemRow
@@ -152,6 +155,13 @@ export function ExerciseLibraryScreen() {
                   testID={`exercise-row-${item.id}`}
                 />
               )}
+              onEndReached={() => {
+                if (hasNextPage && !isFetchingNextPage) {
+                  void fetchNextPage();
+                }
+              }}
+              onEndReachedThreshold={0.5}
+              ListFooterComponent={isFetchingNextPage ? <ExerciseListFooterSkeleton /> : null}
               contentContainerStyle={{ paddingBottom: space[20] }}
               testID="exercise-library-list"
             />
@@ -186,5 +196,18 @@ function ExerciseListSkeleton() {
         </Row>
       ))}
     </Column>
+  );
+}
+
+/** `WorkoutHistoryListScreen`'s `HistoryListFooterSkeleton` precedent, applied here for the same "loading the next page" state. */
+function ExerciseListFooterSkeleton() {
+  return (
+    <Row gap={3} align="center" style={{ padding: space[4] }}>
+      <Skeleton width={48} height={48} radius="md" />
+      <Column gap={2} style={{ flex: 1 }}>
+        <Skeleton width="70%" height={16} />
+        <Skeleton width="40%" height={12} />
+      </Column>
+    </Row>
   );
 }

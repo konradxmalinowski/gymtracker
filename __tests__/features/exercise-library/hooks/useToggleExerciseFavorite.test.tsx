@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 import { createTestDatabase } from '@/database/node/createTestDatabase';
@@ -87,10 +87,13 @@ describe('useToggleExerciseFavorite - optimistic update', () => {
     });
     activeQueryClient = queryClient;
 
-    queryClient.setQueryData(exerciseKeys.search({}), [
-      seedItem(succeeding.id, succeeding.nameEn),
-      seedItem(failing.id, failing.nameEn),
-    ]);
+    // `useExerciseSearch`'s cache holds `InfiniteData<ExerciseListItem[]>` (it's
+    // `useInfiniteQuery`-backed as of the post-P12 bugfix pass) - a single
+    // one-page shape mirrors what a real first fetch would leave behind.
+    queryClient.setQueryData(exerciseKeys.search({}), {
+      pages: [[seedItem(succeeding.id, succeeding.nameEn), seedItem(failing.id, failing.nameEn)]],
+      pageParams: [0],
+    });
 
     function Wrapper({ children }: { children: ReactNode }) {
       return (
@@ -108,8 +111,10 @@ describe('useToggleExerciseFavorite - optimistic update', () => {
     });
 
     await waitFor(() => {
-      const cached = queryClient.getQueryData<ExerciseListItem[]>(exerciseKeys.search({}));
-      expect(cached?.find((item) => item.id === succeeding.id)?.isFavorite).toBe(true);
+      const cached = queryClient.getQueryData<InfiniteData<ExerciseListItem[]>>(
+        exerciseKeys.search({}),
+      );
+      expect(cached?.pages.flat().find((item) => item.id === succeeding.id)?.isFavorite).toBe(true);
     });
 
     // The write is still pending at this point - the flip above happened
@@ -127,11 +132,12 @@ describe('useToggleExerciseFavorite - optimistic update', () => {
       );
     });
 
-    const cachedAfterFailure = queryClient.getQueryData<ExerciseListItem[]>(
+    const cachedAfterFailure = queryClient.getQueryData<InfiniteData<ExerciseListItem[]>>(
       exerciseKeys.search({}),
     );
-    expect(cachedAfterFailure?.find((item) => item.id === failing.id)?.isFavorite).toBe(false);
+    const flatAfterFailure = cachedAfterFailure?.pages.flat();
+    expect(flatAfterFailure?.find((item) => item.id === failing.id)?.isFavorite).toBe(false);
     // The earlier successful flip is untouched by the later rollback.
-    expect(cachedAfterFailure?.find((item) => item.id === succeeding.id)?.isFavorite).toBe(true);
+    expect(flatAfterFailure?.find((item) => item.id === succeeding.id)?.isFavorite).toBe(true);
   });
 });
