@@ -45,6 +45,9 @@ import { SqliteBodyMetricRepository } from '@/features/body-metrics/repository/S
 import type { BodyMetricRepository } from '@/features/body-metrics/repository/BodyMetricRepository';
 import { SqliteProgressPhotoRepository } from '@/features/body-metrics/repository/SqliteProgressPhotoRepository';
 import type { ProgressPhotoRepository } from '@/features/body-metrics/repository/ProgressPhotoRepository';
+import { DataTransferService } from '@/features/data-transfer/services/DataTransferService';
+import { SqliteDataTransferRepository } from '@/features/data-transfer/repository/SqliteDataTransferRepository';
+import type { DataTransferRepository } from '@/features/data-transfer/repository/DataTransferRepository';
 import type { DatabaseContext } from '@/repositories/contracts/database';
 import { SqliteSettingsRepository, type SettingsRepository } from '@/repositories/settings';
 import { SystemClock, type Clock } from '@/services/clock';
@@ -98,6 +101,10 @@ export interface AppContainer {
   progressPhotoRepository: ProgressPhotoRepository;
   /** ARCHITECTURE.md section 3.1 rule 3: the only door into `progressPhotoRepository` for hooks/screens. */
   progressPhotoService: ProgressPhotoService;
+  /** Feature repository, P14 (data-transfer) - reads across virtually every table (ARCHITECTURE.md section 9.1: "depends on everything, built last"). Not re-exported for presentation use - go through `dataTransferService`. */
+  dataTransferRepository: DataTransferRepository;
+  /** ARCHITECTURE.md section 3.1 rule 3: the only door into `dataTransferRepository` for hooks/screens. */
+  dataTransferService: DataTransferService;
 }
 
 export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer>): AppContainer {
@@ -146,6 +153,29 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
       idGenerator,
       logging,
     });
+  const dataTransferRepository =
+    deps?.dataTransferRepository ?? new SqliteDataTransferRepository({ db, clock, idGenerator });
+  const dataTransferService =
+    deps?.dataTransferService ??
+    new DataTransferService({
+      repository: dataTransferRepository,
+      recordService,
+      progressPhotoService,
+      settings,
+      // A dedicated cache-scoped `FileStorage`, mirroring `logging`'s own
+      // `createFileStorage('cache')` call above rather than adding a new
+      // `AppContainer` member for it - export/backup files are transient,
+      // handed to the share sheet, not meant to accumulate in the document
+      // directory across repeated exports. (Distinct from the container's
+      // own `files` member, which is `'document'`-scoped for avatars/photos -
+      // overriding this service's file storage for a test is done by passing
+      // `deps.dataTransferService` wholesale, the same override shape every
+      // other service in this function already uses.)
+      files: createFileStorage('cache'),
+      db,
+      clock,
+      idGenerator,
+    });
   const sessionRepository =
     deps?.sessionRepository ??
     new SqliteWorkoutSessionRepository({
@@ -182,6 +212,8 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
     bodyMetricService,
     progressPhotoRepository,
     progressPhotoService,
+    dataTransferRepository,
+    dataTransferService,
     sessionRepository,
     sessionService,
   };
