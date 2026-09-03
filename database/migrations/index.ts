@@ -1,12 +1,17 @@
 import type { DatabaseContext, SqlExecutor } from '@/repositories/contracts/database';
 import { migration001Initial } from './001_initial';
+import { migration002AddSleepAndHeightMetrics } from './002_add_sleep_and_height_metrics';
 import type { Migration } from './types';
 
 export type { Migration } from './types';
 export { migration001Initial, SCHEMA_V1_SQL } from './001_initial';
+export { migration002AddSleepAndHeightMetrics } from './002_add_sleep_and_height_metrics';
 
 /** Every migration the app currently ships, in the order they were authored. */
-export const MIGRATIONS: readonly Migration[] = [migration001Initial];
+export const MIGRATIONS: readonly Migration[] = [
+  migration001Initial,
+  migration002AddSleepAndHeightMetrics,
+];
 
 /** The highest schema version this build of the app knows how to run against. */
 export const LATEST_KNOWN_VERSION: number = MIGRATIONS.reduce(

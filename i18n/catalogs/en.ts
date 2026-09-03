@@ -847,6 +847,8 @@ export const en = {
       thighRight: 'Right thigh',
       calfLeft: 'Left calf',
       calfRight: 'Right calf',
+      sleepHours: 'Sleep',
+      height: 'Height',
     },
     list: {
       screenTitle: 'Body measurements',

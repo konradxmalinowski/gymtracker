@@ -28,7 +28,9 @@ const METRIC_LABEL_KEY: Record<
     | 'thighLeft'
     | 'thighRight'
     | 'calfLeft'
-    | 'calfRight'}`
+    | 'calfRight'
+    | 'sleepHours'
+    | 'height'}`
 > = {
   body_weight: 'bodyMetrics.metricLabel.bodyWeight',
   body_fat_pct: 'bodyMetrics.metricLabel.bodyFatPct',
@@ -45,16 +47,18 @@ const METRIC_LABEL_KEY: Record<
   thigh_right: 'bodyMetrics.metricLabel.thighRight',
   calf_left: 'bodyMetrics.metricLabel.calfLeft',
   calf_right: 'bodyMetrics.metricLabel.calfRight',
+  sleep_hours: 'bodyMetrics.metricLabel.sleepHours',
+  height: 'bodyMetrics.metricLabel.height',
 };
 
 export function metricLabel(metric: BodyMetricType): string {
   return t(METRIC_LABEL_KEY[metric]);
 }
 
-/** `Ionicons` name per metric - `scale`/`pie-chart` for the two non-circumference metrics, `resize` (a two-way arrow) for every circumference measurement. */
+/** `Ionicons` name per metric - `scale`/`pie-chart` for the two non-circumference/non-linear metrics, `moon` for sleep, `resize` (a two-way arrow) for every linear measurement (every circumference plus `height`, which is a linear measurement exactly like the others). */
 const METRIC_ICON: Record<
   BodyMetricType,
-  'scale-outline' | 'pie-chart-outline' | 'resize-outline'
+  'scale-outline' | 'pie-chart-outline' | 'moon-outline' | 'resize-outline'
 > = {
   body_weight: 'scale-outline',
   body_fat_pct: 'pie-chart-outline',
@@ -71,6 +75,8 @@ const METRIC_ICON: Record<
   thigh_right: 'resize-outline',
   calf_left: 'resize-outline',
   calf_right: 'resize-outline',
+  sleep_hours: 'moon-outline',
+  height: 'resize-outline',
 };
 
 export function metricIconName(metric: BodyMetricType) {

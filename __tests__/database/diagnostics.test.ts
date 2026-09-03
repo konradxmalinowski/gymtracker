@@ -18,7 +18,7 @@ describe('getDatabaseDiagnostics (ADR-0014 part 2 dev DB health screen data)', (
     expect(diagnostics.lastMigration).toBeNull();
   });
 
-  it('reports full diagnostics after migration 001 runs', async () => {
+  it('reports full diagnostics after every migration runs', async () => {
     const raw = createNodeDatabase(':memory:');
     raw.exec('PRAGMA foreign_keys = ON');
     const db = new NodeSqlExecutor(raw);
@@ -26,10 +26,13 @@ describe('getDatabaseDiagnostics (ADR-0014 part 2 dev DB health screen data)', (
 
     const diagnostics = await getDatabaseDiagnostics(db);
 
-    expect(diagnostics.schemaVersion).toBe(1);
+    // Was pinned to version 1 / 'initial_schema' before migration 002
+    // (add_sleep_and_height_metrics) shipped - runMigrations() against an empty
+    // database now applies both, landing at the latest known version.
+    expect(diagnostics.schemaVersion).toBe(2);
     expect(diagnostics.lastMigration).toMatchObject({
-      version: 1,
-      name: 'initial_schema',
+      version: 2,
+      name: 'add_sleep_and_height_metrics',
       appVersion: '1.0.0-test',
     });
     expect(diagnostics.integrityCheck).toBe('ok');
@@ -40,14 +43,14 @@ describe('getDatabaseDiagnostics (ADR-0014 part 2 dev DB health screen data)', (
     expect(diagnostics.fileSizeBytes).toBeGreaterThan(0);
 
     expect(diagnostics.tableRowCounts).toHaveLength(DIAGNOSTIC_TABLES.length);
-    // migration_history itself carries one row (the migration that just ran);
-    // every other table is still empty at this point.
+    // migration_history now carries two rows (001 and 002, both just ran); every
+    // other table is still empty at this point.
     const nonMigrationTables = diagnostics.tableRowCounts.filter(
       (r) => r.table !== 'migration_history',
     );
     expect(nonMigrationTables.every((r) => r.rowCount === 0)).toBe(true);
     expect(diagnostics.tableRowCounts.find((r) => r.table === 'migration_history')?.rowCount).toBe(
-      1,
+      2,
     );
   });
 

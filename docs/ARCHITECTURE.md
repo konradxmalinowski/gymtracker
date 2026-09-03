@@ -770,8 +770,9 @@ CREATE TABLE body_metric_entry (
     metric      TEXT NOT NULL CHECK (metric IN
                 ('body_weight','body_fat_pct','chest','waist','hips','neck','shoulders',
                  'arm_left','arm_right','forearm_left','forearm_right',
-                 'thigh_left','thigh_right','calf_left','calf_right')),
-    value       REAL NOT NULL,       -- kg for body_weight, percent for body_fat_pct, cm otherwise
+                 'thigh_left','thigh_right','calf_left','calf_right',
+                 'sleep_hours','height')),
+    value       REAL NOT NULL,       -- kg for body_weight, percent for body_fat_pct, hours for sleep_hours, cm otherwise
     measured_at INTEGER NOT NULL,
     local_date  TEXT NOT NULL,
     note        TEXT,
