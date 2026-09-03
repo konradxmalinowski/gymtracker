@@ -10,10 +10,10 @@ P0 (project foundation), P1 (design system and UI primitives), P2 (persistence
 foundation), P3 (onboarding, profile and core settings), P4 (exercise library), P5
 (workout plans), P6 (workout logging), P7 (rest timer), P8 (progressive overload and
 personal records), P9 (workout summary and history), P10 (home dashboard), P11
-(statistics and charts), P12 (training calendar), and P13 (body measurements and
-progress photos) are complete - `docs/ROADMAP.md`'s MVP line closed at P10, and
-P11-P13 are the first three phases past it (v1.1-v1.3, "Statistics, calendar, body
-metrics, data transfer"). P8
+(statistics and charts), P12 (training calendar), P13 (body measurements and progress
+photos), and P14 (data export and import) are complete - `docs/ROADMAP.md`'s MVP line
+closed at P10, and P11-P14 are the first four phases past it (v1.1-v1.4, "Statistics,
+calendar, body metrics, data transfer"). P8
 (`feat/p8-progressive-overload`) was cut from
 `main` before P7's PR merged - a documented decision made when P8 was kicked off so
 the two phases could be reviewed independently (see
@@ -23,14 +23,17 @@ overlapping files (`WorkoutSessionRepository.ts`/`SqliteWorkoutSessionRepository
 this file and `docs/architecture-snapshot.md`) needed a merge; that merge is reflected
 throughout this file as of this update, not left as an open branch note. The
 `onboarding`, `profile`, `exercise-library`, `plans`, `workout-logging`, `rest-timer`,
-`records`, `home`, `statistics`, `calendar`, and `body-metrics` features now have real
-implementations (screens, hooks, services, repository where applicable - `rest-timer`
-itself owns no database table and therefore no repository; `records` does, see below;
-`home`, `statistics`, and `calendar` each have a repository but no accompanying
-service, see below; `body-metrics` has two repositories, each with its own service,
-see below); the remaining feature (`data-transfer`) is still an empty skeleton
-directory (components/hooks/screens/services/domain/repository/types/index.ts
-subfolders, no implementation) awaiting its own phase.
+`records`, `home`, `statistics`, `calendar`, `body-metrics`, and `data-transfer`
+features now have real implementations (screens, hooks, services, repository where
+applicable - `rest-timer` itself owns no database table and therefore no repository;
+`records` does, see below; `home`, `statistics`, and `calendar` each have a repository
+but no accompanying service, see below; `body-metrics` has two repositories, each with
+its own service, see below; `data-transfer` has one repository and one service, see
+below). `data-transfer` was the last of the originally-empty P2-era skeleton
+directories (components/hooks/screens/services/domain/repository/types/index.ts
+subfolders, no implementation) - none remain as of this update. (`daily-goals` is
+still documentation-only, P17 - see below - but was never one of those originally-
+empty skeleton directories, so it is not counted here.)
 
 The app now boots for real: `app/_layout.tsx` opens the database, runs migrations,
 seeds the exercise catalog (`database/seed/runSeed()`, idempotent - a P2 gap fixed in
@@ -1720,6 +1723,245 @@ documents for its own test-writing question. The full Jest suite stayed the
 regression gate rather than the target of new coverage: typecheck, lint, and the full
 suite (145 suites, 1321 passed, 1 pre-existing skip, 1322 total - unchanged from the
 post-P12 bugfix pass's own count, since this phase added no new test files) are clean.
+
+**Data export and import (P14):** `features/data-transfer/` fills the last remaining
+P2-era empty skeleton directory - the same "empty skeleton to real implementation"
+framing P11-P13 already used - and is the twelfth real feature. It ships ADR-0013's
+full contract: a streamed JSON backup (export and merge/replace import), a CSV
+workout-log export and import with a preview-before-commit step, and the post-import
+rebuild sequence that keeps derived data trustworthy afterward.
+
+`features/data-transfer/repository/{DataTransferRepository,
+SqliteDataTransferRepository}.ts` is the app's twelfth feature-repository pair
+(`services/container.ts` gained `dataTransferRepository`/`dataTransferService`,
+additive) after P3-P13's profile/exercise-library/plans/workout-logging/records/
+exercise-history/home/statistics/calendar/body-metrics ones, and the first repository
+whose own doc comment states outright that it "depends on everything" -
+`docs/ARCHITECTURE.md` section 9.1 already named `data-transfer` as the one feature
+built last for exactly this reason. `DataTransferService` is Zod-validated at its
+envelope boundary (`features/data-transfer/domain/exportEnvelopeSchema.ts`) and is the
+only door into the repository, same rule as every other feature; it also reaches two
+other features' services directly - `PersonalRecordService.rebuild()` and
+`ProgressPhotoService.verifyIntegrity()` (see the rebuild-sequence paragraph below) -
+through their public barrels, never their repositories.
+
+**Streamed export, not one `JSON.stringify` over the whole aggregate** (ADR-0013's own
+stated hard NFR, re-verified this session by reading the actual write calls, not
+assumed from the ADR alone): `DataTransferService`'s private `writeBackupFile` writes
+the envelope's fixed header (`format`/`version`/`exportedAt`/`app`/`units`/`counts`,
+plus the opening of `"data":{`) as one `writeText`, then appends every other `data.*`
+entity as its own manually-bracketed JSON fragment via repeated `appendText` calls
+(`services/files`' existing `writeText`/`appendText`/`copyFrom` methods - added in
+P13 for the image-processing write path, not new this phase, just reused here for a
+different kind of large sequential write). Every table except `sessions` is small
+enough to be one `JSON.stringify` per entity (`DataTransferRepository`'s own "smaller
+tables get a single unbounded read" guidance); `data.sessions` - the one array that can
+reach real scale - streams through `countExportSessions`/`exportSessionsBatch(offset,
+limit)` in fixed-size pages, each page's sessions individually stringified and
+appended, so the largest single in-memory JSON string this method ever produces is one
+page's worth, never the full export. The whole write goes to a `.tmp-`-prefixed
+relative path first; only once every fragment lands does a `commitTempFile` step copy
+it to the real destination name and delete the temp file - the same ADR-0012
+write-then-commit ordering this codebase already uses for photo/avatar writes, applied
+here to a file instead of a database row, so a failure partway through leaves at worst
+an orphaned `.tmp-*` file, never a truncated file at the name a caller might read back
+as a real backup. `writeBackupFile` is also the one place a JSON backup is ever written
+at all - `exportBackup()` and `importJson`'s own automatic pre-replace backup (below)
+both call it, so the streaming logic exists exactly once rather than twice with the
+two copies free to drift. Export files are written through a dedicated cache-scoped
+`FileStorage` instance (`createFileStorage('cache')`, a new `services/container.ts`
+construction site, not a new `AppContainer` member) rather than the container's own
+document-scoped `files` member that avatars/photos already use - export/backup files
+are transient, handed straight to the native share sheet, not meant to accumulate in
+the document directory across repeated exports the way a photo does.
+
+**CSV export** streams the same way, batched through a new `v_working_set`-joined
+query (`countCsvSetRows`/`exportCsvSetRowsBatch(offset, limit)`) rather than one
+unbounded read, both `weight_kg` and `weight_lb` columns per ADR-0013 (canonical
+storage stays metric, ADR-0009; the pounds column is emitted for a spreadsheet reader
+in an imperial gym, not a formula they'd have to write themselves), RFC 4180 quoting
+with a UTF-8 BOM (`domain/csv.ts` - the BOM is what makes Excel render Polish exercise
+names correctly instead of as mojibake). A real, security-review-caught gap in the
+first draft: a free-text field (a session title or note) starting with `=`/`+`/`-`/`@`
+would execute as a formula when the exported CSV is opened in Excel/Sheets - fixed
+same-session in `csv.ts`'s `encodeCsvField` by prefixing such fields with a leading
+apostrophe before RFC 4180 quoting, the standard mitigation both applications treat as
+"force text." Export-side only; the CSV **importer**'s equivalent hardening is a
+documented, deliberate follow-up rather than a same-pass add, since it needs a real
+product decision (reject the row outright, silently strip the leading apostrophe, or
+warn and import as-is) this pass's own scope did not settle.
+
+**JSON import, merge mode**, is upsert-by-id via one `INSERT ... ON CONFLICT(id) DO
+UPDATE ... WHERE excluded.updated_at > <table>.updated_at` statement per row
+(`SqliteDataTransferRepository`'s private `upsertRow` helper, shared by every
+entity's own `upsertX` method) - ADR-0013's "on conflict, the row with the newer
+`updated_at` wins" enforced as a single SQL statement's `WHERE` clause rather than a
+read-compare-write branch in application code, the same "let SQLite's own conflict
+resolution do the comparison" discipline this codebase's other repositories already
+favor over hand-rolled optimistic-concurrency checks. This is what makes merge
+genuinely idempotent - re-importing the same file twice writes zero net changes, since
+every row's `excluded.updated_at` never exceeds its own already-stored value the
+second time - verified live on-device this session (see below), not just asserted from
+reading the query.
+
+**JSON import, replace mode**, is gated behind `TypedConfirmationGate`
+(`features/data-transfer/components/`) - a typed-phrase ("REPLACE") seatbelt ADR-0013
+explicitly asks for ("guarded by a typed confirmation"), stricter than this codebase's
+existing `ConfirmDialog`, which has no concept of a required text match at all and
+which every other destructive action in this app (`PlanListScreen`'s delete-plan flow,
+`WorkoutHistoryDetailScreen`'s delete-workout flow) already uses for a single-tap
+confirm. Built as its own small component per this phase's own brief rather than
+stretching `ConfirmDialog` to fit; it owns only the typed-text state and a
+case-sensitive equality check, firing `onConfirm` only on an explicit second tap of
+the now-enabled button rather than the instant the phrase matches, mirroring `SetRow`'s
+own "controlled input, no side effects until an explicit action" convention.
+`DataTransferService.importJson` throws `ReplaceImportNotConfirmedError` if `mode ===
+'replace'` and the caller's `confirmed` flag isn't `true`, so the seatbelt is enforced
+at the service boundary, not only in the UI. Replace mode's own automatic pre-replace
+backup (`writeBackupFile('pre-replace-backup')`) is awaited to full completion before
+`purgeAllUserData` ever runs - re-verified by this session's security review reading
+the actual call order, not assumed from the code's intent, since an unawaited backup
+racing the purge would defeat the entire safety net ADR-0013 built this mode around.
+
+**The post-import rebuild sequence runs in two halves, not one**, a real design
+decision the implementing session's own doc comments call out rather than leave
+implicit: `applyEnvelopeWrites`' in-transaction half re-derives each written session's
+totals (`recomputeSessionTotals`) and rebuilds the FTS index (`rebuildExerciseFts` -
+`database/seed/catalogSeeder.ts`'s function moved from module-private to exported this
+phase, needed since the post-import rebuild is the first caller from outside that
+module) as part of the same transaction the row writes joined; a second, post-commit
+half (`runPostImportRebuild`) then calls `personalRecordService.rebuild()` and
+`progressPhotoService.verifyIntegrity()` **after** that transaction has already
+committed, because neither service's public method accepts a `tx` parameter to join
+one with - both are cross-feature calls reached through their barrels
+(`@/features/records`, `@/features/body-metrics`), and neither barrel exposes the kind
+of transaction-composable method `WorkoutSessionRepository.completeSet` gets for its
+own in-transaction PR evaluation. The stated, accepted consequence: if the main import
+transaction commits but this second half then throws, the imported data is not rolled
+back - the caller sees the error, and the documented recovery is the same
+"Recalculate records" action Settings already offers for a stale PR cache. Reaching
+past either service's own public contract to call its repository directly instead
+(closing this gap by breaking the "no direct repository access, one door in" rule one
+layer up) was rejected as the wrong fix. `ProgressPhotoIntegrityReport.danglingRows`
+(a live row whose file is missing on disk - always expected after a JSON restore,
+since photo binaries are never included in a backup per ADR-0012/ADR-0013) is folded
+into the import result's `warnings` rather than silently discarded, with copy
+explaining exactly why the metadata came back but the picture did not.
+
+**CSV import** groups parsed rows into sessions by `(date, session_id)` when present,
+falling back to `(date, session_title)` when not (`domain/csvImportGrouping.ts`), and
+resolves each row's exercise by catalog slug, then id, then exact name, then
+diacritic-folded name, with an unresolved name becoming a new custom exercise rather
+than a dropped row - the same resolution order ADR-0013 specifies. `DataImportScreen`
+picks a file via the new `expo-document-picker` dependency and hands its full text
+content to `stores/dataTransferImportStore.ts` (a new, small Zustand store, `format`/
+`fileName`/`fileContent`) for `DataImportPreviewScreen` to read - the same "store, not
+route params, for a payload too large for a URL" precedent `stores/
+exercisePickerStore.ts` already established in P5, applied here to an even larger
+payload (ADR-0013's own worst-case ~30-40MB JSON backup, which Expo Router's
+URL-serialized route params were never going to carry). Both screens use
+`usePreviewImportJson`/`usePreviewImportCsv` before ever calling
+`useImportJson`/`useImportCsv`, so nothing is written to the database until the user
+has seen exactly what an import would create, update, or fail to resolve.
+
+Catalog exercises are never exported (`source = 'custom'` filter only, at the
+repository query level) and import never overwrites one - the same "don't duplicate
+or clobber the bundled catalog" rule every other phase touching exercises already
+follows.
+
+**"Share progress photos"** (`DataExportScreen`) is a third export action beyond the
+two ADR-0013 names, added per the roadmap's own P14 acceptance line. It shares each
+current, non-deleted photo's full-size image through its own sequential
+`Sharing.shareAsync` call, awaiting each share sheet's dismissal before opening the
+next - deliberately not a bulk/zip share, since no such primitive exists anywhere in
+`body-metrics` (`ProgressPhotoService`'s entire read surface is `listPhotos`/
+`verifyIntegrity`, confirmed by reading the interface in full rather than assumed),
+and building one is real, independent domain work this phase's scope did not cover.
+Built entirely from primitives that already existed (`progressPhotoService
+.listPhotos()`, `files.getUri()`, `expo-sharing`, already wired app-wide since P9) -
+no new export logic of its own.
+
+New Settings sub-screens: `app/profile/settings/{export,import,import-preview}.tsx`,
+reached via new "Export & backup"/"Import data" rows on `SettingsScreen` and
+registered in `app/profile/settings/_layout.tsx`, structurally mirroring the existing
+`units`/`timers`/`progression` screen/route shape (`routes.profileSettings.dataExport`/
+`dataImport`) - per ADR-0013's own "export/import screens in settings" placement,
+matching `docs/ROADMAP.md`'s P14 line verbatim. `dataImportPreview` is the one route
+beyond that three-screen precedent, since import - unlike every other settings screen -
+is a two-step flow (pick a file, then review what it would do before anything
+commits).
+
+New dependency: `expo-document-picker` (`~57.0.1`), installed via `npx expo install`
+and registered in `app.config.ts`'s `plugins` array alongside the project's other Expo
+plugins - confirmed, by reading `node_modules/expo-document-picker/plugin`, to be a
+no-op today (it only ever touches iOS entitlements, and only when
+`ios.usesIcloudStorage` is set, which this app's config does not set), added
+defensively so the module isn't literally absent from the plugins list, the same
+reasoning already given for `expo-sharing`'s own P9 registration. This native
+dependency was not present in the dev-client build the P13 session had used, so this
+session again needed a fresh local `npx expo run:android` build before on-device
+verification - the same class of requirement P13's own `expo-image-manipulator`
+addition already established, not a new pattern.
+
+A security review (`reports/security-2026-09-02-p14.md`, security-agent-sonnet,
+routine scope, explicitly triggered as a manual request given this feature's stakes -
+a full-database read on export, a full-database purge-and-replace on import) found
+zero critical/high findings, one MEDIUM (the CSV formula-injection gap described
+above, fixed same-session, export-side only), and one LOW (a narrow same-tick
+double-tap race on the replace-confirmation button - the same already-accepted
+severity class P8/P9's own `ConfirmDialog` findings established, non-destructive here
+specifically because the unconditional pre-replace backup makes a raced second call
+idempotent rather than actually destructive).
+
+On-device verification this session covered the full E2E flow live on the
+`gymtracker_test` Android emulator: a JSON backup export, with the exported file's
+actual contents inspected and confirmed to match ADR-0013's envelope shape exactly,
+including the correct exclusion of photo binaries; a CSV export; both delivered
+through the native share sheet (`expo-sharing`); a full merge-import round-trip
+(export, then re-import the same file) whose preview correctly reported "0 new, 0
+updated" across every category, with the database independently confirmed afterward
+to hold zero duplicates (one plan, one day, not two) - the live confirmation of the
+`ON CONFLICT ... WHERE excluded.updated_at >` idempotency claim above; and the
+replace-mode typed-confirmation gate's UI, confirmed disabled until the exact phrase
+is typed. Per explicit user instruction for this pass, no new tests were authored -
+the same deliberate scope decision `CLAUDE.md`'s P13 write-up above already documents
+for its own test-writing question, verification here resting on live E2E behavior
+plus the security review rather than new automated coverage. The full Jest suite
+stayed the regression gate: typecheck, lint, and the full suite (145 suites, 1321
+passed, 1 pre-existing skip, 1322 total - unchanged from P13's own count) are clean.
+
+**Two same-session bug fixes, unrelated to P14 itself, found during this pass's live
+QA sweep and landing in the same commit group:**
+
+`ActiveWorkoutBanner` had a route-visibility bug this session confirmed and fixed
+(committed separately as this session's `fix: show ActiveWorkoutBanner on all routes,
+not just tabs`) - closing the "not confirmed as a real bug... not investigated
+further" hedge the post-P12 bugfix pass's own "Known gaps" entry had left open for
+exactly this symptom. Root cause: the banner mounted inside `app/(tabs)/_layout.tsx`,
+so it disappeared on any root-level route outside the `(tabs)` group -
+`profile/history`, `profile/calendar`, `profile/records`, and every `body-metrics/*`
+screen all unmount that layout entirely, since they live outside the group it belongs
+to. Fixed by moving the mount point to the true app root (`app/_layout.tsx`) so it
+persists across every route; its own existing `pathname === '/workout/active'` check
+still correctly suppresses it while the user is actually inside the active workout
+screen, unchanged by the move.
+
+`ExerciseLibraryScreen`/`ExercisePickerScreen` silently capped every search -
+including the default unfiltered browse - at exactly 20 results out of the catalog's
+873 exercises, found live during this session's QA sweep (the "N exercises" header
+never changed no matter how far the list was scrolled). Root cause: `useExerciseSearch`
+called `exerciseService.search()` with no `limit`/`offset`, so `repositories/query`'s
+`buildLimitOffset` silently applied its own `DEFAULT_LIMIT = 20`. Fixed by converting
+`useExerciseSearch` to `useInfiniteQuery` (50-item pages, matching
+`useSessionHistoryList`'s existing `HISTORY_PAGE_SIZE` pagination precedent) with
+`onEndReached`-driven `fetchNextPage()`, verified live post-fix by scrolling all the
+way to exactly 873 ("Weighted Pull Ups", the catalog's last entry) with no further
+fetch firing after. Fixing this surfaced a second, real, previously-hidden bug in the
+same area: `useToggleExerciseFavorite`'s optimistic cache update assumed the search
+cache held a flat `ExerciseListItem[]`; once that cache became `InfiniteData`-shaped,
+the updater threw inside `onMutate`, which silently no-op'd the favorite-toggle
+mutation entirely - confirmed via a real failing test written before the fix, not
+assumed - fixed by mapping over `cached.pages` instead of the whole cache object.
 
 ## Product
 
