@@ -109,6 +109,10 @@ export const en = {
     progressionRowSubtitle: 'Estimated 1RM formula and suggested increments',
     estimatedCaloriesRowTitle: 'Estimated calories',
     estimatedCaloriesRowSubtitle: 'Show a rough calorie estimate on the workout summary',
+    dataExportRowTitle: 'Export & backup',
+    dataExportRowSubtitle: 'Create a backup, export your workout log, or share progress photos',
+    dataImportRowTitle: 'Import data',
+    dataImportRowSubtitle: 'Restore from a backup or import a workout log',
     aboutRowTitle: 'About',
   },
   progressionSettings: {
@@ -134,6 +138,87 @@ export const en = {
     previewLabel: 'Example',
     previewWeightSample: 'Bench press: {{value}}',
     previewLengthSample: 'Height: {{value}}',
+  },
+  dataTransfer: {
+    entities: {
+      profile: 'Profile',
+      settings: 'Settings',
+      customExercises: 'Custom exercises',
+      exerciseUserData: 'Exercise favorites & notes',
+      exerciseVideos: 'Exercise videos',
+      plans: 'Plans',
+      sessions: 'Workouts',
+      bodyMetrics: 'Body measurements',
+      progressPhotos: 'Progress photos',
+    },
+    export: {
+      title: 'Export & backup',
+      jsonTitle: 'Create backup (JSON)',
+      jsonDescription:
+        'A complete backup of everything in the app, restorable on this or any other device.',
+      jsonExclusionNote:
+        'Does not include your progress photo pictures - only their dates, poses and notes.',
+      jsonButtonLabel: 'Create backup (JSON)',
+      jsonShareDialogTitle: 'Share GymTracker backup',
+      jsonErrorMessage: 'Could not create a backup. Please try again.',
+      csvTitle: 'Export workout log (CSV)',
+      csvDescription:
+        'A spreadsheet of every set you have logged, for analysis or moving data to another tool.',
+      csvExclusionNote:
+        'Does not include plans, body measurements, progress photos, settings, per-exercise notes, favorites, superset grouping or drop-set parentage. It is a log, not a backup.',
+      csvButtonLabel: 'Export workout log (CSV)',
+      csvShareDialogTitle: 'Share GymTracker workout log',
+      csvErrorMessage: 'Could not export your workout log. Please try again.',
+      photosTitle: 'Share progress photos',
+      photosDescription:
+        'Share every current progress photo through the share sheet, one at a time.',
+      photosButtonLabel: 'Share progress photos',
+      photosShareDialogTitle: 'Share progress photo',
+      photosErrorMessage: 'Could not share your progress photos. Please try again.',
+      noPhotosMessage: 'You have no progress photos to share yet.',
+      shareUnavailableMessage: 'Sharing is not available on this device. The file was still saved.',
+    },
+    import: {
+      title: 'Import data',
+      previewTitle: 'Review import',
+      jsonTitle: 'Restore from backup (JSON)',
+      jsonDescription: 'Restore a GymTracker backup file, merging or replacing your current data.',
+      jsonButtonLabel: 'Choose backup file',
+      csvTitle: 'Import workout log (CSV)',
+      csvDescription: 'Import a GymTracker workout log CSV export as new or updated workouts.',
+      csvButtonLabel: 'Choose CSV file',
+      pickErrorMessage: 'Could not read that file. Please try again.',
+      noRequestMessage:
+        'No file was picked. Go back and choose a backup or workout log file to import.',
+      backToImportButtonLabel: 'Back to import',
+      previewErrorMessage:
+        'This file could not be read as a GymTracker export. Make sure you picked the right file.',
+      modeSectionTitle: 'Import mode',
+      modeMergeLabel: 'Merge',
+      modeReplaceLabel: 'Replace',
+      modeMergeDescription:
+        'Adds new data and updates anything changed. Nothing existing is deleted.',
+      modeReplaceDescription:
+        'Deletes everything currently in the app and replaces it with this file. A backup of your current data is created automatically first.',
+      replaceConfirmInstruction:
+        'Replacing your data cannot be undone from within the app. Type REPLACE below to confirm.',
+      replaceConfirmFieldLabel: 'Confirmation',
+      replaceConfirmHint: 'Type "{{phrase}}" exactly as shown to enable the button below.',
+      replaceConfirmButtonLabel: 'Replace all data',
+      replaceConfirmPhraseMatchedAnnouncement:
+        'Confirmation phrase matched. Replace all data button enabled.',
+      importButtonLabel: 'Import',
+      importErrorMessage: 'The import could not be completed. Nothing was changed.',
+      resultTitle: 'Import complete',
+      resultSummaryTemplate:
+        '{{sessions}} workouts, {{sets}} sets and {{plans}} plans were imported.',
+      resultAnnouncement: 'Import complete.',
+      backupCreatedMessage: 'A backup of your data from before this import was saved to:',
+      backupShareDialogTitle: 'Share pre-replace backup',
+      shareBackupButtonLabel: 'Share this backup',
+      warningsSectionTitle: 'Warnings',
+      entityCountsTemplate: '{{toCreate}} new, {{toUpdate}} updated, {{unchanged}} unchanged',
+    },
   },
   exerciseLibrary: {
     searchPlaceholder: 'Search exercises',

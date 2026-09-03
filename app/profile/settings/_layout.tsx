@@ -25,6 +25,12 @@ export default function ProfileSettingsLayout() {
       <Stack.Screen name="units" options={{ title: t('unitsSettings.title') }} />
       <Stack.Screen name="timers" options={{ title: t('restTimer.timerSettings.title') }} />
       <Stack.Screen name="progression" options={{ title: t('progressionSettings.title') }} />
+      <Stack.Screen name="export" options={{ title: t('dataTransfer.export.title') }} />
+      <Stack.Screen name="import" options={{ title: t('dataTransfer.import.title') }} />
+      <Stack.Screen
+        name="import-preview"
+        options={{ title: t('dataTransfer.import.previewTitle') }}
+      />
       <Stack.Screen name="about" options={{ title: t('about.title') }} />
     </Stack>
   );

@@ -26,6 +26,16 @@ jest.mock('../../global.css', () => ({}), { virtual: true });
 jest.mock('expo-router', () => ({
   Stack: () => null,
   Redirect: () => null,
+  // `ActiveWorkoutBanner` (now mounted inside `RootNavigationGate` as of the
+  // `381efef` fix moving it to `app/_layout.tsx`) calls `usePathname()` to
+  // check `pathname === '/workout/active'`, and reads `router` for its own
+  // `onPress` handler. Returning a path that is not `/workout/active`
+  // matches what this test actually simulates - the root gate rendering on
+  // a non-workout route - so the banner takes its normal (non-suppressed)
+  // render path here. None of this file's tests interact with the banner
+  // itself, so a minimal `router` stub is enough to satisfy the import.
+  usePathname: () => '/',
+  router: { push: jest.fn(), replace: jest.fn(), back: jest.fn() },
 }));
 
 const START = Date.UTC(2026, 7, 6, 18, 0, 0);

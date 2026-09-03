@@ -216,7 +216,7 @@ async function replaceCuratedVideos(
  * SQLite `rowid` (the table is not `WITHOUT ROWID`), which is how search results
  * join back to `exercise` rows.
  */
-async function rebuildExerciseFts(tx: SqlExecutor): Promise<void> {
+export async function rebuildExerciseFts(tx: SqlExecutor): Promise<void> {
   await tx.run("INSERT INTO exercise_fts(exercise_fts) VALUES('delete-all')");
   await tx.run(`
     INSERT INTO exercise_fts(rowid, name_en, name_pl, aliases, equipment_slug, muscles)

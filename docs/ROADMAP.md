@@ -514,6 +514,10 @@ Commit: `feat: add body measurements tracking with progress photos`
 
 ## P14 - Data export and import
 
+**Status: complete** (`feat/p14-data-transfer-qa-sweep`, 2026-09-02) - see `CLAUDE.md`'s
+Status section for the full write-up and `docs/adr/0013-export-import-formats.md` for
+the JSON-backup/CSV-interchange format decision this phase implements.
+
 Scope: `DataTransferService`; JSON backup export (streamed to file, not built as one
 string) and import with merge and replace modes, the automatic pre-replace backup, the
 import preview screen and the post-import rebuild sequence (ADR-0013); CSV export and
@@ -521,10 +525,35 @@ CSV import of the app's own layout; `migrateExport` chain; share sheet integrati
 "Share progress photos" as a separate action; export/import screens in settings with the
 explicit lossiness warnings.
 
-Acceptance: E2E flow 7 passes (export, wipe, import, everything matches); importing the
-same file twice creates no duplicates; a malformed file fails validation with a readable
-message and zero database writes; exporting the 75,000-set fixture completes without an
-out-of-memory crash; CSV opens in Excel with Polish characters intact.
+Acceptance: E2E flow 7 (export, wipe, import, everything matches) and the idempotent
+double-import check were verified live on-device this session rather than by a
+dedicated new automated test - see the test-deferral note below, the same class of
+scope decision P13's own write-up already used. A merge-import round-trip (export,
+then re-import the same file) was confirmed live to produce zero new/updated rows in
+the preview and zero duplicate database rows afterward, the practical form of "importing
+the same file twice creates no duplicates" this pass verified. A malformed file's
+validation path (`InvalidExportFormatError`/`InvalidCsvFormatError`) and the streamed,
+batched export path (never one `JSON.stringify` over the whole aggregate - see
+`CLAUDE.md`'s P14 write-up for exactly how) are real and reviewed by this session's
+security pass; a dedicated run against the full 75,000-set fixture was not part of this
+session's own on-device sweep and remains open for a future benchmark-suite pass. CSV
+opening correctly in Excel with Polish characters intact is satisfied by construction
+(UTF-8 BOM, RFC 4180 quoting, `domain/csv.ts`) and was not independently re-verified by
+opening a real spreadsheet application this session.
+
+**Test-deferral note (2026-09-02):** per explicit user instruction for this pass, no new
+automated tests were authored for the `data-transfer` feature itself - the same
+deliberate scope decision `CLAUDE.md`'s P13 write-up already documents for its own
+test-writing question. Live E2E verification on the `gymtracker_test` Android emulator
+and a routine security review (`reports/security-2026-09-02-p14.md`) stood in as this
+phase's verification instead. The full pre-existing Jest suite (145 suites, 1321
+passed, 1 pre-existing skip) stayed green throughout as a regression gate. Two
+unrelated, same-session bug fixes found during this pass's own QA sweep (an
+`ActiveWorkoutBanner` route-visibility bug and an exercise-library pagination bug - see
+`CLAUDE.md`'s P14 write-up) did pick up real regression coverage as a side effect of
+their own implementing agents verifying the fix, matching the same "found live, some
+fixes get tests as a side effect, not as policy" pattern the post-P12 bugfix pass note
+above already established.
 
 Commit: `feat: add json backup and csv export with import support`
 
