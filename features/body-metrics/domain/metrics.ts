@@ -24,16 +24,19 @@ export const BODY_METRIC_TYPES = [
   'thigh_right',
   'calf_left',
   'calf_right',
+  'sleep_hours',
+  'height',
 ] as const;
 
 export type BodyMetricType = (typeof BODY_METRIC_TYPES)[number];
 
-export type MetricUnit = 'kg' | 'percent' | 'cm';
+export type MetricUnit = 'kg' | 'percent' | 'cm' | 'hours';
 
 /**
- * `body_weight` -> `'kg'`, `body_fat_pct` -> `'percent'`, every other metric
- * (a circumference measurement) -> `'cm'` - matches `body_metric_entry.value`'s
- * own column comment in `database/schema.sql`.
+ * `body_weight` -> `'kg'`, `body_fat_pct` -> `'percent'`, `sleep_hours` ->
+ * `'hours'`, every other metric (a linear measurement - the existing
+ * circumference metrics plus `height`) -> `'cm'` - matches
+ * `body_metric_entry.value`'s own column comment in `database/schema.sql`.
  */
 export function metricUnit(metric: BodyMetricType): MetricUnit {
   if (metric === 'body_weight') {
@@ -41,6 +44,9 @@ export function metricUnit(metric: BodyMetricType): MetricUnit {
   }
   if (metric === 'body_fat_pct') {
     return 'percent';
+  }
+  if (metric === 'sleep_hours') {
+    return 'hours';
   }
   return 'cm';
 }

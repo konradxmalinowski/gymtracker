@@ -3,10 +3,13 @@
  * presentation layer ADR-0009's "unit conversion for display only happens in
  * the presentation layer" rule applies. `BodyMetricService` (see its own
  * `recordEntry`/`updateEntry` doc comments) always stores/returns a value in
- * the metric's own canonical unit (`metricUnit()` - kg, percent, or cm); the
- * user's `units.weight`/`units.length` preference only ever affects what's
- * typed into or rendered by the quick-entry sheet, the history list, and the
- * chart.
+ * the metric's own canonical unit (`metricUnit()` - kg, percent, cm, or
+ * hours); the user's `units.weight`/`units.length` preference only ever
+ * affects what's typed into or rendered by the quick-entry sheet, the
+ * history list, and the chart. `hours` (currently only `sleep_hours`) has no
+ * unit-preference conversion - there is no "hours in a different system" the
+ * way kg has lb or cm has inches - so it passes straight through unconverted,
+ * the same treatment `percent` already gets.
  *
  * Not placed under `domain/` (off-limits for this pass - the backend half
  * already shipped it) even though it's pure, dependency-free logic; it lives
@@ -36,10 +39,18 @@ export function displayUnitLabel(
   if (unit === 'cm') {
     return lengthUnit;
   }
+  if (unit === 'hours') {
+    return 'h';
+  }
   return '%';
 }
 
-/** Converts a canonical-unit value (as stored/returned by `BodyMetricService`) into the user's preferred display unit. */
+/**
+ * Converts a canonical-unit value (as stored/returned by `BodyMetricService`)
+ * into the user's preferred display unit. `hours` falls through the same
+ * `else` branch as `percent` - no conversion, passed through as-is - since
+ * neither has a second unit system to convert to/from.
+ */
 export function toDisplayValue(
   metric: BodyMetricType,
   canonicalValue: number,
@@ -56,7 +67,12 @@ export function toDisplayValue(
   return canonicalValue;
 }
 
-/** Converts a value typed in the user's preferred display unit back into the metric's canonical unit, ready for `BodyMetricService.recordEntry`/`updateEntry`. */
+/**
+ * Converts a value typed in the user's preferred display unit back into the
+ * metric's canonical unit, ready for `BodyMetricService.recordEntry`/
+ * `updateEntry`. `hours` falls through the same `else` branch as `percent` -
+ * no conversion - for the same reason `toDisplayValue` does.
+ */
 export function toCanonicalValue(
   metric: BodyMetricType,
   displayValue: number,
@@ -79,9 +95,11 @@ export function toCanonicalValue(
  * metrics - the same ADR-0009 rounding (nearest 0.25 kg/0.5 lb for weight,
  * always 1 decimal for length) every other weight/length display in this
  * app already uses, rather than a second, independently-rounded
- * `toFixed(1)` living only here. `body_fat_pct` has no `Weight`/`Length`
- * representation (it's already a percent, never converted) - formatted with
- * a plain 1-decimal `toFixed`, matching this app's other percent displays.
+ * `toFixed(1)` living only here. `body_fat_pct` and `sleep_hours` have no
+ * `Weight`/`Length` representation (they're already in their own canonical
+ * unit, never converted) - both formatted with a plain 1-decimal `toFixed`,
+ * matching this app's other percent displays (a value like "7.5" hours
+ * reads fine at one decimal place, the same as "18.5" for a percent).
  */
 export function formatDisplayValue(
   metric: BodyMetricType,

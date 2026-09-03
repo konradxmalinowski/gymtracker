@@ -1,15 +1,91 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { SCHEMA_V1_SQL } from '@/database/migrations/001_initial';
+import { runMigrations } from '@/database/migrations';
 import { createTestDatabase } from '@/database/node/createTestDatabase';
-import type { NodeSqlExecutor } from '@/database/node/NodeSqlExecutor';
+import { createNodeDatabase, NodeSqlExecutor } from '@/database/node/NodeSqlExecutor';
 
 const SCHEMA_SQL_PATH = join(__dirname, '..', '..', 'database', 'schema.sql');
 
 describe('database/schema.sql', () => {
-  it('is byte-for-byte identical to the DDL embedded in migration 001', () => {
+  // Pre-migration-002, this test compared schema.sql byte-for-byte against
+  // SCHEMA_V1_SQL (migration 001's embedded DDL) - true only because no migration had
+  // ever shipped past version 1. schema.sql is now the canonical *current* cumulative
+  // schema (it's what database/node/createTestDatabase.ts applies directly, and every
+  // repository test in the app builds its fixture from it), while SCHEMA_V1_SQL stays
+  // a deliberately frozen historical snapshot of what migration 001 alone produces -
+  // see that constant's own doc comment in 001_initial.ts. The real invariant worth
+  // guarding is that the two paths to "a fully migrated database" - applying
+  // schema.sql directly, versus running every migration (001, 002, ...) against an
+  // empty database - still accept and reject exactly the same body_metric_entry.metric
+  // values, so this test now runs the full migration chain and probes both databases'
+  // CHECK constraints with real inserts, rather than comparing raw DDL text (SQLite's
+  // own DROP+RENAME rebuild in migration 002 re-quotes the table name and re-formats
+  // whitespace, so the *text* of the two paths' sqlite_master.sql legitimately
+  // diverges even though their accepted-value sets are identical).
+  it('running every migration against an empty database accepts/rejects the same body_metric_entry.metric values as schema.sql', async () => {
+    const raw = createNodeDatabase(':memory:');
+    raw.exec('PRAGMA foreign_keys = ON');
+    const migrated = new NodeSqlExecutor(raw);
+    await runMigrations(migrated, '1.0.0-test');
+
+    const direct = createTestDatabase();
+
+    const acceptedMetrics = [
+      'body_weight',
+      'body_fat_pct',
+      'chest',
+      'waist',
+      'hips',
+      'neck',
+      'shoulders',
+      'arm_left',
+      'arm_right',
+      'forearm_left',
+      'forearm_right',
+      'thigh_left',
+      'thigh_right',
+      'calf_left',
+      'calf_right',
+      'sleep_hours',
+      'height',
+    ];
+
+    const insertSql = `INSERT INTO body_metric_entry
+      (id, metric, value, measured_at, local_date, created_at, updated_at)
+      VALUES (?, ?, 1, 0, '2026-01-01', 0, 0)`;
+
+    for (const db of [migrated, direct]) {
+      for (const metric of acceptedMetrics) {
+        await db.run(insertSql, [`${metric}-id`, metric]);
+      }
+      await expect(db.run(insertSql, ['bad-id', 'not_a_real_metric'])).rejects.toThrow();
+    }
+  });
+
+  it("schema.sql's body_metric_entry CHECK constraint covers all 17 current metric values", () => {
     const fileContents = readFileSync(SCHEMA_SQL_PATH, 'utf8');
-    expect(fileContents.trim()).toBe(SCHEMA_V1_SQL.trim());
+    const expectedMetrics = [
+      'body_weight',
+      'body_fat_pct',
+      'chest',
+      'waist',
+      'hips',
+      'neck',
+      'shoulders',
+      'arm_left',
+      'arm_right',
+      'forearm_left',
+      'forearm_right',
+      'thigh_left',
+      'thigh_right',
+      'calf_left',
+      'calf_right',
+      'sleep_hours',
+      'height',
+    ];
+    for (const metric of expectedMetrics) {
+      expect(fileContents).toContain(`'${metric}'`);
+    }
   });
 
   describe('applied to a fresh database', () => {
