@@ -126,6 +126,20 @@ export function SettingsScreen() {
             testID="settings-recalculate-records-row"
           />
           <ListRow
+            title={t('profileSettings.dataExportRowTitle')}
+            subtitle={t('profileSettings.dataExportRowSubtitle')}
+            onPress={() => router.push(routes.profileSettings.dataExport())}
+            showChevron
+            testID="settings-data-export-row"
+          />
+          <ListRow
+            title={t('profileSettings.dataImportRowTitle')}
+            subtitle={t('profileSettings.dataImportRowSubtitle')}
+            onPress={() => router.push(routes.profileSettings.dataImport())}
+            showChevron
+            testID="settings-data-import-row"
+          />
+          <ListRow
             title={t('profileSettings.aboutRowTitle')}
             onPress={() => router.push(routes.profileSettings.about())}
             showChevron

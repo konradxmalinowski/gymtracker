@@ -25,6 +25,15 @@ const config: ExpoConfig = {
     'expo-router',
     'expo-sqlite',
     'expo-sharing',
+    // P14: the data-transfer import screen's file picker. Registered
+    // defensively, the same reasoning `expo-sharing`'s own entry above
+    // documents in `CLAUDE.md`'s P9 write-up: `expo-document-picker`'s own
+    // config plugin (`node_modules/expo-document-picker/plugin`) only ever
+    // touches iOS entitlements, and only when `ios.usesIcloudStorage` is
+    // set - which this app's config does not - so this is currently a
+    // confirmed no-op, added so the module isn't literally absent from the
+    // plugins list rather than because it changes anything today.
+    'expo-document-picker',
     // Device-locale detection for the P1 i18n layer (@/i18n) - only the
     // English catalog ships in v1 (D-11), but reading the device locale now
     // means a future Polish catalog is a data-only addition, not a refactor.

@@ -34,6 +34,18 @@ export const routes = {
     timers: (): Href => '/profile/settings/timers',
     /** P8: `oneRm.formula`/`progression.upperIncrementKg`/`progression.lowerIncrementKg`. */
     progression: (): Href => '/profile/settings/progression',
+    /**
+     * P14: the data-transfer feature's three settings-nested routes
+     * (ADR-0013 / `docs/ROADMAP.md`'s own P14 line: "export/import screens
+     * in settings") - `dataExport`/`dataImport` mirror `units`/`timers`/
+     * `progression`'s flat naming exactly; `dataImportPreview` is the one
+     * addition beyond that three-screen precedent, since import (unlike
+     * every other settings screen) is a two-step flow (pick a file, then
+     * review what it would do before anything commits).
+     */
+    dataExport: (): Href => '/profile/settings/export',
+    dataImport: (): Href => '/profile/settings/import',
+    dataImportPreview: (): Href => '/profile/settings/import-preview',
   },
 
   /**
