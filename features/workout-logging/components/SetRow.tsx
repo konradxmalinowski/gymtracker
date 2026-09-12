@@ -8,6 +8,7 @@ import { SwipeableRow, type SwipeableRowAction } from '@/components/gestures/Swi
 import { PressScale } from '@/components/gestures/PressScale';
 import type {
   CompleteSetValues,
+  PreviousPerformanceSet,
   SetDisplayNumber,
   UpdateSetPatch,
   WorkoutSet,
@@ -25,6 +26,15 @@ export interface SetRowProps {
   isFocused: boolean;
   /** P8: this set's newly-earned PRs (`SessionExerciseCard`'s `latestPR` prop, matched by set id), `undefined` when this isn't the set that just earned one. */
   prRecords?: readonly PersonalRecord[] | undefined;
+  /**
+   * Gravitus-inspired refresh: the previous session's set at this same
+   * display-number ordinal (`SessionExerciseCard` matches by position among
+   * non-drop sets, since a drop segment has no clean equivalent to copy
+   * from) - `undefined` when there's nothing at that position to copy,
+   * which hides the swipe-right "copy previous" action entirely rather than
+   * offering a copy with nothing behind it.
+   */
+  previousSet?: PreviousPerformanceSet | undefined;
   onFocus: (setId: string) => void;
   /**
    * `values` is optional only for signature compatibility with older
@@ -46,11 +56,15 @@ export interface SetRowProps {
  * entry. Built on `SwipeableRow` exactly as the P6 brief specifies: swipe
  * left deletes (with undo, `useDeleteSet`'s job, not this component's -
  * `onDelete` is called and the toast is the caller's responsibility so every
- * `SetRow` in a card doesn't wire up its own independent toast), swipe right
- * toggles this row's own inline expanded editor - never a modal (ADR-0007
- * rule 4). `SwipeableRow` already exposes both actions through
- * `accessibilityActions`/`onAccessibilityAction` for a screen-reader or
- * switch-control user, so no separate non-gesture affordance is added here.
+ * `SetRow` in a card doesn't wire up its own independent toast). Swipe right
+ * used to toggle this row's own inline expanded editor; the Gravitus-inspired
+ * refresh repurposed it to copy the previous session's weight/reps into this
+ * set instead (`SwipeableRow` supports only one action per side), with the
+ * expand/collapse trigger relocated onto a tap of the set-number/focus
+ * control - never a modal either way (ADR-0007 rule 4). `SwipeableRow`
+ * already exposes both actions through `accessibilityActions`/
+ * `onAccessibilityAction` for a screen-reader or switch-control user, so no
+ * separate non-gesture affordance is added here.
  *
  * Completion is a single tap on the checkbox using whatever the row already
  * holds (NFR-01: "completable in two taps from a pre-filled row, no
@@ -59,12 +73,20 @@ export interface SetRowProps {
  * `QuickAdjustBar`" and is optional, not required). Weight/reps can also be
  * typed directly via the two `NumberField`s, each debounced through
  * `useDebouncedFieldCommit` rather than committing per keystroke.
+ *
+ * Gravitus-inspired refresh: swipe right used to toggle this row's inline
+ * expanded editor; it now copies the previous session's weight/reps into
+ * this set instead (`SwipeableRow` only supports one action per side, and
+ * this was the approved trade). The expand/collapse trigger moved onto a
+ * tap of the set-number/focus control below, so no functionality was lost,
+ * just relocated.
  */
 export function SetRow({
   set,
   displayNumber,
   isFocused,
   prRecords,
+  previousSet,
   onFocus,
   onComplete,
   onUncomplete,
@@ -118,18 +140,42 @@ export function SetRow({
     onComplete(set, values);
   }
 
+  // Only offers the copy when there is a real previous value behind it -
+  // both fields null (e.g. a duration/distance-only set last time) means
+  // nothing to copy, so the action is hidden rather than a no-op tap target.
+  const canCopyPrevious =
+    previousSet !== undefined && (previousSet.weightKg !== null || previousSet.reps !== null);
+
+  // Writes through the same debounced-commit path typing already uses
+  // (`setWeightDraft`/`setRepsDraft` update the draft and schedule the
+  // normal `onUpdate` commit) rather than a raw direct write - only the
+  // fields the previous set actually had a value for are touched.
+  function handleCopyPrevious() {
+    if (!previousSet) {
+      return;
+    }
+    if (previousSet.weightKg !== null) {
+      setWeightDraft(previousSet.weightKg);
+    }
+    if (previousSet.reps !== null) {
+      setRepsDraft(previousSet.reps);
+    }
+  }
+
   const leftAction: SwipeableRowAction = {
     icon: <Ionicons name="trash-outline" size={20} color={color.textInverse} />,
     label: t('workoutLogging.set.deleteAccessibilityLabel'),
     color: color.danger,
     onTrigger: () => onDelete(set),
   };
-  const rightAction: SwipeableRowAction = {
-    icon: <Ionicons name="create-outline" size={20} color={color.textInverse} />,
-    label: t('workoutLogging.set.editAccessibilityLabel'),
-    color: color.accent,
-    onTrigger: () => setExpanded((current) => !current),
-  };
+  const rightAction: SwipeableRowAction | undefined = canCopyPrevious
+    ? {
+        icon: <Ionicons name="copy-outline" size={20} color={color.textInverse} />,
+        label: t('workoutLogging.set.copyPreviousAccessibilityLabel'),
+        color: color.accent,
+        onTrigger: handleCopyPrevious,
+      }
+    : undefined;
 
   const completeLabel = set.isCompleted
     ? t('workoutLogging.set.uncompleteAccessibilityLabelTemplate', { number: displayNumber.label })
@@ -166,12 +212,16 @@ export function SetRow({
             }}
           >
             <PressScale
-              onPress={() => onFocus(set.id)}
+              onPress={() => {
+                onFocus(set.id);
+                setExpanded((current) => !current);
+              }}
               accessibilityRole="button"
               accessibilityLabel={t('workoutLogging.set.focusAccessibilityLabelTemplate', {
                 number: displayNumber.label,
                 type: setTypeLabel(set.setType),
               })}
+              accessibilityHint={t('workoutLogging.set.editAccessibilityHint')}
               style={{ minWidth: 56, alignItems: 'flex-start' }}
             >
               <Column gap={1}>

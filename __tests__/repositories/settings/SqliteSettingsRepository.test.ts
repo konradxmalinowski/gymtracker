@@ -29,6 +29,12 @@ describe('SETTINGS_SCHEMA', () => {
         'catalog.version',
         'diagnostics.crashReporting',
         'haptics.enabled',
+        'plateCalculator.barWeightKg',
+        'plateCalculator.ezBarWeightKg',
+        'plateCalculator.availablePlatesKg',
+        'reminders.enabled',
+        'reminders.days',
+        'reminders.time',
       ]),
     );
   });
@@ -106,6 +112,18 @@ function sampleFor(key: SettingsKey): unknown {
       return 2.5;
     case 'catalog.version':
       return '42';
+    case 'plateCalculator.barWeightKg':
+      return 15;
+    case 'plateCalculator.ezBarWeightKg':
+      return 7.5;
+    case 'plateCalculator.availablePlatesKg':
+      return [20, 10, 5];
+    case 'reminders.enabled':
+      return true;
+    case 'reminders.days':
+      return [1, 3, 5];
+    case 'reminders.time':
+      return '07:30';
   }
 }
 

@@ -140,6 +140,20 @@ export function SettingsScreen() {
             testID="settings-data-import-row"
           />
           <ListRow
+            title={t('profileSettings.platesRowTitle')}
+            subtitle={t('profileSettings.platesRowSubtitle')}
+            onPress={() => router.push(routes.profileSettings.plates())}
+            showChevron
+            testID="settings-plates-row"
+          />
+          <ListRow
+            title={t('profileSettings.remindersRowTitle')}
+            subtitle={t('profileSettings.remindersRowSubtitle')}
+            onPress={() => router.push(routes.profileSettings.reminders())}
+            showChevron
+            testID="settings-reminders-row"
+          />
+          <ListRow
             title={t('profileSettings.aboutRowTitle')}
             onPress={() => router.push(routes.profileSettings.about())}
             showChevron

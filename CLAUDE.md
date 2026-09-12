@@ -1997,6 +1997,129 @@ the updater threw inside `onMutate`, which silently no-op'd the favorite-toggle
 mutation entirely - confirmed via a real failing test written before the fix, not
 assumed - fixed by mapping over `cached.pages` instead of the whole cache object.
 
+**Gravitus-inspired UI refresh and training tools (2026-09-12):** a product-scoped
+pass, not a numbered roadmap phase, bringing a small set of UI/UX and functionality
+elements from a competing app (Gravitus) into GymTracker where they fit this app's
+offline, single-local-user, no-backend architecture. Scoped with the user up front:
+no subscriptions/Pro tier/paywall (this app has one feature tier, always did), no
+accounts/auth/cloud (stays fully offline), and the reference app's community feed,
+cross-user leaderboards/Strength Score, AI workout generator, real Apple Watch app,
+and Dynamic Island/Live Activity were all explicitly rejected as out of scope - each
+needs a backend, a real user network, or native Swift code this Expo-managed app has
+none of, and none of them got even a stub screen.
+
+Theme reskin: `theme/tokens.ts`'s `accent` family (`accent`/`accentPressed`/
+`accentSubtle`/`accentText`/`borderAccent`) moved from blue (`#4C8DFF`) to a vivid
+rose-magenta (`accent: #FF2D6B`) - the app's single interactive/brand accent, so this
+one token change reskins `Button` variant="primary" (Finish, every primary CTA) and
+`RestTimerBar`'s running-state ring everywhere they're used, per the reference app's
+"Finish button, rest timer, progress bars" accent. `accentText` (`#FFA1BC`) was
+contrast-checked against `background`/`surfaceElevated` the same way this file's own
+`textTertiary` comment already documents its check (~8.95:1 against `surfaceElevated`,
+the binding constraint - clears WCAG AA 4.5:1 with headroom). `success` (green,
+checkmarks) and `danger` (red, status) were deliberately left untouched - `danger` was
+sanity-checked against the new `accent` for hue/saturation separation (~357° vs ~342°)
+so the two reds stay visually distinguishable. A new semantic pair,
+`achievement`/`achievementSubtle` (`#FFD60A` gold), was added specifically for PR/1RM
+badges - deliberately separate from `warning` (`#F5A524`, unchanged), since "PR
+achieved" and "caution" are different meanings that happened to be visually similar
+before this pass. `RestTimerBar`'s expired/"REST UP" state no longer switches to
+`success` green on expiry - it stays on `accent` (now red/magenta) throughout,
+matching the reference app's "REST UP" being an accent-colored state, not a
+success-colored one. `components/ui/{Text,Button}.tsx` both needed `achievement` added
+as a recognized color/variant option in lockstep.
+
+Four new offline-only features, each scoped down from the reference app's fuller
+version to what this architecture actually supports:
+
+- **Plate calculator** (`features/workout-logging/domain/PlateCalculator.ts`, pure,
+  fast-check-tested): given a target weight, bar weight, and a sorted plate set, greedily
+  computes the per-side plate breakdown, achieved total, and rounding delta - stays in
+  kg internally per ADR-0009, no unit-conversion-boundary exemption needed. Three new
+  settings keys (`plateCalculator.barWeightKg` default 20, `.ezBarWeightKg` default 10,
+  `.availablePlatesKg` default `[25,20,15,10,5,2.5,1.25]` - the schema's first
+  array-shaped setting, needing no repository change since `app_setting.value` was
+  already JSON-encoded). Surfaced via a new compact toolbar row on
+  `SessionExerciseCard` (a "Plates" button) opening `PlateCalculatorSheetContent`
+  through `sheetStore.present()` - deliberately not an inline `<BottomSheet>`, per the
+  post-P12 bugfix pass's own documented fix for the exact bug class that caused (an
+  inline sheet rendering underneath `ActiveWorkoutBanner` when a workout is minimized).
+  Reference-app scope was trimmed to just the calculator itself - no "LOG | MAX |
+  PLATES | STRAIN | TREND | NOTES" full toolbar; STRAIN/MAX/TREND were never approved
+  for this pass. A new `app/profile/settings/plates.tsx` screen configures the bar/
+  plate weights, mirroring `TimerSettingsScreen`'s shape.
+- **Swipe-right to copy previous set**: `SetRow.tsx`'s `SwipeableRow` only supports one
+  action per side, and both were already spoken for (left = delete, right = edit/
+  expand) - a real product tradeoff, decided rather than defaulted: `rightAction` is now
+  "copy previous" (copies the previous session's weight/reps for that set into the
+  current draft, through the same debounced-commit path `handleComplete` already uses),
+  and the edit/expand trigger moved to a tap on the row's existing set-number/focus
+  control instead of a swipe, so no existing functionality was dropped. The copy action
+  hides itself when there's no previous value for that set to copy.
+- **Rep-max table (1-12 reps)** (`features/records/domain/RepMaxTable.ts`, pure,
+  fast-check-tested against `estimated1RM` for round-trip consistency): inverts the
+  existing Epley/Brzycki formulas (`features/records/domain/Estimated1RM.ts`) rather
+  than adding a third calculator, reusing that file's own `MAX_ELIGIBLE_REPS = 12`
+  guard. Rendered as `RepMaxTableCard` on `ExerciseProgressionScreen` only (`stats/
+exercise/[exerciseId]`, below the existing e1RM trend chart) - deliberately not added
+  to `ExerciseDetailScreen`, keeping PR/e1RM-table content in one place.
+- **Workout reminders** (local notifications only - this app has no backend to send a
+  push notification from, and never will): `services/notifications/
+WorkoutReminderService.ts` is the first real occupant of the `services/notifications/`
+  folder this file's own "Folder structure" section had listed as reserved-but-unbuilt
+  since P0 (the rest timer's own notification service lives inside
+  `features/rest-timer/services/` instead, a feature-scoped concern; this one is
+  cross-cutting, like `hooks/useAppState.ts` was the first real occupant of the
+  root `hooks/` folder in P7). Uses `expo-notifications`' per-weekday calendar trigger
+  (one scheduled notification per selected day, not a hand-rolled recurrence), the same
+  lazy-permission-on-first-schedule / own-Android-channel / never-throws contract
+  `RestTimerNotificationService` already established. Its cancellation path only ever
+  cancels its own `workout-reminder-day-*`-prefixed notifications via
+  `getAllScheduledNotificationsAsync` - never `cancelAllScheduledNotificationsAsync`,
+  which would also cancel a live rest-timer notification; confirmed by this pass's own
+  security review, not just by the implementer's doc comment. Three new settings keys
+  (`reminders.enabled`, `reminders.days`, `reminders.time`); a new
+  `app/profile/settings/reminders.tsx` screen (enable toggle, day-of-week multi-select,
+  HH:mm time entry). No time-picker primitive exists anywhere in `components/ui` and
+  `@react-native-community/datetimepicker` isn't a dependency - rather than add a new
+  native dependency for this one field, the HH:mm input is built from two existing
+  `StepperField`s (hour/minute), per this pass's "no new dependency unless truly
+  unavoidable" brief.
+
+Two cross-feature judgment calls, both resolved the same way: `oneRm.formula` (read by
+`RepMaxTableCard`) and `plateCalculator.*` (read by `PlateCalculatorSheetContent`) are
+both read directly off the shared `settings` container member rather than through
+`profile`'s settings hooks, since neither is barrel-exported from `profile` and reaching
+into it from `records`/`workout-logging` would violate `eslint.config.js`'s
+`crossFeatureBarrelZones` - the same precedent `body-metrics`' `useDisplayUnits.ts`
+already established in P13 for exactly this reason.
+
+A security review (`reports/security-2026-09-12-gravitus-refresh.md`,
+security-agent-sonnet, routine scope) found zero critical/high/medium findings, two low,
+one informational; nothing blocked commit. One low (`reminders.days` accepting
+duplicate/over-length weekday arrays, unreachable via the actual UI but not schema-
+enforced) was fixed same-session by adding `.max(7)` plus a uniqueness `refine()` to
+that Zod schema - the other low (two untracked personal scratch files sitting in the
+repo root, unrelated to this diff) was left for the user to gitignore or remove, not
+this session's to touch. `WorkoutReminderService`'s cancellation scoping and
+`PlateCalculator`'s handling of degenerate inputs (empty plate set, non-finite/negative
+bar weight) were both independently confirmed safe by reading the implementation, not
+assumed from its doc comments.
+
+Verification: `npx tsc --noEmit` clean; `npx eslint .` clean (0 errors, the same 32
+pre-existing `no-require-imports` test-file warnings every prior phase has carried);
+`npx prettier --check .` clean; full Jest suite: 147 suites, 1351 passed, 1
+pre-existing skip, 1352 total (up from P14's 145 suites/1321 passed baseline by 2 new
+suites and 29 new tests - `PlateCalculator.test.ts`, `RepMaxTable.test.ts`, plus
+extended `SetRow.test.tsx`/`ExerciseProgressionScreen.test.tsx`/
+`SqliteSettingsRepository.test.ts` coverage); `npx expo export --platform ios` bundled
+successfully, the same build-verification proxy every phase since P4 has used - no
+simulator/emulator available in this session. No new npm dependency. One process note
+worth recording: Expo Router's typed-routes file (`.expo/types/router.d.ts`) is
+gitignored and only regenerates via `expo start`, not `expo export` - a fresh route file
+(this pass added two, `plates` and `reminders`) needs a brief `expo start` run before
+`tsc` will see it, which isn't wired into any script in this repo.
+
 ## Product
 
 Offline-only React Native/Expo workout logging app. No backend, no accounts, no
@@ -2231,33 +2354,43 @@ benchmark remains `test.skip`'d with a comment naming its future phase (JSON exp
 
 ## Known gaps (tracked, non-blocking)
 
-- **`dragHandle="handle"` mode's grip is nested inside each row's own
+- **~~`dragHandle="handle"` mode's grip is nested inside each row's own
   already-`accessible` container (`PlanCard`/`PlanDayCard`/
   `PlanDayExerciseRow`, all three P5 `DraggableList` consumers), which may
-  make the handle - and, by the same mechanism, each row's own nested icon
-  buttons (rename/duplicate/delete/set-active/ungroup/remove) - unreachable
-  as independent VoiceOver/TalkBack stops. Every one of these three row
-  components sets `accessibilityRole="button"`/`"checkbox"` plus an
-  `accessibilityLabel` directly on its own outer `PressScale`, independent
-  of anything `DraggableList` clones onto it - so the row was already a
-  single accessible unit by construction, before the move-up/move-down fix
-  below ever touches it. `DraggableList.tsx`'s move-up/move-down actions
-  are attached to the handle node itself in `"handle"` mode (not to the
-  row) specifically to avoid _compounding_ this with a second collapse
-  point, but that placement does not resolve the pre-existing one: RN
-  Testing Library's tree inspection reads component props directly and
-  cannot simulate the native accessibility engine's subtree-collapsing
-  behavior, so this cannot be confirmed or ruled out without a real device
-  (VoiceOver/TalkBack or the platform accessibility inspectors) - the same
-  category of unverifiable-via-RNTL claim `SwipeableRow.tsx`'s own A11Y-004
-  finding already established for this codebase. If real, the fix is
-  structural (stop wrapping the entire row - including its trailing icon
-  buttons and the drag handle - in one `accessible` `PressScale`; split the
-  row so only the "navigate to detail" tap target carries the row-level
-  role/label, leaving the handle and each icon button as independent,
-  un-collapsed accessible elements), not a prop tweak - do not attempt that
-  restructuring without on-device verification first, to avoid trading a
-  confirmed-safe layout for an unverified one. Source: accessibility audit
+  make the handle - and each row's own trailing icon buttons - unreachable
+  as independent VoiceOver/TalkBack stops.~~ Verified false on Android,
+  P15's own accessibility pass (2026-09-04)**: this was flagged since P5 as
+  unverifiable without a real device (RN Testing Library's prop-tree
+  inspection reads component props directly and cannot simulate the native
+  accessibility engine's subtree-collapsing behavior), and P15 had a real
+  Android emulator (`gymtracker_test`, API 34) with a dev-client build to
+  check it on. Per the same "no need to literally turn TalkBack on" logic
+  P13/P14's own on-device passes established, `adb shell uiautomator dump`
+  was read directly instead: it walks the same `AccessibilityNodeInfo` tree
+  TalkBack itself consumes, so a node's `focusable`/`clickable` attributes in
+  its output are the real accessibility-focus flags, not raw `View`
+  properties. Dumped against all three real screens this entry names -
+  `PlanListScreen`'s `PlanCard` row, `PlanDetailScreen`'s `PlanDayCard` row,
+  and `PlanDayEditorScreen`'s `PlanDayExerciseRow` row, every one in
+  `dragHandle="handle"` mode (the only mode this codebase actually uses) -
+  the outer row (`Button`, `clickable="true" focusable="true"`, spanning the
+  full row's bounds) did **not** hide or merge its descendants in any of the
+  three: the drag-handle `SeekBar` ("Drag to reorder") and every trailing
+  icon button (e.g. `PlanCard`'s "Set X as active plan"/"Rename X"/
+  "Duplicate X"/"Delete X") each still surfaced as their own distinct
+  `clickable="true" focusable="true"` node with its own `content-desc`,
+  nested inside but independently reachable - not swallowed by the outer
+  row's own accessible/clickable node the way this entry's untested,
+  iOS-shaped mental model assumed. RN's `accessible={true}` on Android
+  (`PressScale`'s `accessibilityRole="button"` + label here) does not
+  collapse nested focusable descendants into one opaque node the way iOS's
+  UIAccessibility model does - the `SetRow`/`SwipeableRow` entry below
+  confirms the identical mechanism holds there too. No code change made:
+  the structural fix this entry used to prescribe (splitting the row so only
+  the navigate target carries the row-level role/label) would have been a
+  real, unforced UI-restructuring risk against a concern that does not
+  reproduce. iOS remains unverified - this pass, like the post-P12 bugfix
+  pass before it, is Android-only. Original source: accessibility audit
   finding A11Y-P5-002, `reports/accessibility-2026-08-06-p5.md`.
 
 - **`components/gestures/DraggableList.tsx` had no non-gesture reorder
@@ -2278,36 +2411,48 @@ PlanDayExerciseRow}.test.tsx`), not just a synthetic `<Text>` stand-in -
   the exact regression class the first pass's own unit tests missed.
   Original source: accessibility audit finding A11Y-005,
   `reports/accessibility-2026-08-05-p1.md`; follow-up finding A11Y-P5-001,
-  `reports/accessibility-2026-08-06-p5.md`. See the gap entry above this one
-  for a related, still-open, device-unverified concern this fix did not
-  (and structurally could not, without a device) resolve.
+  `reports/accessibility-2026-08-06-p5.md`. The gap entry above this one
+  tracked a related, structurally-unverifiable-without-a-device concern this
+  fix did not resolve at the time - P15's on-device pass has since confirmed
+  that concern doesn't reproduce on Android either; see that entry.
 
-- **`features/workout-logging/components/SetRow.tsx`'s checkbox/weight-field/
-  reps-field/focus-button group is the same `SwipeableRow`-collapse shape the
-  gap entry above this one describes for `DraggableList`'s row consumers, on
-  the same `SwipeableRow` primitive `SwipeableRow.tsx`'s own A11Y-004 finding
-  already flagged.** `SetRow`'s outer `View` (the `Row` holding the set-number
+- **~~`features/workout-logging/components/SetRow.tsx`'s checkbox/
+  weight-field/reps-field/focus-button group is the same `SwipeableRow`-
+  collapse shape the gap entry above describes for `DraggableList`'s row
+  consumers~~ - verified false on Android, P15's own accessibility pass
+  (2026-09-04)**: `SetRow`'s outer `View` (the `Row` holding the set-number
   `PressScale`, the two `NumberField`s, and the completion `Checkbox`) is the
   single child `SwipeableRow` clones its `accessible={true}` plus
-  `leftAction`/`rightAction` `accessibilityActions` onto - confirmed via a
-  real RNTL mount (accessibility report A11Y-P8-001,
-  `reports/accessibility-2026-08-11-p8.md`) that every one of those controls
-  is a descendant of that one already-`accessible` node, not a sibling of it.
-  P8's fix for this same finding moved `PRBadge` (a non-interactive,
-  `onPress`-free element with no reason to sit inside the swipeable region at
-  all) out to render as a sibling below the `SwipeableRow`, mirroring how
-  P7's `RestTimerBar` fix pulled its two adjust buttons out from under an
-  equivalent collapse - but that fix deliberately did not touch `SetRow`'s
-  actual interactive controls. Restructuring those - which control, if any,
-  becomes the swipe-attachable primary target, and how the row keeps its "two
-  taps, no keyboard" completion flow (NFR-01) working with several
-  independently-operable controls instead of one - is a real design decision,
-  not a prop tweak, and (per the entry above this one) RN Testing Library's
-  prop-tree inspection cannot confirm or rule out how the native accessibility
-  engine actually collapses this subtree on a real device. Do not attempt that
-  restructuring without on-device VoiceOver/TalkBack verification first, for
-  the same "don't trade a confirmed-safe layout for an unverified one" reason
-  already given above. Source: accessibility audit finding A11Y-P8-001,
+  `leftAction`/`rightAction` `accessibilityActions` onto - RNTL mount
+  evidence (accessibility report A11Y-P8-001,
+  `reports/accessibility-2026-08-11-p8.md`) could only confirm those controls
+  are descendants of that one cloned-`accessible` node, not whether that
+  actually collapses them into one TalkBack stop on a real device (the same
+  RNTL-can't-simulate-native-collapsing limit the `DraggableList` gap entry
+  above already names). P15 had a real Android emulator with a live workout
+  session to check it against: `adb shell uiautomator dump` (which walks the
+  same `AccessibilityNodeInfo` tree TalkBack consumes, so its `focusable`/
+  `clickable` output is the real accessibility-focus state, not a raw `View`
+  property) against `ActiveWorkoutScreen`'s `SetRow` showed the
+  `SwipeableRow`-cloned wrapper as its own `focusable="true"` `ViewGroup`
+  (bounds `[63,780][1017,948]` in the captured dump) - but every control
+  inside it still surfaced as its own distinct `clickable="true"
+focusable="true"` node, each with its own label: the set-number/focus
+  `Button` ("Set 1, Normal"), the weight `EditText`, the reps `EditText`, and
+  the completion `CheckBox` ("Mark set 1 complete"). None were swallowed.
+  This confirms the same finding as the `DraggableList` entry above, on the
+  same underlying mechanism: RN's `accessible={true}` on Android does not
+  hide/merge nested focusable descendants into one opaque node, unlike iOS's
+  UIAccessibility model, which is what this entry's fix had been reasoning
+  from. No restructuring was attempted or is needed - re-architecting
+  `SetRow`'s swipe-target/control split against a concern that doesn't
+  reproduce would have been a pure, unforced risk to NFR-01's "two taps, no
+  keyboard" completion flow for zero accessibility benefit. P8's original
+  `PRBadge`-as-sibling fix (moving a non-interactive element out from under
+  the clone, mirroring P7's `RestTimerBar` fix) remains correct and
+  untouched regardless - it addressed a real placement question independent
+  of this now-closed collapse concern. iOS remains unverified. Original
+  source: accessibility audit finding A11Y-P8-001,
   `reports/accessibility-2026-08-11-p8.md`.
 
 - **`ActiveWorkoutScreen`'s `FlashList` `extraData={{ focusedSetId, latestPR }}`

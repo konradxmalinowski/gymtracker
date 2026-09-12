@@ -1,4 +1,4 @@
-import { Column } from '@/components/layout';
+import { Column, Row } from '@/components/layout';
 import { Card, Divider } from '@/components/ui';
 import {
   assignSetDisplayNumbers,
@@ -10,12 +10,17 @@ import {
 } from '@/features/workout-logging';
 import { ProgressionHint, type PersonalRecord } from '@/features/records';
 import { useContainer } from '@/services/container';
+import { useSheetStore } from '@/stores/sheetStore';
 import { space } from '@/theme/tokens';
 
 import { AddSetButton } from './AddSetButton';
 import { ExerciseHeader } from './ExerciseHeader';
+import { PlateCalculatorButton } from './PlateCalculatorButton';
+import { PlateCalculatorSheetContent } from './PlateCalculatorSheetContent';
 import { PreviousPerformancePanel } from './PreviousPerformancePanel';
 import { SetRow } from './SetRow';
+
+const PLATE_CALCULATOR_SHEET_ID = 'plate-calculator';
 
 export interface SessionExerciseCardProps {
   exercise: SessionExercise;
@@ -92,6 +97,15 @@ export function SessionExerciseCard({
   // is none, so `ProgressionHint` hides the affordance instead of rendering
   // an inert tap target (this phase's own brief: "disable or hide ... rather
   // than doing nothing silently on tap").
+  // Gravitus-inspired refresh's "swipe right to copy previous" (`SetRow`):
+  // matched by ordinal position among the previous session's non-drop sets,
+  // the same "parents numbered 1..n" convention `assignSetDisplayNumbers`
+  // already uses for this session - a drop segment has no clean equivalent
+  // to copy from, so it's excluded on both sides of the match.
+  const previousParentSets = (previousPerformance?.sets ?? []).filter(
+    (previousSetEntry) => previousSetEntry.setType !== 'drop',
+  );
+
   const nextIncompleteSet = exercise.sets.find((candidate) => !candidate.isCompleted) ?? null;
   const handleApplySuggestion =
     nextIncompleteSet && suggestion && suggestion.kind !== 'first_time'
@@ -101,6 +115,19 @@ export function SessionExerciseCard({
             reps: suggestion.reps,
           })
       : undefined;
+
+  // Gravitus-inspired refresh's plate calculator: seeded from the
+  // currently-focused set's weight (`null` when nothing is focused yet, or
+  // the focused set carries no weight - the sheet's own target field just
+  // starts empty in that case rather than guessing).
+  const focusedSet = exercise.sets.find((candidate) => candidate.id === focusedSetId) ?? null;
+  function handleOpenPlateCalculator() {
+    useSheetStore.getState().present({
+      id: PLATE_CALCULATOR_SHEET_ID,
+      content: <PlateCalculatorSheetContent initialTargetWeightKg={focusedSet?.weightKg ?? null} />,
+      snapPoints: [0.6],
+    });
+  }
 
   return (
     <Card variant="elevated" padding={4} testID={testID}>
@@ -115,6 +142,13 @@ export function SessionExerciseCard({
           onUpdateNote={onUpdateNote}
           testID={testID ? `${testID}-header` : undefined}
         />
+
+        <Row>
+          <PlateCalculatorButton
+            onPress={handleOpenPlateCalculator}
+            testID={testID ? `${testID}-plate-calculator-button` : undefined}
+          />
+        </Row>
 
         <PreviousPerformancePanel
           previousPerformance={previousPerformance}
@@ -137,6 +171,9 @@ export function SessionExerciseCard({
               }
               const prRecords: readonly PersonalRecord[] | undefined =
                 latestPR?.setId === workoutSet.id ? latestPR.records : undefined;
+              const previousSet = displayNumber.isDropSegment
+                ? undefined
+                : previousParentSets[displayNumber.displayNumber - 1];
               return (
                 <Column key={workoutSet.id}>
                   {index > 0 ? <Divider /> : null}
@@ -145,6 +182,7 @@ export function SessionExerciseCard({
                     displayNumber={displayNumber}
                     isFocused={focusedSetId === workoutSet.id}
                     prRecords={prRecords}
+                    previousSet={previousSet}
                     onFocus={onFocusSet}
                     onComplete={onCompleteSet}
                     onUncomplete={onUncompleteSet}

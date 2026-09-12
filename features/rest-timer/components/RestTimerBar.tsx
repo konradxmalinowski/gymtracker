@@ -110,7 +110,11 @@ export function RestTimerBar({
   }
 
   const progress = totalSeconds > 0 ? 1 - remainingSeconds / totalSeconds : 0;
-  const ringColor = isExpired ? color.success : color.accent;
+  // Gravitus-inspired refresh: the post-expiry "REST UP" (counting-up) state
+  // used to read `success` green; `accent` is now itself an intense
+  // red/magenta, so both states share the same ring color deliberately -
+  // there is no longer a distinct "done" color to switch to here.
+  const ringColor = color.accent;
 
   const skipAction: SwipeableRowAction = {
     icon: <Ionicons name="play-skip-forward-outline" size={20} color={color.textInverse} />,
@@ -182,7 +186,7 @@ export function RestTimerBar({
               </Text>
               <Text
                 variant="numeric"
-                color={isExpired ? 'success' : 'primary'}
+                color={isExpired ? 'accent' : 'primary'}
                 testID={testID ? `${testID}-countdown` : undefined}
               >
                 {formatRestSeconds(remainingSeconds)}

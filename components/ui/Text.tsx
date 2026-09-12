@@ -18,7 +18,14 @@ export type TextVariant =
   | 'label';
 
 export type TextColor =
-  'primary' | 'secondary' | 'tertiary' | 'accent' | 'success' | 'danger' | 'inverse';
+  | 'primary'
+  | 'secondary'
+  | 'tertiary'
+  | 'accent'
+  | 'success'
+  | 'danger'
+  | 'achievement'
+  | 'inverse';
 
 const COLOR_MAP: Record<TextColor, string> = {
   primary: colorTokens.textPrimary,
@@ -27,6 +34,7 @@ const COLOR_MAP: Record<TextColor, string> = {
   accent: colorTokens.accentText,
   success: colorTokens.success,
   danger: colorTokens.danger,
+  achievement: colorTokens.achievement,
   inverse: colorTokens.textInverse,
 };
 
