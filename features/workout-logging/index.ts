@@ -96,6 +96,12 @@ export {
   type SetType,
   type SetTypeSemantics,
 } from './domain/setSemantics';
+export {
+  calculatePlateBreakdown,
+  type PlateBreakdownEntry,
+  type PlateCalculatorInput,
+  type PlateCalculatorResult,
+} from './domain/PlateCalculator';
 
 /**
  * `useStartWorkout` is a presentation-layer hook, not a service or domain

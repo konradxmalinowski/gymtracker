@@ -46,6 +46,8 @@ export {
   type CandidateSetInput,
 } from './domain/evaluateCandidateRecords';
 
+export { computeRepMaxTable, type RepMaxEntry } from './domain/RepMaxTable';
+
 export {
   RECORD_TYPES,
   WEIGHT_AT_REPS_BUCKETS,

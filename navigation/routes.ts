@@ -46,6 +46,13 @@ export const routes = {
     dataExport: (): Href => '/profile/settings/export',
     dataImport: (): Href => '/profile/settings/import',
     dataImportPreview: (): Href => '/profile/settings/import-preview',
+    /**
+     * Gravitus-inspired refresh: the plate calculator's configurable inputs
+     * and the local workout-reminder schedule - both mirror `timers`/
+     * `progression`'s flat naming exactly.
+     */
+    plates: (): Href => '/profile/settings/plates',
+    reminders: (): Href => '/profile/settings/reminders',
   },
 
   /**

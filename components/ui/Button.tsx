@@ -15,6 +15,7 @@ const TEXT_COLOR_HEX: Record<TextColor, string> = {
   accent: color.accentText,
   success: color.success,
   danger: color.danger,
+  achievement: color.achievement,
   inverse: color.textInverse,
 };
 

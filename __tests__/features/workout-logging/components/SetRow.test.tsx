@@ -1,7 +1,7 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
 
 import { assignSetDisplayNumbers } from '@/features/workout-logging';
-import type { WorkoutSet } from '@/features/workout-logging';
+import type { PreviousPerformanceSet, WorkoutSet } from '@/features/workout-logging';
 import { SetRow } from '@/features/workout-logging/components/SetRow';
 import type { PersonalRecord } from '@/features/records';
 
@@ -161,16 +161,106 @@ describe('SetRow', () => {
     expect(onFocus).toHaveBeenCalledWith(workoutSet.id);
   });
 
-  it('exposes delete and edit as accessibility actions (non-gesture path for the swipe affordances)', async () => {
+  it('exposes delete as a left accessibility action, and no right action when there is nothing to copy', async () => {
     const { toJSON } = await renderRow();
     const node = findByProp(toJSON() as JsonNode, 'accessibilityActions');
     const actions = node?.props?.accessibilityActions as { name: string; label: string }[];
-    expect(actions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: 'leftAction', label: 'Delete set' }),
-        expect.objectContaining({ name: 'rightAction', label: 'Edit set' }),
-      ]),
-    );
+    expect(actions).toEqual([expect.objectContaining({ name: 'leftAction', label: 'Delete set' })]);
+  });
+
+  it('tapping the leading number/badge area toggles the inline expanded editor (moved off the swipe gesture)', async () => {
+    const { findByText, queryByText } = await renderRow();
+    expect(queryByText('RPE')).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(await findByText('1'));
+    });
+    expect(await findByText('RPE')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(await findByText('1'));
+    });
+    expect(queryByText('RPE')).toBeNull();
+  });
+
+  describe('Gravitus-inspired refresh: swipe right copies the previous set', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    function makePreviousSet(
+      overrides: Partial<PreviousPerformanceSet> = {},
+    ): PreviousPerformanceSet {
+      return {
+        id: 'prev-set-1',
+        setType: 'normal',
+        weightKg: 55,
+        reps: 6,
+        durationSeconds: null,
+        distanceM: null,
+        rpe: null,
+        performedAt: 500,
+        ...overrides,
+      };
+    }
+
+    it('exposes "Copy previous set" as a right accessibility action when a previous value exists', async () => {
+      const { toJSON } = await renderRow({ previousSet: makePreviousSet() });
+      const node = findByProp(toJSON() as JsonNode, 'accessibilityActions');
+      const actions = node?.props?.accessibilityActions as { name: string; label: string }[];
+      expect(actions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'rightAction', label: 'Copy previous set' }),
+        ]),
+      );
+    });
+
+    it('does not expose a right accessibility action when there is no previousSet', async () => {
+      const { toJSON } = await renderRow();
+      const node = findByProp(toJSON() as JsonNode, 'accessibilityActions');
+      const actions = (node?.props?.accessibilityActions ?? []) as { name: string }[];
+      expect(actions.some((action) => action.name === 'rightAction')).toBe(false);
+    });
+
+    it('does not expose a right accessibility action when the previous set has neither weight nor reps', async () => {
+      const { toJSON } = await renderRow({
+        previousSet: makePreviousSet({ weightKg: null, reps: null }),
+      });
+      const node = findByProp(toJSON() as JsonNode, 'accessibilityActions');
+      const actions = (node?.props?.accessibilityActions ?? []) as { name: string }[];
+      expect(actions.some((action) => action.name === 'rightAction')).toBe(false);
+    });
+
+    it('triggering the "copy previous" accessibility action fills the draft and commits it via onUpdate', async () => {
+      const { findByTestId, toJSON, onUpdate } = await renderRow({
+        previousSet: makePreviousSet({ weightKg: 55, reps: 6 }),
+      });
+
+      const node = findByProp(toJSON() as JsonNode, 'accessibilityActions');
+      const onAccessibilityAction = node?.props?.onAccessibilityAction as
+        ((event: { nativeEvent: { actionName: string } }) => void) | undefined;
+      await act(async () => {
+        onAccessibilityAction?.({ nativeEvent: { actionName: 'rightAction' } });
+      });
+
+      const weightField = await findByTestId('set-row-weight');
+      const repsField = await findByTestId('set-row-reps');
+      // `NumberField` formats its underlying `TextInput`'s value to the
+      // field's own precision (weight: 2, reps: 0) - "55.00"/"6", not the
+      // raw numbers passed in.
+      expect(weightField.props.value).toBe('55.00');
+      expect(repsField.props.value).toBe('6');
+
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+      });
+      expect(onUpdate).toHaveBeenCalledWith('set-1', { weightKg: 55 });
+      expect(onUpdate).toHaveBeenCalledWith('set-1', { reps: 6 });
+    });
   });
 
   it('drop segments render indented, badged as "Drop" instead of a set-type pill, and get no "add drop set" action', async () => {

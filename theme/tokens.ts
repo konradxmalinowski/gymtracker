@@ -24,11 +24,17 @@
  * behind the same names rather than editing every component.
  *
  * Accent discipline (ARCHITECTURE.md section 11.2) is an explicit rule, not
- * a suggestion: blue (`accent`) is interactive, green (`success`) is
- * achievement. A completed set turns green because it is an accomplishment;
- * a primary button is blue because it is an action. Mixing them makes both
- * meaningless - do not reach for `success` to mean "primary" or `accent` to
- * mean "done".
+ * a suggestion: red/magenta (`accent`) is interactive, green (`success`) is
+ * completion, gold (`achievement`) is celebration. A completed set turns
+ * green because it is an accomplishment; a primary button is
+ * red/magenta because it is an action; a PR/1RM badge turns gold because it
+ * is a celebratory highlight, distinct from both. Mixing these makes all
+ * three meaningless - do not reach for `success` to mean "primary", `accent`
+ * to mean "done", or `achievement` to mean "caution" (that's `warning`).
+ *
+ * `accent` was reskinned from the original blue (`#4C8DFF` family) to a
+ * vivid rose/magenta red (Gravitus-inspired refresh, 2026-09) - see the
+ * comment on the `accent` block below for the exact values and reasoning.
  */
 
 export const color = {
@@ -43,7 +49,7 @@ export const color = {
   // Borders - the main hierarchy tool in a dark UI where shadows barely read
   border: '#26262C',
   borderStrong: '#35353E',
-  borderAccent: 'rgba(76,141,255,0.40)',
+  borderAccent: 'rgba(255,45,107,0.40)',
 
   // Text
   textPrimary: '#F4F4F5',
@@ -63,18 +69,47 @@ export const color = {
   textDisabled: '#4A4A53',
   textInverse: '#09090B',
 
-  // Accent - interactive and brand. Blue. Used sparingly.
-  accent: '#4C8DFF',
-  accentPressed: '#3B78E0',
-  accentSubtle: 'rgba(76,141,255,0.14)',
-  accentText: '#8FB6FF',
+  // Accent - interactive and brand. Vivid rose/magenta red. Used sparingly.
+  // Reskinned from the original blue family (#4C8DFF/#3B78E0/#8FB6FF) as
+  // part of the Gravitus-inspired refresh (2026-09) - same hue (~342°,
+  // magenta-leaning red) carried through every derived shade below, only
+  // the base hue changed, so the pressed/subtle/border relationships mirror
+  // exactly how the old blue family related to each other.
+  accent: '#FF2D6B',
+  // Same hue/saturation as `accent`, value (brightness) reduced ~12% -
+  // the same "darker, same hue" relationship the old accentPressed had to
+  // accent, computed via HSV rather than eyeballed.
+  accentPressed: '#E0285E',
+  accentSubtle: 'rgba(255,45,107,0.14)',
+  // A lighter tint of `accent` (blended toward white, same hue) sized for
+  // text-scale use, mirroring the old accentText's role. Contrast-checked
+  // the same way `textTertiary` above was after A11Y-001: relative
+  // luminance ~0.504, giving (0.504+0.05)/(0.011881+0.05) ~= 8.95:1 against
+  // `surfaceElevated` (the lightest surface, so the binding constraint) and
+  // ~10.5:1 against `background` - both comfortably clear WCAG AA's 4.5:1
+  // for regular text, with headroom similar to the old #8FB6FF's own ~9:1.
+  accentText: '#FFA1BC',
 
   // Semantic
   success: '#3DDC84', // set completed, PR achieved - NEVER used as brand accent
   successSubtle: 'rgba(61,220,132,0.14)',
   warning: '#F5A524',
+  // Deliberately distinct from the new magenta-leaning `accent` (~342° hue,
+  // more saturated) despite both now sitting in the red family: `danger`
+  // stays a truer, less-saturated red (~357° hue, S 0.65 vs accent's 0.82)
+  // so the two remain visually distinguishable side by side. Checked, not
+  // just assumed - unchanged from its original value.
   danger: '#F2545B',
   dangerSubtle: 'rgba(242,84,91,0.14)',
+
+  // Celebratory gold - PR/1RM badges only. Deliberately separate from
+  // `warning` (same rough color family, opposite meaning): `warning` means
+  // "pay attention, something needs care," `achievement` means "you just
+  // hit a personal record," and conflating the two would make a PR badge
+  // read as a caution. Luminance ~0.694 clears WCAG AA even at text scale
+  // (~14:1 against `background`, ~12:1 against `surfaceElevated`).
+  achievement: '#FFD60A',
+  achievementSubtle: 'rgba(255,214,10,0.14)',
 
   // Set-type badges
   setWarmup: '#F5A524',

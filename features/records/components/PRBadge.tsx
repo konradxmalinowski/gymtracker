@@ -62,13 +62,13 @@ export function PRBadge({ records, testID }: PRBadgeProps) {
         height: 24,
         paddingHorizontal: space[2],
         borderRadius: radius.full,
-        backgroundColor: color.accentSubtle,
+        backgroundColor: color.achievementSubtle,
         alignSelf: 'flex-start',
       }}
       testID={testID}
     >
-      <Ionicons name="trophy" size={14} color={color.accentText} />
-      <Text variant="caption" color="accent" numberOfLines={1}>
+      <Ionicons name="trophy" size={14} color={color.achievement} />
+      <Text variant="caption" color="achievement" numberOfLines={1}>
         {t('records.badge.label', { count: records.length })}
       </Text>
     </View>

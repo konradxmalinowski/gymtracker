@@ -25,6 +25,8 @@ export default function ProfileSettingsLayout() {
       <Stack.Screen name="units" options={{ title: t('unitsSettings.title') }} />
       <Stack.Screen name="timers" options={{ title: t('restTimer.timerSettings.title') }} />
       <Stack.Screen name="progression" options={{ title: t('progressionSettings.title') }} />
+      <Stack.Screen name="plates" options={{ title: t('plateCalculatorSettings.title') }} />
+      <Stack.Screen name="reminders" options={{ title: t('remindersSettings.title') }} />
       <Stack.Screen name="export" options={{ title: t('dataTransfer.export.title') }} />
       <Stack.Screen name="import" options={{ title: t('dataTransfer.import.title') }} />
       <Stack.Screen

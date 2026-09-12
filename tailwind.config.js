@@ -66,6 +66,8 @@ module.exports = {
         warning: color.warning,
         danger: color.danger,
         'danger-subtle': color.dangerSubtle,
+        achievement: color.achievement,
+        'achievement-subtle': color.achievementSubtle,
 
         'set-warmup': color.setWarmup,
         'set-normal': color.setNormal,

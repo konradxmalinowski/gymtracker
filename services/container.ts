@@ -55,6 +55,7 @@ import { createFileStorage, type FileStorage } from '@/services/files';
 import { Uuid7IdGenerator, type IdGenerator } from '@/services/id';
 import { createImageProcessor, type ImageProcessor } from '@/services/images';
 import { createLogger, type Logger } from '@/services/logging';
+import { workoutReminderService, type WorkoutReminderService } from '@/services/notifications';
 
 export interface AppContainer {
   db: DatabaseContext;
@@ -105,6 +106,8 @@ export interface AppContainer {
   dataTransferRepository: DataTransferRepository;
   /** ARCHITECTURE.md section 3.1 rule 3: the only door into `dataTransferRepository` for hooks/screens. */
   dataTransferService: DataTransferService;
+  /** Gravitus-inspired refresh: local weekly workout reminders (`services/notifications/WorkoutReminderService.ts`) - a bare service with no repository, since nothing here is DB-backed beyond the `reminders.*` settings keys `RemindersSettingsScreen` already reads/writes directly through `settings`. The default is the shared singleton (no per-call `expo-notifications` state to isolate), overridable via `deps` the same way every other container member is for tests. */
+  workoutReminderService: WorkoutReminderService;
 }
 
 export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer>): AppContainer {
@@ -176,6 +179,7 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
       clock,
       idGenerator,
     });
+  const workoutReminderServiceInstance = deps?.workoutReminderService ?? workoutReminderService;
   const sessionRepository =
     deps?.sessionRepository ??
     new SqliteWorkoutSessionRepository({
@@ -216,6 +220,7 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
     dataTransferService,
     sessionRepository,
     sessionService,
+    workoutReminderService: workoutReminderServiceInstance,
   };
 }
 

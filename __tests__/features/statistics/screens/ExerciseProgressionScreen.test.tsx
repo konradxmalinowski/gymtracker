@@ -80,6 +80,8 @@ async function renderScreen(statisticsRepository: StatisticsRepository, exercise
   (useContainer as jest.Mock).mockReturnValue({
     statisticsRepository,
     exerciseService: { getById: jest.fn().mockResolvedValue(exercise) },
+    recordService: { listCurrent: jest.fn().mockResolvedValue([]) },
+    settings: { get: jest.fn().mockResolvedValue('epley') },
     clock: new FixedClock(Date.UTC(2026, 7, 18, 12, 0, 0)),
   });
 
@@ -165,5 +167,84 @@ describe('ExerciseProgressionScreen', () => {
       expect.any(String),
       'e1rm',
     );
+  });
+
+  describe('Gravitus-inspired refresh: rep-max table', () => {
+    it('renders the empty state when the exercise has no estimated_1rm record yet', async () => {
+      const statisticsRepository = buildFakeStatisticsRepository();
+      (useContainer as jest.Mock).mockReturnValue({
+        statisticsRepository,
+        exerciseService: { getById: jest.fn().mockResolvedValue(buildFakeExercise()) },
+        recordService: { listCurrent: jest.fn().mockResolvedValue([]) },
+        settings: { get: jest.fn().mockResolvedValue('epley') },
+        clock: new FixedClock(Date.UTC(2026, 7, 18, 12, 0, 0)),
+      });
+
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false, gcTime: 0 },
+          mutations: { retry: false, gcTime: 0 },
+        },
+      });
+      activeQueryClient = queryClient;
+      (useLocalSearchParams as jest.Mock).mockReturnValue({ exerciseId: EXERCISE_ID });
+
+      const { findByTestId } = await render(
+        <QueryClientProvider client={queryClient}>
+          <ExerciseProgressionScreen />
+        </QueryClientProvider>,
+      );
+
+      expect(await findByTestId('rep-max-table-card-empty')).toBeTruthy();
+    });
+
+    it('renders a 12-row rep-max table derived from the current estimated_1rm record', async () => {
+      const statisticsRepository = buildFakeStatisticsRepository();
+      (useLocalSearchParams as jest.Mock).mockReturnValue({ exerciseId: EXERCISE_ID });
+      (useContainer as jest.Mock).mockReturnValue({
+        statisticsRepository,
+        exerciseService: { getById: jest.fn().mockResolvedValue(buildFakeExercise()) },
+        recordService: {
+          listCurrent: jest.fn().mockResolvedValue([
+            {
+              id: 'pr-1',
+              exerciseId: EXERCISE_ID,
+              recordType: 'estimated_1rm',
+              repBucket: null,
+              value: 100,
+              weightKg: 100,
+              reps: 5,
+              workoutSetId: 'set-1',
+              sessionId: 'session-1',
+              achievedAt: 1000,
+              previousValue: null,
+              isCurrent: true,
+              createdAt: 1000,
+              updatedAt: 1000,
+            },
+          ]),
+        },
+        settings: { get: jest.fn().mockResolvedValue('epley') },
+        clock: new FixedClock(Date.UTC(2026, 7, 18, 12, 0, 0)),
+      });
+
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false, gcTime: 0 },
+          mutations: { retry: false, gcTime: 0 },
+        },
+      });
+      activeQueryClient = queryClient;
+
+      const { findByTestId, findByText } = await render(
+        <QueryClientProvider client={queryClient}>
+          <ExerciseProgressionScreen />
+        </QueryClientProvider>,
+      );
+
+      expect(await findByTestId('rep-max-table-card')).toBeTruthy();
+      // 1-rep max === the estimated 1RM itself.
+      expect(await findByText('100 kg')).toBeTruthy();
+    });
   });
 });
