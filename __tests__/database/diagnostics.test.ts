@@ -26,13 +26,13 @@ describe('getDatabaseDiagnostics (ADR-0014 part 2 dev DB health screen data)', (
 
     const diagnostics = await getDatabaseDiagnostics(db);
 
-    // Was pinned to version 1 / 'initial_schema' before migration 002
-    // (add_sleep_and_height_metrics) shipped - runMigrations() against an empty
-    // database now applies both, landing at the latest known version.
-    expect(diagnostics.schemaVersion).toBe(2);
+    // Was pinned to version 2 / 'add_sleep_and_height_metrics' before migration 003
+    // (daily_goals) shipped - runMigrations() against an empty database now applies
+    // all three, landing at the latest known version.
+    expect(diagnostics.schemaVersion).toBe(3);
     expect(diagnostics.lastMigration).toMatchObject({
-      version: 2,
-      name: 'add_sleep_and_height_metrics',
+      version: 3,
+      name: 'daily_goals',
       appVersion: '1.0.0-test',
     });
     expect(diagnostics.integrityCheck).toBe('ok');
@@ -43,14 +43,14 @@ describe('getDatabaseDiagnostics (ADR-0014 part 2 dev DB health screen data)', (
     expect(diagnostics.fileSizeBytes).toBeGreaterThan(0);
 
     expect(diagnostics.tableRowCounts).toHaveLength(DIAGNOSTIC_TABLES.length);
-    // migration_history now carries two rows (001 and 002, both just ran); every
-    // other table is still empty at this point.
+    // migration_history now carries three rows (001, 002, and 003, all just ran);
+    // every other table is still empty at this point.
     const nonMigrationTables = diagnostics.tableRowCounts.filter(
       (r) => r.table !== 'migration_history',
     );
     expect(nonMigrationTables.every((r) => r.rowCount === 0)).toBe(true);
     expect(diagnostics.tableRowCounts.find((r) => r.table === 'migration_history')?.rowCount).toBe(
-      2,
+      3,
     );
   });
 

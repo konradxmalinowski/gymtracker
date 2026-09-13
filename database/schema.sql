@@ -334,6 +334,71 @@ CREATE TABLE progress_photo (
 );
 
 -- ============================================================================
+-- 7.12 Daily goals and reminders
+-- ============================================================================
+-- Added by migration 003 (P17). Numbered 7.12 rather than 7.9 to match
+-- ARCHITECTURE.md's own numbering note for this section: 7.10 (Views) and 7.11
+-- (Storage volume estimate) are cross-referenced by number from several ADRs, so
+-- this section was appended after them instead of renumbering everything to slot
+-- in at its more natural position right after 7.8.
+
+CREATE TABLE daily_goal (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    icon            TEXT,                      -- Ionicons name; curated picker list, deferred to P17 Step 0
+    goal_type       TEXT NOT NULL CHECK (goal_type IN ('boolean','counter','numeric')),
+    target_value    REAL CHECK (target_value IS NULL OR target_value > 0),
+    unit            TEXT,                       -- free-text label ('kroki','ml','min'); NOT the kg/cm
+                                                  -- canonical-unit rule (ADR-0009) - that rule scopes
+                                                  -- physical body/plate measurements only, this is an
+                                                  -- arbitrary user-defined countable
+    active_weekdays INTEGER NOT NULL CHECK (active_weekdays BETWEEN 1 AND 127),  -- bitmask, bit0=Monday..bit6=Sunday
+    is_enabled      INTEGER NOT NULL DEFAULT 1 CHECK (is_enabled IN (0,1)),
+    sort_order      INTEGER NOT NULL DEFAULT 0,
+    created_at      INTEGER NOT NULL,
+    updated_at      INTEGER NOT NULL,
+    deleted_at      INTEGER,
+    CHECK (goal_type = 'boolean' OR target_value IS NOT NULL)
+);
+
+CREATE TABLE daily_goal_entry (
+    id             TEXT PRIMARY KEY,
+    goal_id        TEXT NOT NULL REFERENCES daily_goal(id) ON DELETE CASCADE,
+    local_date     TEXT NOT NULL,
+    progress_value REAL NOT NULL DEFAULT 0,
+    created_at     INTEGER NOT NULL,
+    updated_at     INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX ux_daily_goal_entry_goal_date ON daily_goal_entry (goal_id, local_date);
+
+CREATE TABLE daily_reminder (
+    id               TEXT PRIMARY KEY,
+    goal_id          TEXT REFERENCES daily_goal(id) ON DELETE SET NULL,   -- NULL = standalone, not tied to any goal
+    name             TEXT NOT NULL,
+    icon             TEXT,
+    is_enabled       INTEGER NOT NULL DEFAULT 1 CHECK (is_enabled IN (0,1)),
+    reminder_type    TEXT NOT NULL CHECK (reminder_type IN ('scheduled','interval')),
+    time_of_day      TEXT CHECK (time_of_day IS NULL OR time_of_day GLOB '[0-2][0-9]:[0-5][0-9]'),
+    interval_minutes INTEGER CHECK (interval_minutes IS NULL OR interval_minutes >= 15),
+    active_weekdays  INTEGER NOT NULL CHECK (active_weekdays BETWEEN 1 AND 127),
+    created_at       INTEGER NOT NULL,
+    updated_at       INTEGER NOT NULL,
+    deleted_at       INTEGER,
+    CHECK ((reminder_type = 'scheduled' AND time_of_day IS NOT NULL AND interval_minutes IS NULL)
+        OR (reminder_type = 'interval' AND interval_minutes IS NOT NULL AND time_of_day IS NULL))
+);
+
+CREATE TABLE daily_reminder_response (
+    id           TEXT PRIMARY KEY,
+    reminder_id  TEXT NOT NULL REFERENCES daily_reminder(id) ON DELETE CASCADE,
+    local_date   TEXT NOT NULL,
+    response     TEXT NOT NULL CHECK (response IN ('done','not_done')),
+    responded_at INTEGER NOT NULL,
+    created_at   INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX ux_daily_reminder_response_reminder_date ON daily_reminder_response (reminder_id, local_date);
+
+-- ============================================================================
 -- 7.9 Indexes
 -- ============================================================================
 
@@ -373,6 +438,11 @@ CREATE INDEX ix_pr_exercise           ON personal_record (exercise_id, record_ty
 CREATE INDEX ix_pr_recent             ON personal_record (achieved_at DESC) WHERE is_current = 1;
 CREATE INDEX ix_body_metric           ON body_metric_entry (metric, measured_at DESC) WHERE deleted_at IS NULL;
 CREATE INDEX ix_photo_taken           ON progress_photo (taken_at DESC) WHERE deleted_at IS NULL;
+
+-- Daily goals and reminders.
+CREATE INDEX ix_daily_goal_sort       ON daily_goal (sort_order) WHERE deleted_at IS NULL;
+CREATE INDEX ix_daily_goal_entry_date ON daily_goal_entry (local_date);
+CREATE INDEX ix_daily_reminder_goal   ON daily_reminder (goal_id) WHERE deleted_at IS NULL;
 
 -- ============================================================================
 -- 7.10 Views (the read model)

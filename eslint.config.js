@@ -20,6 +20,7 @@ const FEATURES = [
   'calendar',
   'data-transfer',
   'home',
+  'daily-goals',
 ];
 
 // Cross-feature imports are only allowed through a feature's public index.ts

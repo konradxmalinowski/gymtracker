@@ -13,6 +13,7 @@ import { ActivePlanCard } from '../components/ActivePlanCard';
 import { LastWorkoutCard } from '../components/LastWorkoutCard';
 import { LatestPRCard } from '../components/LatestPRCard';
 import { StreakCard } from '../components/StreakCard';
+import { TodaysGoalsCard } from '../components/TodaysGoalsCard';
 import { WeeklySummaryCard } from '../components/WeeklySummaryCard';
 import { useHomeDashboard } from '../hooks/useHomeDashboard';
 // P6/P10: `useStartWorkout` is `workout-logging`'s one deliberate
@@ -50,6 +51,7 @@ export function HomeScreen() {
     planService: container.planService,
     recordService: container.recordService,
     exerciseService: container.exerciseService,
+    dailyGoalService: container.dailyGoalService,
     clock: container.clock,
   });
   const {
@@ -146,6 +148,13 @@ export function HomeScreen() {
           testID="home-latest-pr-card"
         />
 
+        <TodaysGoalsCard
+          todaysGoals={data.todaysGoals}
+          hasAnyGoals={data.hasAnyGoals}
+          onPress={() => router.push(routes.goals.list())}
+          testID="home-todays-goals-card"
+        />
+
         <WeeklySummaryCard weeklySummary={data.weeklySummary} testID="home-weekly-summary-card" />
       </Column>
 
@@ -173,7 +182,7 @@ function HomeSkeleton() {
     <Column gap={4} style={{ paddingVertical: space[4] }}>
       <Skeleton width="60%" height={40} />
       <Skeleton width="100%" height={48} radius="xl" />
-      {[0, 1, 2, 3, 4].map((index) => (
+      {[0, 1, 2, 3, 4, 5].map((index) => (
         <Skeleton key={index} width="100%" height={120} radius="xl" />
       ))}
     </Column>

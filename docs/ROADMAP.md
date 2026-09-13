@@ -591,8 +591,18 @@ Commit: `chore: prepare production release builds and store submission assets`
 
 ## P17 - Daily goals and reminders
 
+**Status: complete** (`feat/p17-daily-goals-reminders`, 2026-09-12/13) - see
+`CLAUDE.md`'s Status section for the full write-up, `docs/adr/
+0016-shared-notification-scheduler.md`'s "P17 resolution" addendum for the
+notification-path reality-gap finding, and `reports/security-2026-09-12-p17.md`/
+`reports/accessibility-2026-09-12-p17.md` for the review reports.
+
 **Goal:** user-defined daily goals and reminders, independent of workout state and the
-first schema change to ship since P2's original migration.
+second schema change to ship since P2's original migration (the sleep/height
+follow-up's `002_add_sleep_and_height_metrics.ts` claimed the first new number, so
+this phase's migration is `003_daily_goals.ts`, not the `002_daily_goals.ts` this
+section originally proposed before implementation - see "Numbering note" in
+`docs/ARCHITECTURE.md` section 7.12, itself unaffected by the renumbering).
 
 Scope: new feature module `features/daily-goals/` (a leaf in the section 9.1
 dependency graph - depends on nothing else, not even `exercise-library`, since goals
@@ -682,6 +692,22 @@ documentation pass):
   backgrounded (not killed), and the notification body itself remains tappable to
   open the app normally regardless.
 
+**Resolved at implementation time (2026-09-12/13):** icon subset - a curated 32-icon
+Ionicons list (see `CLAUDE.md`'s P17 write-up). Increment granularity - fixed +1/-1,
+not per-goal-configurable. Route naming - matched as proposed, except reminder create/
+edit is a `sheetStore`-presented form rather than its own route (this app's
+post-P12 sheet-based-form precedent). Background/killed-app reliability - a real,
+on-device test found a more fundamental problem than the killed-app case this note
+anticipated: scheduled reminders were silently never firing even with the app merely
+backgrounded, because Android's exact-alarm permission model (not addressed by this
+note) made every scheduled notification inexact and `expo-notifications` discards a
+late-inexact-delivered one rather than showing it late. Fixed by declaring
+`SCHEDULE_EXACT_ALARM`; see `CLAUDE.md`'s P17 write-up and the "Known gaps" section for
+the full root cause and for why this specific fix's live re-verification remains open
+(this session's sandbox could not complete a native rebuild). The original killed-app
+question this note asked is now downstream of that fix and still not independently
+re-verified either.
+
 ---
 
 ## Prioritized backlog (post-1.0)
@@ -697,7 +723,7 @@ documentation pass):
 | Full Polish UI localization (D-11) | Infrastructure lands in P1; this is the translation catalog plus a language setting | S |
 | Biometric app lock (D-08) | Progress photos and bodyweight are personal | S |
 | Rest-day and deload awareness in the streak | The current streak punishes programmed rest | S |
-| Migrate rest-timer's notification wrapper onto the shared `NotificationScheduler` (ADR-0016) | Two independent local-notification code paths (rest-timer's own P7 wrapper vs. daily-goals' P17 shared service) is an accepted, tracked inconsistency, not a permanent one | S |
+| Migrate rest-timer's and workout-reminders' notification wrappers onto the shared `NotificationScheduler` (ADR-0016) | Three independent local-notification code paths (rest-timer's own P7 wrapper, the Gravitus refresh's `WorkoutReminderService`, and daily-goals' P17 `NotificationScheduler`) is an accepted, tracked inconsistency, not a permanent one - see ADR-0016's "P17 resolution" addendum | M |
 
 **Could have**
 

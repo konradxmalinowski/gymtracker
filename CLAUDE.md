@@ -11,9 +11,11 @@ foundation), P3 (onboarding, profile and core settings), P4 (exercise library), 
 (workout plans), P6 (workout logging), P7 (rest timer), P8 (progressive overload and
 personal records), P9 (workout summary and history), P10 (home dashboard), P11
 (statistics and charts), P12 (training calendar), P13 (body measurements and progress
-photos), and P14 (data export and import) are complete - `docs/ROADMAP.md`'s MVP line
-closed at P10, and P11-P14 are the first four phases past it (v1.1-v1.4, "Statistics,
-calendar, body metrics, data transfer"). P8
+photos), P14 (data export and import), and P17 (daily goals and reminders) are
+complete - `docs/ROADMAP.md`'s MVP line closed at P10, and P11-P14 plus P17 are the
+five post-MVP phases shipped so far (v1.1-v1.4 plus P17, "Statistics, calendar, body
+metrics, data transfer, daily goals and reminders"; P15-P16 - performance hardening
+and release engineering - remain unbuilt). P8
 (`feat/p8-progressive-overload`) was cut from
 `main` before P7's PR merged - a documented decision made when P8 was kicked off so
 the two phases could be reviewed independently (see
@@ -23,17 +25,19 @@ overlapping files (`WorkoutSessionRepository.ts`/`SqliteWorkoutSessionRepository
 this file and `docs/architecture-snapshot.md`) needed a merge; that merge is reflected
 throughout this file as of this update, not left as an open branch note. The
 `onboarding`, `profile`, `exercise-library`, `plans`, `workout-logging`, `rest-timer`,
-`records`, `home`, `statistics`, `calendar`, `body-metrics`, and `data-transfer`
-features now have real implementations (screens, hooks, services, repository where
-applicable - `rest-timer` itself owns no database table and therefore no repository;
-`records` does, see below; `home`, `statistics`, and `calendar` each have a repository
-but no accompanying service, see below; `body-metrics` has two repositories, each with
-its own service, see below; `data-transfer` has one repository and one service, see
-below). `data-transfer` was the last of the originally-empty P2-era skeleton
-directories (components/hooks/screens/services/domain/repository/types/index.ts
-subfolders, no implementation) - none remain as of this update. (`daily-goals` is
-still documentation-only, P17 - see below - but was never one of those originally-
-empty skeleton directories, so it is not counted here.)
+`records`, `home`, `statistics`, `calendar`, `body-metrics`, `data-transfer`, and
+`daily-goals` features now have real implementations (screens, hooks, services,
+repository where applicable - `rest-timer` itself owns no database table and
+therefore no repository; `records` does, see below; `home`, `statistics`, and
+`calendar` each have a repository but no accompanying service, see below;
+`body-metrics` has two repositories, each with its own service, see below;
+`data-transfer` has one repository and one service, see below; `daily-goals` has two
+repositories, each with its own service, see below). `data-transfer` was the last of
+the originally-empty P2-era skeleton directories (components/hooks/screens/services/
+domain/repository/types/index.ts subfolders, no implementation) - none remain as of
+this update. (`daily-goals` was never one of those originally-empty skeleton
+directories - it didn't exist as a folder at all until P17 built it for real, see
+below - so it was never counted in that skeleton-directory tally.)
 
 The app now boots for real: `app/_layout.tsx` opens the database, runs migrations,
 seeds the exercise catalog (`database/seed/runSeed()`, idempotent - a P2 gap fixed in
@@ -2120,6 +2124,252 @@ gitignored and only regenerates via `expo start`, not `expo export` - a fresh ro
 (this pass added two, `plates` and `reminders`) needs a brief `expo start` run before
 `tsc` will see it, which isn't wired into any script in this repo.
 
+**Daily goals and reminders (P17, 2026-09-12/13):** `features/daily-goals/` fills the
+last remaining leaf feature named in the roadmap - the "Documentation-only addition
+(2026-08-11)" paragraph above described its architecture-planning-only state; this
+pass makes it real, closing `docs/ROADMAP.md`'s P17 line and taking this project past
+every phase P0-P17 names. It ships user-defined daily goals (boolean, counter,
+numeric), independent of workout state and plan days, plus optional per-goal or
+standalone reminders with OS-level interactive actions - FR-27 through FR-31 in full.
+
+This is only the app's **second** real schema migration since P2's original
+`001_initial.ts` (the sleep/height follow-up's `002_add_sleep_and_height_metrics.ts`
+claimed the prior number) - `database/migrations/003_daily_goals.ts` creates four
+brand-new tables that did not exist before this pass: `daily_goal`,
+`daily_goal_entry`, `daily_reminder`, `daily_reminder_response`, exactly per
+`docs/ARCHITECTURE.md` section 7.12's schema, with `database/schema.sql` updated in
+lockstep as the canonical cumulative shape. `features/daily-goals/repository/
+{DailyGoalRepository,SqliteDailyGoalRepository,DailyReminderRepository,
+SqliteDailyReminderRepository}.ts` are the thirteenth and fourteenth feature-repository
+pairs on `BaseSqliteRepository`, added to `services/container.ts` as
+`dailyGoalRepository`/`dailyGoalService`/`dailyReminderRepository`/
+`dailyReminderService` - additive only. `features/daily-goals/domain/` holds four pure
+calculators, all fast-check/unit tested before this pass' test-authoring freeze landed
+(see below): `weekdayBitmask.ts` (bit0=Monday..bit6=Sunday, reading "today" only
+through an injected `Clock`, never `new Date()`, matching `home`/`statistics`/
+`calendar`'s own convention), `goalCompletion.ts` (completion is derived, never
+stored - `isGoalComplete(goalType, targetValue, progressValue)`, the same "pure
+calculator over persisted values" pattern `SetVolume`/`Estimated1RM`/
+`StreakCalculator` already established, per ADR-0017 Decision 2), `reminderOccurrences.ts`
+(`computeRemainingOccurrencesToday`, ADR-0017 Decision 3's "today-only, re-arm on
+foreground/boot" strategy as a pure, testable calculator independent of
+`expo-notifications`), and `summarizeTodaysGoals.ts` (feeds Home's summary card).
+`daily-goals` is a genuine leaf per its own design brief - no dependency on `plans`,
+`workout-logging`, or `exercise-library`, confirmed by its own barrel; `home` is its
+only dependent, read-only, one direction.
+
+A real correctness bug was caught and fixed before this reached review, not shipped
+and found later: the first draft of `DailyGoalService.deleteGoal`/
+`DailyReminderService.deleteReminder` called the base repository's `softDelete()`,
+but the schema's `ON DELETE CASCADE` (a goal's entries) and `ON DELETE SET NULL` (a
+reminder degrading to standalone when its goal is deleted) only fire on a real `DELETE`
+statement, never a soft-delete `UPDATE` - meaning the roadmap's own "deleting a goal
+degrades any reminder pointing at it to standalone" acceptance criterion would
+silently not have happened. Fixed to call the base repository's real `purge()`
+instead, matching the precedent `PlanService.purgePlan()`/
+`WorkoutSessionService.deleteSession()` already established for exactly this class of
+top-level hard delete; `restoreGoal`/`restoreReminder` were removed from both
+services as a result (a real hard delete has no undo, so a restore method would be
+dead code), while `setEnabled`/`disable` remain as the actual "hide without losing
+history" affordance the roadmap's acceptance line separately calls for. A dedicated
+service-level test (`DailyGoalService.test.ts`, written before the test-authoring
+freeze below) exercises `deleteGoal()` through the real service call path - not just
+`repository.purge()` directly - confirming the cascade and the standalone-degrade both
+actually happen.
+
+`services/notifications/NotificationScheduler.ts` is what ADR-0016 named as this
+phase's job - built as a new, additive sibling module (never touching the two
+existing wrappers), wired into `services/container.ts` as a new `notifications`
+member, the last member `docs/ARCHITECTURE.md` section 8.4 had declared with nothing
+behind it. It implements ADR-0017 in full: every reminder notification carries two OS
+action buttons ("Zrealizowane"/"Nie") via `Notifications.setNotificationCategoryAsync`;
+`scheduleRemainingOccurrencesToday` cancels only this reminder's own
+`daily-reminder-{id}-`-prefixed pending notifications (via
+`getAllScheduledNotificationsAsync`, never `cancelAllScheduledNotificationsAsync`,
+which would also cancel an unrelated live rest-timer or workout-reminder notification)
+before scheduling `computeRemainingOccurrencesToday`'s result as absolute-time OS
+notifications; re-arming happens on every app foreground (`hooks/useAppState.ts`) and
+boot (`app/_layout.tsx`), never a long-lived OS repeat. The response handler
+(extending `app/_layout.tsx`'s existing warm-listener/cold-start-`getLastNotificationResponseAsync`
+dual path already built for rest-timer's own deep link) writes exactly per ADR-0016/
+7.12's spec: "Zrealizowane" on a goal-linked reminder writes the same
+`daily_goal_entry` a Daily View tap would (boolean -> `progress_value = 1`;
+counter/numeric -> full `target_value`, since a notification button can't collect a
+partial amount) via `DailyGoalService`, then always logs the response via
+`DailyReminderService.recordResponse`; "Nie" only ever logs the response, never
+touches `daily_goal_entry`; this works with no UI open, since all of it is driven by
+data embedded in a locally-self-scheduled notification (this is a fully offline app -
+there is no push-notification capability anywhere to originate a payload from
+elsewhere, confirmed by this pass' own security review).
+
+**A real, documented reality gap**: ADR-0016 anticipated exactly two independent
+local-notification code paths existing until a future backlog migration -
+`RestTimerNotificationService` (P7) and this phase's `NotificationScheduler`. Between
+that ADR being written and this phase actually landing, the separate "Gravitus-inspired
+refresh" pass (see above) added a _third_, `services/notifications/
+WorkoutReminderService.ts`, the same feature-scoped-wrapper shape as rest-timer's, not
+through the (still unbuilt, at that time) shared scheduler. `docs/adr/
+0016-shared-notification-scheduler.md` now carries a "P17 resolution" addendum
+recording this plainly - the backlog migration item in `docs/ROADMAP.md`'s
+"Prioritized backlog" table now covers three call sites converging to one, not two,
+and this pass' security review confirmed the three do not conflict in practice (each
+scopes a disjoint notification-id convention; none calls
+`cancelAllScheduledNotificationsAsync()`). Migrating any of the three onto another
+remains explicitly out of this phase's scope.
+
+The UI layer: `app/goals/_layout.tsx` (a new root-level Stack outside `(tabs)`,
+mirroring `app/body-metrics/_layout.tsx`'s exact shape) hosts `app/goals/index.tsx`
+(`DailyGoalsScreen` - today's weekday-filtered active goals only, with inline quick
+actions requiring no navigation: a boolean toggle that supports un-completing by
+tapping again, since a habit tracker's completion should stay correctable; counter
+increment/decrement at a fixed +1/-1 step, the simpler of the roadmap's two named
+options for this open decision; numeric "add progress" opening the shared modal),
+`app/goals/manage/index.tsx` (`GoalListScreen` - full list, create/edit/delete/
+enable-disable/reorder via the existing `DraggableList` primitive and its established
+`accessibilityActions` move-up/move-down fallback, not a fresh gesture-only
+regression), `app/goals/manage/create.tsx`/`edit/[goalId].tsx` (a shared React Hook
+Form + Zod screen: name, a curated 32-icon Ionicons subset resolving this phase's
+"which icons" open decision, goal type, target/unit for counter/numeric, a 7-day
+`WeekdayPicker` bound to the bitmask, enable toggle), `app/goals/manage/reminders/
+index.tsx` and `reminders/[reminderId]/stats.tsx` (done/not-done/ignored counts over a
+date range, "ignored" computed as active-days-in-range minus rows-present per
+ARCHITECTURE.md's own spec, never a stored third state), and `app/(modals)/
+goal-progress-entry.tsx` (mirroring `body-metric-entry.tsx`'s established modal
+shape). One route-naming deviation from the roadmap's own tentative proposal, stated
+as a resolved open decision rather than a silent departure: reminder create/edit is a
+`sheetStore`-presented form (`ReminderFormSheetContent.tsx`), matching this app's
+post-P12 sheet-based-form precedent, rather than its own full route. `home` gained its
+one allowed edge into this feature: `TodaysGoalsCard` (a single-accessible-node
+summary, matching `LastWorkoutCard`/`StreakCard`'s shape) wired into
+`useHomeDashboard.ts` via constructor-parameter injection (the same DI shape avoiding
+the `import/no-cycle` class of bug P8's write-up already documents fixing once) and
+`HomeScreen.tsx`, opening `goals/index` on tap.
+
+**Test-authoring scope note**: partway through this pass, per explicit user
+instruction, no further new tests were to be authored. The domain calculators' and
+both repositories' tests, plus one service test (`DailyGoalService.test.ts`, covering
+the delete/purge fix above), were already written before that instruction landed and
+were kept; no new tests were authored for the UI layer, `NotificationScheduler`, or
+`DailyReminderService` beyond what already existed at that point - a deliberate,
+mid-pass scope call, the same framing `docs/ROADMAP.md`'s own P13/P14 write-ups
+already use for their own full-phase test-deferral decisions, just landing partway
+through this one instead of from the start.
+
+Verification (independently re-run, not just agent-reported): `npx tsc --noEmit`
+clean; `npx eslint .` clean (0 errors, the same 32 pre-existing `no-require-imports`
+warnings every prior phase has carried); `npx prettier --check .` clean; full Jest
+suite: 154 suites, 1439 passed, 1 pre-existing skip, 1440 total (up from the Gravitus
+refresh's 147 suites/1351 passed baseline by 7 new suites and 88 new tests, all from
+the domain/repository/one-service tests written before the test-authoring freeze
+above); `npx expo export --platform ios` bundled successfully, the same
+build-verification proxy every phase since P4 has used.
+
+**A real Android emulator was available this session** (`gymtracker_test`, the same
+API 34 AVD the post-P12 bugfix pass and P13/P14 already used) and a live, on-device
+pass was run against the existing dev-client APK - the app boots real production data
+through the new `003_daily_goals.ts` migration with no crash, confirming the migration
+runs clean against a real, non-trivial pre-existing database, not just the Node-backed
+repository test fixtures. End-to-end flows verified live, not just by static review:
+`TodaysGoalsCard`'s empty state on Home, navigating into `DailyGoalsScreen`, creating a
+goal through the full icon/type/weekday form, the Home card's summary count correctly
+reading back "0 of 1 done" immediately after creation (confirming
+`summarizeTodaysGoals`/`useHomeDashboard` wiring end-to-end against real data, not a
+fixture), the boolean quick-complete toggle and its un-complete-by-tapping-again
+behavior both round-tripping through `daily_goal_entry` correctly, creating a
+goal-linked scheduled reminder (confirming the distinctly-labeled hour/minute
+`StepperField`s from the accessibility fix below), and the lazy notification-permission
+prompt firing exactly on the first real schedule attempt, matching
+`RestTimerNotificationService`'s own established contract.
+
+**A real, on-device-verified bug was found and fixed as a direct result of this live
+pass**, not something static review or the Node-backed test suite could have caught:
+scheduled reminder notifications silently never fired. Reproduced with hard evidence,
+not inferred: a reminder scheduled for a specific time produced a real
+`RTC_WAKEUP` alarm (confirmed via `adb shell dumpsys alarm`,
+tag `expo.modules.notifications.NOTIFICATION_EVENT`, matching the exact configured
+time) - but Android delivered it within an inexact multi-minute tolerance window
+rather than at the exact instant, and by the time it fired, `expo-notifications`' own
+Kotlin `DateTrigger.nextTriggerDate()` (a zero-tolerance check: `if
+(triggerDate.before(now)) return null`) decided the trigger had already passed and
+silently discarded it - confirmed via the library's own log line
+(`"...will not trigger in the future, removing."`) and via `adb shell dumpsys
+notification` showing zero posted notification records for the app. Root cause,
+traced directly in `node_modules/expo-notifications`' own native source
+(`ExpoSchedulingDelegate.kt`'s `setupAlarm()`): it calls
+`alarmManager.canScheduleExactAlarms()` and only uses the precise
+`setExactAndAllowWhileIdle()` API when that returns true; this app declared neither
+`SCHEDULE_EXACT_ALARM` nor `USE_EXACT_ALARM`, so Android 12+ silently downgraded every
+scheduled reminder to the imprecise `setAndAllowWhileIdle()` path - the exact path that
+produced the multi-minute delay this session observed. Fixed by adding
+`android.permission.SCHEDULE_EXACT_ALARM` to `app.config.ts`'s `android.permissions`
+array (confirmed present in the regenerated `AndroidManifest.xml` via a fresh `npx
+expo prebuild`) - a normal, non-"dangerous" Android permission (unlike the more
+restricted `USE_EXACT_ALARM`, reserved for alarm-clock/calendar-category apps and
+rejected here as a real Play Store review risk for a fitness app), auto-granted on
+install through Android 12 and requiring a one-time user grant via Settings > Apps >
+GymTracker > Alarms & reminders on Android 13+ (this app has no in-app deep link into
+that settings screen yet - a real, tracked follow-up, see "Known gaps" below, not
+silently dropped).
+
+**This specific fix's own live re-verification was blocked, and that is stated
+plainly rather than glossed over**: confirming it end-to-end needed a fresh native
+build (a manifest permission change only takes effect in a newly compiled APK), and a
+full `./gradlew assembleDebug` in this session's sandbox hung indefinitely producing
+zero output and zero build-directory or Gradle-cache file activity, even after ruling
+out - one at a time, not assumed - memory pressure (freed ~2.7GB by stopping the
+emulator; no change), stale daemon/lock state (cleared `~/.gradle/daemon` and the
+distribution's `.lck` file; no change), and network/DNS (`curl`/`nslookup` to Maven and
+`services.gradle.org` both fast). Even `gradle --version` - invoked directly against
+the already-extracted distribution binary, bypassing the wrapper's own bootstrap
+entirely - hung the same way, and `jstack` could not attach to the hung JVM at all,
+pointing to this sandboxed session restricting something the Gradle JVM needs at
+startup that plain `java -version` does not need, rather than a defect in the fix
+itself. The fix is therefore verified by direct inspection of the exact conditional in
+`expo-notifications`' own native source that gates exact-vs-inexact scheduling (quoted
+above), not by a fresh live re-test - the same "cannot assert from documentation alone"
+discipline this project's own conventions demand, applied honestly in the direction of
+under-claiming rather than over-claiming. Confirming it fires correctly on a freshly
+built APK is a real, open follow-up for the next session with working build tooling,
+not assumed done here.
+
+A security review (`reports/security-2026-09-12-p17.md`, security-agent-sonnet,
+routine scope) found zero critical/high/medium/low findings and two informational
+notes (a swallowed FK-violation edge case when a stale notification action targets an
+already-deleted goal/reminder; a confirmation-only note on the hard-delete design) -
+nothing blocked commit. It independently re-confirmed the delete/purge fix, the three
+notification paths' disjoint id-prefix conventions, and that every Zod schema in this
+feature aligns with its corresponding SQL CHECK constraint in both directions.
+
+An accessibility review (`reports/accessibility-2026-09-12-p17.md`, general-purpose
+agent standing in for the accessibility-agent role, the same substitution every prior
+phase's own report already used) found no BLOCKING finding. One real, non-blocking
+finding was fixed in the same pass: `ReminderFormSheetContent.tsx`'s hour and minute
+`StepperField`s shared one identical `accessibilityLabel` ("Reminder time"), so their
+Increase/Decrease buttons were indistinguishable to a screen reader
+(A11Y-P17-001, MEDIUM) - fixed by splitting the i18n key into
+`timeHourAccessibilityLabel`/`timeMinuteAccessibilityLabel`, verified via a real
+RNTL mount before and after the fix (scratch test, deleted afterward per this pass'
+own test-authoring freeze). The identical bug pre-exists, unfixed, in
+`features/profile/screens/RemindersSettingsScreen.tsx` (Gravitus-refresh era, outside
+this review's file scope) - flagged for awareness, not fixed here. The recurring
+`SwipeableRow`-collapse bug class that blocked P7/P8 was confirmed absent from this
+feature entirely (zero matches across the full UI scope), and `DraggableList`'s
+established accessibility-actions fallback was confirmed correctly forwarded through
+`GoalCard` for goal reordering, not silently dropped for a new row component.
+
+Explicitly out of scope, and why: migrating `RestTimerNotificationService`/
+`WorkoutReminderService` onto the shared `NotificationScheduler` (an existing,
+now-widened `docs/ROADMAP.md` backlog item, not this phase's job); `data-transfer`
+(P14) export/import wiring for the four new tables (a real, currently-open gap - a
+JSON backup taken today will not include daily goals/reminders/history until a future
+pass extends `DataTransferRepository`); the `RemindersSettingsScreen.tsx`
+duplicate-accessibility-label bug named just above; an in-app deep link into Android
+13+'s "Alarms & reminders" settings screen for `SCHEDULE_EXACT_ALARM` (this session
+added the permission declaration only - guiding the user to grant it is real,
+scoped UI work of its own, see "Known gaps"); and a fresh-build live re-test of the
+exact-alarm fix itself, blocked by this session's own Gradle/JVM tooling failure
+(see above).
+
 ## Product
 
 Offline-only React Native/Expo workout logging app. No backend, no accounts, no
@@ -2217,8 +2467,8 @@ item, non-blocking).
 - `data-transfer` depends on everything and is built last.
 - `daily-goals` is also a leaf, deliberately isolated: no dependency on `plans`,
   `workout-logging`, or `exercise-library` - goals are user-defined and must not be
-  tied to training days or workout state. `home` is its only dependent, via a summary
-  card (P17, documentation-only so far - see "Status" above).
+  tied to training days or workout state. Real as of P17 (see "Status" above);
+  `home` is its only dependent, via `TodaysGoalsCard`, read-only, one direction.
 - `home` (P10) depends on `workout-logging`, `plans`, and `records` - read-only, one
   direction, nothing depends back on `home`. It does not depend on `statistics` in
   practice, despite `docs/ARCHITECTURE.md` section 9.1's diagram drawing a
@@ -2226,7 +2476,8 @@ item, non-blocking).
   resolution" settles this permanently: `home` keeps its own lightweight read model
   (`HomeDashboardRepository`) forever, since `statistics` (real as of P11) never
   implements `streak()`/`weeklySummary()` at all. The diagram's `HOME --> DG` edge is
-  likewise still unbuilt, since `daily-goals` remains documentation-only (P17).
+  now real as of P17 (`TodaysGoalsCard`), the same read-only shape as `home`'s other
+  three edges.
 - `statistics` (P11, real as of this phase) depends only on read models, never on
   write services, with one real edge: `STAT --> REC`, `exerciseProgression`'s `e1rm`
   metric reusing `records`' pure `estimated1RM`/`isRecordEligibleSetType` domain
@@ -2353,6 +2604,35 @@ benchmark remains `test.skip`'d with a comment naming its future phase (JSON exp
   instrument yet.
 
 ## Known gaps (tracked, non-blocking)
+
+- **P17's `SCHEDULE_EXACT_ALARM` fix has not been re-verified live on a freshly
+  built APK.** Found and root-caused this same session (see CLAUDE.md's P17
+  write-up above for the full technical detail): scheduled daily-goal reminders
+  were silently never firing because `expo-notifications`' own
+  `ExpoSchedulingDelegate.setupAlarm()` falls back to an inexact Android alarm
+  without this permission, and its `DateTrigger` has zero delivery-delay
+  tolerance before discarding a notification rather than showing it late. Fixed
+  by declaring `android.permission.SCHEDULE_EXACT_ALARM` in `app.config.ts`, and
+  the fix is correct by direct inspection of the exact conditional it changes -
+  but confirming it live needs a fresh native build, and this session's sandbox
+  could not complete one (`./gradlew assembleDebug` and even a direct,
+  wrapper-bypassing `gradle --version` both hung indefinitely with zero output
+  and an unresponsive JVM `jstack` could not attach to - diagnosed as a sandbox
+  restriction on something the Gradle JVM needs at startup, not a build-content
+  problem, after ruling out memory, stale daemon/lock state, and network/DNS one
+  at a time). A future session with working Gradle tooling should run
+  `npx expo run:android`, recreate the same live repro (schedule a
+  near-future goal-linked reminder, wait for it to fire), and confirm the
+  notification now posts on time with both action buttons working - not assume
+  the fix is proven just because the reasoning is sound.
+- **Android 13+ has no in-app path to grant `SCHEDULE_EXACT_ALARM`.** Declaring
+  the permission is necessary but not sufficient on API 33+ - the user must
+  separately enable it via Settings > Apps > GymTracker > Alarms & reminders,
+  and this app has no deep link into that screen (no equivalent of the
+  in-app notification-permission prompt exists for this permission class,
+  since Android does not offer a runtime dialog for it). Real, scoped UI work
+  for a future pass, not a one-line fix - out of scope for the pass that added
+  the permission declaration itself.
 
 - **~~`dragHandle="handle"` mode's grip is nested inside each row's own
   already-`accessible` container (`PlanCard`/`PlanDayCard`/

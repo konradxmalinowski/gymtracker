@@ -91,3 +91,36 @@ Rest-timer's migration onto the shared scheduler is actually scheduled. At that 
 diff `RestTimerNotificationService`'s still-open needs (an absolute single deadline,
 cancelled on early finish) against what `NotificationScheduler` ended up looking like
 after daily-goals' usage, before assuming the existing interface is sufficient as-is.
+
+## P17 resolution (2026-09-12)
+
+This ADR's "Negative" consequence above was written assuming exactly two
+notification code paths would exist until the backlog migration happens:
+rest-timer's own wrapper, and the shared `NotificationScheduler` this ADR
+introduces. Between this ADR being accepted and P17 actually being implemented, a
+separate, unrelated pass - the "Gravitus-inspired UI refresh" (see `CLAUDE.md`'s
+Status section) - added a *third* independent wrapper,
+`services/notifications/WorkoutReminderService.ts` (local weekly workout
+reminders), built the same feature-scoped-wrapper way rest-timer's was, not
+through this ADR's still-unbuilt `NotificationScheduler`. That pass had no reason
+to reach for `NotificationScheduler`, since as of that date it still did not
+exist - `daily-goals` (P17) is what finally builds it, per this ADR's own
+decision, unchanged.
+
+So as of P17's implementation, there are three independent local-notification
+code paths, not the two this ADR anticipated: `RestTimerNotificationService`
+(P7), `WorkoutReminderService` (Gravitus refresh), and `NotificationScheduler`
+(P17, `daily-goals`' own consumer). This is named here for the same reason this
+ADR already named the original two-path inconsistency - an accepted, tracked
+gap, not a silently-widening one. It does not change this ADR's decision or its
+consequences in substance: `NotificationScheduler` is still built exactly as
+decided, `RestTimerNotificationService` is still left untouched, and
+`WorkoutReminderService` is likewise left untouched by this phase - migrating
+either (or both) onto the shared scheduler remains the same single backlog item
+in `docs/ROADMAP.md`'s "Prioritized backlog (post-1.0)" table, now covering three
+call sites converging to one instead of two. P17's own security review
+(`reports/security-2026-09-12-p17.md`) confirmed the three paths do not conflict
+in practice: each scopes its own notification-id prefix when
+listing/cancelling pending notifications, and none of the three ever calls
+`cancelAllScheduledNotificationsAsync()`, which would cancel another path's
+live, unrelated notification.

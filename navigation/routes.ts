@@ -137,6 +137,18 @@ export const routes = {
       pathname: '/(modals)/plan-day-picker',
       params: { planId },
     }),
+    /**
+     * P17: the daily-goals feature's quick "add an exact amount" entry for a
+     * `numeric` goal (a `counter`/`boolean` goal's quick actions never need
+     * this - they mutate in place on `DailyGoalsScreen` itself). Same "plain
+     * id as a route param" shape as `restTimerSettings`/`planDayPicker` -
+     * this flow's result is a single write against an already-known goal id,
+     * nothing to accumulate.
+     */
+    goalProgressEntry: (goalId: string): Href => ({
+      pathname: '/(modals)/goal-progress-entry',
+      params: { goalId },
+    }),
   },
 
   /**
@@ -218,6 +230,36 @@ export const routes = {
     compare: (photoIdA: string, photoIdB: string): Href => ({
       pathname: '/body-metrics/photos/compare',
       params: { photoIdA, photoIdB },
+    }),
+  },
+
+  /**
+   * P17: the daily-goals feature's own root-level Stack
+   * (`app/goals/_layout.tsx`) - same `bodyMetrics` precedent (not one of the
+   * 5 tabs, dedicated Stack rather than a single flat route since this flow
+   * has more than one screen). Reached from `home`'s `TodaysGoalsCard`
+   * (`list()`, always visible on Home regardless of whether any goal is
+   * configured yet) rather than a `ProfileScreen` row - this feature's own
+   * brief scoped its one entry point to the Home card. `manage`/`create`/
+   * `edit`/`reminders`/`reminderStats` mirror `bodyMetrics.list`/`history`/
+   * `photos`/`photoDetail`'s own flat-path, plain-param shape; `reminders`'s
+   * screen file lives at `app/goals/manage/reminders/index.tsx` (not a flat
+   * `reminders.tsx`) purely for on-disk consistency with
+   * `reminders/[reminderId]/stats.tsx` sitting right next to it - the route
+   * surface here is unaffected either way.
+   */
+  goals: {
+    list: (): Href => '/goals',
+    manage: (): Href => '/goals/manage',
+    create: (): Href => '/goals/manage/create',
+    edit: (goalId: string): Href => ({
+      pathname: '/goals/manage/edit/[goalId]',
+      params: { goalId },
+    }),
+    reminders: (): Href => '/goals/manage/reminders',
+    reminderStats: (reminderId: string): Href => ({
+      pathname: '/goals/manage/reminders/[reminderId]/stats',
+      params: { reminderId },
     }),
   },
 } as const;

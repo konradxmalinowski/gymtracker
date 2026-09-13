@@ -2,6 +2,7 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
+import type { DailyGoalService } from '@/features/daily-goals';
 import type { Exercise, ExerciseService } from '@/features/exercise-library';
 import { useHomeDashboard } from '@/features/home/hooks/useHomeDashboard';
 import type {
@@ -37,6 +38,23 @@ function makeRecordService(listRecent: jest.Mock): PersonalRecordService {
 
 function makeExerciseService(getById: jest.Mock): ExerciseService {
   return { getById } as unknown as ExerciseService;
+}
+
+/**
+ * P17: `useHomeDashboard` gained a `dailyGoalService` dependency for
+ * `TodaysGoalsCard`'s data (`listTodaysGoals`/`listAllGoals`). Defaulted to
+ * an always-empty stub in `renderDashboard` below so every pre-existing test
+ * in this file keeps passing unchanged - none of them are testing the
+ * daily-goals composition itself, which is out of scope for this pass per
+ * this feature's own "no new tests this pass" scope note.
+ */
+function makeDailyGoalService(
+  overrides: { listTodaysGoals?: jest.Mock; listAllGoals?: jest.Mock } = {},
+): DailyGoalService {
+  return {
+    listTodaysGoals: overrides.listTodaysGoals ?? jest.fn().mockResolvedValue([]),
+    listAllGoals: overrides.listAllGoals ?? jest.fn().mockResolvedValue([]),
+  } as unknown as DailyGoalService;
 }
 
 function makeHomeDashboardRepository(overrides: {
@@ -191,6 +209,7 @@ async function renderDashboard(deps: {
   planService: PlanService;
   recordService: PersonalRecordService;
   exerciseService: ExerciseService;
+  dailyGoalService?: DailyGoalService;
 }) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
@@ -205,6 +224,7 @@ async function renderDashboard(deps: {
     () =>
       useHomeDashboard({
         ...deps,
+        dailyGoalService: deps.dailyGoalService ?? makeDailyGoalService(),
         clock: new FixedClock(NOW),
       }),
     { wrapper: Wrapper },
@@ -246,6 +266,8 @@ describe('useHomeDashboard', () => {
       weeklySummary: WEEKLY_SUMMARY,
       latestRecord: null,
       latestRecordExerciseName: null,
+      todaysGoals: [],
+      hasAnyGoals: false,
     });
 
     // No active plan -> the plan-dependent reads never run.
