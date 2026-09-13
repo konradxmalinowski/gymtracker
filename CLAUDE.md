@@ -2605,26 +2605,91 @@ benchmark remains `test.skip`'d with a comment naming its future phase (JSON exp
 
 ## Known gaps (tracked, non-blocking)
 
-- **P17's `SCHEDULE_EXACT_ALARM` fix has not been re-verified live on a freshly
-  built APK.** Found and root-caused this same session (see CLAUDE.md's P17
-  write-up above for the full technical detail): scheduled daily-goal reminders
-  were silently never firing because `expo-notifications`' own
-  `ExpoSchedulingDelegate.setupAlarm()` falls back to an inexact Android alarm
-  without this permission, and its `DateTrigger` has zero delivery-delay
-  tolerance before discarding a notification rather than showing it late. Fixed
-  by declaring `android.permission.SCHEDULE_EXACT_ALARM` in `app.config.ts`, and
-  the fix is correct by direct inspection of the exact conditional it changes -
-  but confirming it live needs a fresh native build, and this session's sandbox
-  could not complete one (`./gradlew assembleDebug` and even a direct,
+- **P17's `SCHEDULE_EXACT_ALARM` fix is now verified fixed live, on a freshly
+  built APK.** The prior write-up left this open because that session's sandbox
+  could not complete a native build - `./gradlew assembleDebug` and a
   wrapper-bypassing `gradle --version` both hung indefinitely with zero output
-  and an unresponsive JVM `jstack` could not attach to - diagnosed as a sandbox
-  restriction on something the Gradle JVM needs at startup, not a build-content
-  problem, after ruling out memory, stale daemon/lock state, and network/DNS one
-  at a time). A future session with working Gradle tooling should run
-  `npx expo run:android`, recreate the same live repro (schedule a
-  near-future goal-linked reminder, wait for it to fire), and confirm the
-  notification now posts on time with both action buttons working - not assume
-  the fix is proven just because the reasoning is sound.
+  and an unresponsive JVM `jstack` could not attach to. This session's sandbox
+  did not reproduce that hang: `cd android && ./gradlew assembleDebug`
+  completed successfully in 16m47s, producing a real debug APK. That APK was
+  installed on the `gymtracker_test` Android emulator (API 34) via `adb install
+-r`, and `adb shell dumpsys package com.konradmalinowski.gymtracker` confirmed
+  `android.permission.SCHEDULE_EXACT_ALARM` is now present in the APK's
+  requested permissions (it was absent on the previously-installed APK). The
+  permission was granted via `adb shell appops set
+com.konradmalinowski.gymtracker SCHEDULE_EXACT_ALARM allow` - the standard
+  emulator-testing equivalent of the user granting it through Settings > Apps >
+  GymTracker > Alarms & reminders on Android 13+, since there is still no
+  in-app path to that screen (see the next entry). An existing daily-goal
+  reminder ("Water reminderii," linked to a "Drink water" boolean goal) was
+  edited to fire a few minutes in the future, and `adb shell dumpsys alarm`
+  confirmed the resulting OS alarm scheduled as `type=RTC_WAKEUP window=0
+exactAllowReason=permission` - a true zero-tolerance exact alarm, with
+  Android's own dump explicitly attributing the exact scheduling to the granted
+  permission. This is the direct, live disconfirmation of the original bug,
+  which produced an inexact, multi-minute-tolerance alarm that
+  `expo-notifications`' own `DateTrigger.nextTriggerDate()` then silently
+  discarded as already passed. Backgrounding the app and waiting confirmed the
+  notification posted exactly on schedule (`adb shell dumpsys notification`
+  plus a shade screenshot showing "Water reminderii - Time to check in on this
+  goal." with both "Zrealizowane"/"Nie" action buttons present), and tapping
+  "Zrealizowane" correctly wrote the day's `daily_goal_entry` completion,
+  visible on a fresh app reload as "Today's goals - 1 of 1 done." The
+  "confirming it fires correctly on a freshly built APK is a real, open
+  follow-up" line from the original write-up is closed - it is no longer open,
+  it is confirmed. The Android 13+ manual-grant requirement itself is unchanged
+  and still real for a real user (no in-app deep link exists yet, per the next
+  entry); this session granted it manually via `adb` purely to test the
+  scheduling behavior, not as a substitute for that missing UI.
+- **Local notifications were silently never shown at all while the app was in
+  the foreground at fire time - found live during the `SCHEDULE_EXACT_ALARM`
+  re-verification above, and fixed within the same session.** Leaving the app
+  open on the reminder screen through a scheduled reminder's fire time produced
+  nothing: no notification, no error, no log line indicating a problem. Root
+  cause, confirmed by reading `expo-notifications`' own Android source
+  (`node_modules/expo-notifications/android/.../service/delegates/
+ExpoHandlingDelegate.kt`'s `handleNotification()`) and its own JS-side doc
+  comment (`node_modules/expo-notifications/src/NotificationsHandler.ts`'s
+  `setNotificationHandler` doc comment, which states verbatim: "The default
+  behavior when the handler is not set or does not respond in time is not to
+  show the notification."): the Android delegate's foreground branch
+  (`isAppInForeground()`) requires a JS-registered
+  `Notifications.setNotificationHandler()` to decide presentation behavior
+  before it will ever call `NotificationsService.present()`. GymTracker never
+  called `Notifications.setNotificationHandler()` anywhere in the codebase
+  (confirmed via a full-repo grep before the fix, zero matches) - so every one
+  of this app's three local-notification code paths
+  (`RestTimerNotificationService`, `WorkoutReminderService`, and P17's
+  `NotificationScheduler`) was silently swallowed by the OS-and-library's own
+  documented default whenever the app happened to be foregrounded at fire
+  time, despite each of those services successfully scheduling a real,
+  correctly-timed OS alarm underneath. Fixed same-session: `app/_layout.tsx`
+  now calls `Notifications.setNotificationHandler({ handleNotification: async
+() => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true,
+shouldSetBadge: false }) })` once at module scope, immediately after the
+  existing `SplashScreen.preventAutoHideAsync()` call, with a comment
+  explaining the specific default-behavior gap it closes. This is a single,
+  cross-cutting registration - all three notification services share it, and
+  none of them special-case foreground vs. background presentation, so one
+  handler for all of them is correct, with no per-service change needed.
+  Verified live, not just by reading the fix: reloaded the app with the
+  change, left it in the foreground on the reminder-editing screen, scheduled a
+  reminder for a few minutes out, and confirmed (via `adb shell dumpsys
+notification` and a shade screenshot) the notification now posts correctly
+  while foregrounded, with both action buttons present and working - tapped
+  "Nie" this time (the other action, "Zrealizowane," was already exercised in
+  the backgrounded test above) and confirmed it only logged the response with
+  no crash or unwanted goal-completion write. `npx tsc --noEmit`, `npx eslint
+app/_layout.tsx`, and the full Jest suite (154 suites, 1439 passed, 1
+  pre-existing skip - unchanged from baseline, since this is a pure app-code
+  fix with no test file touched) were all confirmed clean before and after.
+  Per explicit user instruction, no new tests were authored for this fix -
+  verification rested on the emulator rather than new automated coverage, the
+  same policy several other passes in this file already follow. iOS is
+  unverified for both this finding and the `SCHEDULE_EXACT_ALARM`
+  re-verification above - no Xcode/simulator available in this environment,
+  the same standing constraint every other on-device pass in this file already
+  flags.
 - **Android 13+ has no in-app path to grant `SCHEDULE_EXACT_ALARM`.** Declaring
   the permission is necessary but not sufficient on API 33+ - the user must
   separately enable it via Settings > Apps > GymTracker > Alarms & reminders,
