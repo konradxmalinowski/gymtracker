@@ -1,6 +1,6 @@
 import '../global.css';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -19,6 +19,7 @@ import { loadCatalogAsset, runSeed } from '@/database/seed';
 import { REST_TIMER_DEEP_LINK } from '@/features/rest-timer';
 import { ActiveWorkoutBanner } from '@/features/workout-logging/components/ActiveWorkoutBanner';
 import type { ActiveSessionSnapshot } from '@/features/workout-logging';
+import { useAppState } from '@/hooks/useAppState';
 import { routes } from '@/navigation/routes';
 import {
   ContainerProvider,
@@ -263,6 +264,18 @@ export function RootNavigationGate() {
   // via `getLastNotificationResponseAsync`, not the listener, which only
   // fires for responses received *while this listener is already attached*).
   //
+  // P17 extends this same `handleResponse` (rather than registering a
+  // second, separate listener) to also route a tapped daily-reminder
+  // notification's "Zrealizowane"/"Nie" action through
+  // `NotificationScheduler.handleNotificationResponse` -
+  // `isDailyReminderNotificationData`'s own guard inside that module already
+  // no-ops on any data shape it doesn't recognize (the rest timer's own
+  // `{ url: REST_TIMER_DEEP_LINK }` payload included), so one listener
+  // safely serves both features. Fire-and-forget (`void ...`), matching this
+  // codebase's existing best-effort/non-blocking posture for notification
+  // handling - a failed write there is swallowed inside that module itself,
+  // never surfaced here.
+  //
   // Both calls are wrapped defensively, the same posture
   // `RestTimerNotificationService` takes with every `expo-notifications`
   // call: no native binding under test (or a genuinely malformed stored
@@ -273,6 +286,11 @@ export function RootNavigationGate() {
       if (response.notification.request.content.data?.url === REST_TIMER_DEEP_LINK) {
         router.push(routes.workout.active());
       }
+      void container.notifications.handleNotificationResponse(response, {
+        dailyGoalService: container.dailyGoalService,
+        dailyReminderService: container.dailyReminderService,
+        clock: container.clock,
+      });
     }
 
     let subscription: { remove: () => void } | undefined;
@@ -291,7 +309,66 @@ export function RootNavigationGate() {
       .catch(() => {});
 
     return () => subscription?.remove();
-  }, []);
+  }, [container]);
+
+  // P17 / ADR-0017 Decision 3: "recompute and reschedule on every app
+  // foreground and boot, for every enabled reminder active today" - this is
+  // the one caller `NotificationScheduler`'s own doc comment says is
+  // responsible for that re-arm, since the module itself has no timer or
+  // listener of its own. Scoped to "once a profile exists" (the same
+  // `profileReady` condition `useSessionResumeGate` already gates on) so a
+  // fresh install with no reminders configured yet never pays this cost
+  // before onboarding even completes. Never throws into the boot gate -
+  // every failure is caught and logged, matching this file's own
+  // `bootstrap()` error-handling posture.
+  const profileReady = !isLoading && profile !== null && profile !== undefined;
+  const appState = useAppState();
+  const previousAppStateRef = useRef(appState);
+
+  async function rearmDailyReminders(): Promise<void> {
+    try {
+      const today = container.clock.localDate();
+      const reminders = await container.dailyReminderService.listActiveToday(today);
+      await Promise.all(
+        reminders.map((reminder) =>
+          container.notifications.scheduleRemainingOccurrencesToday(reminder, new Date()),
+        ),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      createLogger().error('dailyReminders.rearm.failed', { message });
+    }
+  }
+
+  useEffect(() => {
+    if (!profileReady) {
+      return;
+    }
+    void rearmDailyReminders();
+    // Runs once per boot, the moment a profile becomes available - not
+    // re-run on every `container` identity change beyond that single
+    // transition, since `container` is stable for the app's lifetime and
+    // `profileReady` only ever flips false->true once. `rearmDailyReminders`
+    // is a plain function recreated every render (not memoized), so it is
+    // deliberately left out of this array rather than chasing a
+    // `useCallback` just to satisfy the linter for a fire-and-forget effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileReady]);
+
+  useEffect(() => {
+    const previousState = previousAppStateRef.current;
+    previousAppStateRef.current = appState;
+
+    if (!profileReady) {
+      return;
+    }
+    const cameToForeground =
+      (previousState === 'background' || previousState === 'inactive') && appState === 'active';
+    if (cameToForeground) {
+      void rearmDailyReminders();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appState, profileReady]);
 
   if (isLoading) {
     return null;

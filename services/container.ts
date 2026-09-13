@@ -48,6 +48,11 @@ import type { ProgressPhotoRepository } from '@/features/body-metrics/repository
 import { DataTransferService } from '@/features/data-transfer/services/DataTransferService';
 import { SqliteDataTransferRepository } from '@/features/data-transfer/repository/SqliteDataTransferRepository';
 import type { DataTransferRepository } from '@/features/data-transfer/repository/DataTransferRepository';
+import { DailyGoalService, DailyReminderService } from '@/features/daily-goals';
+import { SqliteDailyGoalRepository } from '@/features/daily-goals/repository/SqliteDailyGoalRepository';
+import type { DailyGoalRepository } from '@/features/daily-goals/repository/DailyGoalRepository';
+import { SqliteDailyReminderRepository } from '@/features/daily-goals/repository/SqliteDailyReminderRepository';
+import type { DailyReminderRepository } from '@/features/daily-goals/repository/DailyReminderRepository';
 import type { DatabaseContext } from '@/repositories/contracts/database';
 import { SqliteSettingsRepository, type SettingsRepository } from '@/repositories/settings';
 import { SystemClock, type Clock } from '@/services/clock';
@@ -55,7 +60,12 @@ import { createFileStorage, type FileStorage } from '@/services/files';
 import { Uuid7IdGenerator, type IdGenerator } from '@/services/id';
 import { createImageProcessor, type ImageProcessor } from '@/services/images';
 import { createLogger, type Logger } from '@/services/logging';
-import { workoutReminderService, type WorkoutReminderService } from '@/services/notifications';
+import {
+  notificationScheduler,
+  workoutReminderService,
+  type NotificationScheduler,
+  type WorkoutReminderService,
+} from '@/services/notifications';
 
 export interface AppContainer {
   db: DatabaseContext;
@@ -108,6 +118,26 @@ export interface AppContainer {
   dataTransferService: DataTransferService;
   /** Gravitus-inspired refresh: local weekly workout reminders (`services/notifications/WorkoutReminderService.ts`) - a bare service with no repository, since nothing here is DB-backed beyond the `reminders.*` settings keys `RemindersSettingsScreen` already reads/writes directly through `settings`. The default is the shared singleton (no per-call `expo-notifications` state to isolate), overridable via `deps` the same way every other container member is for tests. */
   workoutReminderService: WorkoutReminderService;
+  /** Feature repository, P17 (daily-goals) - `daily_goal`/`daily_goal_entry` (`database/schema.sql` section 7.12). Not re-exported for presentation use - go through `dailyGoalService`. */
+  dailyGoalRepository: DailyGoalRepository;
+  /** ARCHITECTURE.md section 3.1 rule 3: the only door into `dailyGoalRepository` for hooks/screens. */
+  dailyGoalService: DailyGoalService;
+  /** Feature repository, P17 (daily-goals) - `daily_reminder`/`daily_reminder_response`. Not re-exported for presentation use - go through `dailyReminderService`. */
+  dailyReminderRepository: DailyReminderRepository;
+  /** ARCHITECTURE.md section 3.1 rule 3: the only door into `dailyReminderRepository` for hooks/screens. */
+  dailyReminderService: DailyReminderService;
+  /**
+   * ADR-0016: the shared `NotificationScheduler` section 8.4 has declared
+   * since P0 and no phase had implemented until P17 - daily-goals is its
+   * first real consumer. Distinct from `workoutReminderService` (its own,
+   * separate, never-migrated wrapper - ADR-0016's documented "three
+   * notification code paths" gap) and from `features/rest-timer/services/
+   * RestTimerNotificationService.ts` (not a container member at all). The
+   * default is the shared singleton (no per-call `expo-notifications` state
+   * to isolate), overridable via `deps` the same way `workoutReminderService`
+   * already is.
+   */
+  notifications: NotificationScheduler;
 }
 
 export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer>): AppContainer {
@@ -180,6 +210,15 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
       idGenerator,
     });
   const workoutReminderServiceInstance = deps?.workoutReminderService ?? workoutReminderService;
+  const notificationsInstance = deps?.notifications ?? notificationScheduler;
+  const dailyGoalRepository =
+    deps?.dailyGoalRepository ?? new SqliteDailyGoalRepository({ db, clock, idGenerator });
+  const dailyGoalService =
+    deps?.dailyGoalService ?? new DailyGoalService({ repository: dailyGoalRepository });
+  const dailyReminderRepository =
+    deps?.dailyReminderRepository ?? new SqliteDailyReminderRepository({ db, clock, idGenerator });
+  const dailyReminderService =
+    deps?.dailyReminderService ?? new DailyReminderService({ repository: dailyReminderRepository });
   const sessionRepository =
     deps?.sessionRepository ??
     new SqliteWorkoutSessionRepository({
@@ -221,6 +260,11 @@ export function createContainer(db: DatabaseContext, deps?: Partial<AppContainer
     sessionRepository,
     sessionService,
     workoutReminderService: workoutReminderServiceInstance,
+    dailyGoalRepository,
+    dailyGoalService,
+    dailyReminderRepository,
+    dailyReminderService,
+    notifications: notificationsInstance,
   };
 }
 

@@ -31,6 +31,10 @@ export const DIAGNOSTIC_TABLES: readonly string[] = [
   'personal_record',
   'body_metric_entry',
   'progress_photo',
+  'daily_goal',
+  'daily_goal_entry',
+  'daily_reminder',
+  'daily_reminder_response',
 ];
 
 export interface TableRowCount {

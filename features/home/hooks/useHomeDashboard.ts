@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
+import type { DailyGoalService, DailyGoalWithTodayEntry } from '@/features/daily-goals';
 import { formatExerciseName, type ExerciseService } from '@/features/exercise-library';
 import type { PlanAggregate, PlanDay, PlanService } from '@/features/plans';
 import type { PersonalRecord, PersonalRecordService } from '@/features/records';
@@ -65,12 +66,22 @@ export const homeDashboardKeys = {
  * latest PR's exercise name needs it, the same "records reaches into
  * exercise-library's barrel for exactly this" precedent
  * `useRecordExerciseNames.ts` already documents and justifies.
+ *
+ * `dailyGoalService` (P17) is this same pattern's newest addition:
+ * `TodaysGoalsCard` needs "today's goals" plus "does the user have any goal
+ * configured at all" (to tell its two distinct empty states apart), and
+ * both are plain, already-existing `DailyGoalService` reads with nothing to
+ * validate - the same reasoning `domain/summarizeTodaysGoals.ts`'s own doc
+ * comment gives for why this didn't need a new `daily-goals` hook of its
+ * own: a plain service call inside this query function, exactly like
+ * `recordService.listRecent(1)` already is.
  */
 export interface HomeDashboardDependencies {
   homeDashboardRepository: HomeDashboardRepository;
   planService: PlanService;
   recordService: PersonalRecordService;
   exerciseService: ExerciseService;
+  dailyGoalService: DailyGoalService;
   clock: Clock;
 }
 
@@ -82,6 +93,8 @@ export interface HomeDashboardData {
   weeklySummary: HomeWeeklySummary;
   latestRecord: PersonalRecord | null;
   latestRecordExerciseName: string | null;
+  todaysGoals: DailyGoalWithTodayEntry[];
+  hasAnyGoals: boolean;
 }
 
 /**
@@ -97,7 +110,14 @@ export interface HomeDashboardData {
  * needs the other's result, only the already-resolved active plan id.
  */
 export function useHomeDashboard(deps: HomeDashboardDependencies) {
-  const { homeDashboardRepository, planService, recordService, exerciseService, clock } = deps;
+  const {
+    homeDashboardRepository,
+    planService,
+    recordService,
+    exerciseService,
+    dailyGoalService,
+    clock,
+  } = deps;
 
   return useQuery({
     queryKey: homeDashboardKeys.dashboard,
@@ -106,14 +126,23 @@ export function useHomeDashboard(deps: HomeDashboardDependencies) {
       const sinceLocalDate = addDays(today, -STREAK_LOOKBACK_DAYS);
       const weekStart = currentWeekStart(today);
 
-      const [trainingLocalDates, weeklySummary, lastSession, plans, recentRecords] =
-        await Promise.all([
-          homeDashboardRepository.getTrainingLocalDates(sinceLocalDate),
-          homeDashboardRepository.getWeeklySummary(weekStart, today),
-          homeDashboardRepository.getLastCompletedSession(),
-          planService.listPlans(),
-          recordService.listRecent(1),
-        ]);
+      const [
+        trainingLocalDates,
+        weeklySummary,
+        lastSession,
+        plans,
+        recentRecords,
+        todaysGoals,
+        allGoals,
+      ] = await Promise.all([
+        homeDashboardRepository.getTrainingLocalDates(sinceLocalDate),
+        homeDashboardRepository.getWeeklySummary(weekStart, today),
+        homeDashboardRepository.getLastCompletedSession(),
+        planService.listPlans(),
+        recordService.listRecent(1),
+        dailyGoalService.listTodaysGoals(today),
+        dailyGoalService.listAllGoals(),
+      ]);
 
       const streak = calculateStreak(trainingLocalDates, today);
       const latestRecord = recentRecords[0] ?? null;
@@ -155,6 +184,8 @@ export function useHomeDashboard(deps: HomeDashboardDependencies) {
         weeklySummary,
         latestRecord,
         latestRecordExerciseName,
+        todaysGoals,
+        hasAnyGoals: allGoals.length > 0,
       };
     },
   });

@@ -115,6 +115,10 @@ describe('database/schema.sql', () => {
       'personal_record',
       'body_metric_entry',
       'progress_photo',
+      'daily_goal',
+      'daily_goal_entry',
+      'daily_reminder',
+      'daily_reminder_response',
     ];
 
     it.each(expectedTables)('creates table %s', async (table) => {
@@ -137,6 +141,8 @@ describe('database/schema.sql', () => {
       'ux_plan_single_active',
       'ux_session_single_in_progress',
       'ux_pr_current',
+      'ux_daily_goal_entry_goal_date',
+      'ux_daily_reminder_response_reminder_date',
       'ix_set_exercise_time',
       'ix_set_session',
       'ix_set_session_exercise',
@@ -159,6 +165,9 @@ describe('database/schema.sql', () => {
       'ix_pr_recent',
       'ix_body_metric',
       'ix_photo_taken',
+      'ix_daily_goal_sort',
+      'ix_daily_goal_entry_date',
+      'ix_daily_reminder_goal',
     ];
 
     it.each(expectedIndexes)('creates index %s', async (index) => {

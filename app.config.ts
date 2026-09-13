@@ -20,6 +20,24 @@ const config: ExpoConfig = {
       backgroundImage: './assets/images/android-icon-background.png',
       monochromeImage: './assets/images/android-icon-monochrome.png',
     },
+    // P17 (daily-goals): without this, `expo-notifications`' own
+    // ExpoSchedulingDelegate.setupAlarm() falls back to
+    // AlarmManagerCompat.setAndAllowWhileIdle() (inexact) on Android 12+,
+    // and its DateTrigger.nextTriggerDate() has zero delivery-delay
+    // tolerance - the instant the OS's inexact delivery window pushes
+    // firing past the target timestamp, the notification is silently
+    // dropped rather than shown late. Confirmed live on a real emulator:
+    // an inexact alarm delivered ~2 minutes late was discarded with zero
+    // notification ever posted. Declaring SCHEDULE_EXACT_ALARM lets
+    // `canScheduleExactAlarms()` return true so the delegate uses
+    // `setExactAndAllowWhileIdle()` instead, which is what rest-timer's
+    // own P7 notification already relies on implicitly. This is a normal
+    // (not "special"/runtime-dangerous) permission, auto-granted on
+    // install through Android 12; Android 13+ requires the user to grant
+    // it via Settings > Apps > GymTracker > Alarms & reminders - this app
+    // has no in-app deep link into that screen yet (a real, documented
+    // follow-up, not silently dropped - see CLAUDE.md's Known gaps).
+    permissions: ['android.permission.SCHEDULE_EXACT_ALARM'],
   },
   plugins: [
     'expo-router',

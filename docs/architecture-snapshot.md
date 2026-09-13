@@ -32,14 +32,24 @@ P0 (project foundation), P1 (design system/UI primitives), P2 (persistence
 foundation), P3 (onboarding, profile and core settings), P4 (exercise library), P5
 (workout plans), P6 (workout logging), P7 (rest timer), P8 (progressive overload
 and personal records), P9 (workout summary and history), P10 (home dashboard), P11
-(statistics and charts), and P12 (training calendar) are complete - `docs/ROADMAP.md`'s
-MVP line closed at P10, and P11-P12 are the first two phases past it. `onboarding`,
-`profile`, `exercise-library`, `plans`, `workout-logging`, `rest-timer`, `records`,
-`home`, `statistics`, and `calendar` are the ten features with real implementations
-(`rest-timer` owns no database table and therefore no repository; `records`, `home`,
-`statistics`, and `calendar` each have one, all but `records` with no accompanying
-service - see "Composition root" below); the remaining two (`body-metrics`,
-`data-transfer`) remain empty skeletons awaiting their phase. The app boots
+(statistics and charts), P12 (training calendar), P13 (body measurements and
+progress photos), P14 (data export and import), and P17 (daily goals and reminders)
+are complete - `docs/ROADMAP.md`'s MVP line closed at P10, and P11-P14 plus P17 are
+the five post-MVP phases shipped so far (P15-P16, performance hardening and release
+engineering, remain unbuilt). `onboarding`, `profile`, `exercise-library`, `plans`,
+`workout-logging`, `rest-timer`, `records`, `home`, `statistics`, `calendar`,
+`body-metrics`, `data-transfer`, and `daily-goals` are the thirteen features with
+real implementations (`rest-timer` owns no database table and therefore no
+repository; `records`, `home`, `statistics`, `calendar`, `body-metrics`,
+`data-transfer`, and `daily-goals` each have at least one repository, `home`/
+`statistics`/`calendar` with no accompanying service - see "Composition root"
+below) - no empty skeleton feature directories remain. **This snapshot's detailed
+prose below (Status paragraphs, folder structure, dependency graph, composition
+root) was last fully synced at P12** - see the "P13-P17 catch-up" paragraph
+immediately before "## Product" below for a condensed pointer to what shipped since,
+and `CLAUDE.md`'s own Status section for the full, currently-accurate write-up of
+every phase through P17; re-read that file rather than trusting this one's
+per-phase detail past P12. The app boots
 for real as of P3, and as of P4 also seeds the
 exercise catalog on every boot: `app/_layout.tsx` opens the database, runs
 migrations, runs `database/seed/runSeed()` (idempotent), builds the `AppContainer`,
@@ -459,6 +469,40 @@ rest-timer-adjacent writes (see above); `ActiveWorkoutScreen` mounts both `RestT
 carries P8's `recordRepository`/`recordService`/`exerciseHistoryRepository` alongside
 P7's unchanged four-pair shape.
 
+**P13-P17 catch-up (condensed - see `CLAUDE.md` for full detail):** `body-metrics`
+(P13) shipped bodyweight/circumference/body-fat logging plus progress photos, two
+repository/service pairs (`BodyMetricRepository`, `ProgressPhotoRepository`), and a
+new `services/images/ImageProcessor` abstraction (`expo-image-manipulator`); a
+post-P13 follow-up added `sleep_hours`/`height` as two more trackable metrics via
+`database/migrations/002_add_sleep_and_height_metrics.ts` - the app's first real
+schema migration since P2. `data-transfer` (P14) shipped streamed JSON backup export/
+import (merge and replace modes, a typed-confirmation seatbelt on replace) and CSV
+export/import with a preview step, closing the last P2-era empty skeleton directory.
+A "Gravitus-inspired UI refresh" (2026-09-12, not a numbered phase) reskinned the
+accent color, and added four offline-only features: a plate calculator, swipe-to-
+copy-previous-set, a rep-max table, and local workout reminders
+(`services/notifications/WorkoutReminderService.ts` - the first real occupant of
+that previously-empty folder). `daily-goals` (P17) then shipped user-defined daily
+goals/reminders on a second real migration (`003_daily_goals.ts` - four new tables:
+`daily_goal`, `daily_goal_entry`, `daily_reminder`, `daily_reminder_response`),
+implementing the long-reserved `services/notifications/NotificationScheduler.ts` per
+ADR-0016/0017 as a *third*, independent notification code path alongside rest-timer's
+and workout-reminders' own wrappers (a documented reality-gap, not a silent
+inconsistency - see ADR-0016's "P17 resolution" addendum); `home` gained its one
+allowed `daily-goals` edge via `TodaysGoalsCard`. A live on-device pass this same phase
+found scheduled reminders silently never firing (Android's exact-alarm permission
+model made delivery inexact, and `expo-notifications` discards a late-inexact
+notification rather than showing it) - fixed by declaring `SCHEDULE_EXACT_ALARM`; see
+`CLAUDE.md`'s P17 write-up and "Known gaps" for the full root cause and for why this
+specific fix's live re-verification stayed open pending a working native build in a
+future session. Also in this window: a post-P12
+bugfix pass (first real Android on-device verification of any kind, including an
+upstream `expo-sqlite`/FTS5 double-free crash fix and a `SwipeableRow` Worklets
+serialization crash fix) and a routine dependency/security pass. Every phase in this
+window kept the full Jest suite green as its regression gate and shipped its own
+`reports/security-*.md` (P13-P17 all clean, zero critical/high/medium findings) and,
+where UI changed, `reports/accessibility-*.md` review.
+
 ## Product
 
 Offline-only React Native/Expo workout logging app. No backend, no accounts, no cloud.
@@ -711,7 +755,10 @@ profile/core settings, P4 exercise library, P5 workout plans, P6 workout logging
 core 2-3-second-set screen), P7 rest timer, P8 progressive overload and personal
 records, P9 workout summary and history, P10 home screen, P11 statistics and charts,
 P12 calendar, P13 body measurements and progress photos, P14 data export/import, P15
-performance hardening and polish, P16 release engineering. P8 was implemented without
+performance hardening and polish, P16 release engineering. A later-added eighteenth
+phase, P17 (daily goals and reminders), was appended to the roadmap past the original
+P0-P16 count and is complete as of this update - see the "P13-P17 catch-up" paragraph
+under "Status" above. P8 was implemented without
 P7 underneath it on its own branch (see the merge note under "Status") - a
 deliberate, flagged exception to the "never skip ahead" rule's usual reading, not a
 violation of it: P8 doesn't depend on P7's output, only on P6's, so the two were
