@@ -67,7 +67,7 @@ export function PRBadge({ records, testID }: PRBadgeProps) {
         flexDirection: 'row',
         alignItems: 'center',
         gap: space[1],
-        height: 24,
+        minHeight: 24,
         paddingHorizontal: space[2],
         borderRadius: radius.full,
         backgroundColor: color.achievementSubtle,

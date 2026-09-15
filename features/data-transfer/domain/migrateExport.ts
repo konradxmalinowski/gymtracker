@@ -7,17 +7,18 @@
  * `database/migrations/types.ts`) as closely as an envelope-shape upgrade
  * (a pure JS object transform) can mirror a SQL migration runner.
  *
- * v1 is both the oldest and the current version today, so `MIGRATIONS` is
- * empty and `migrateExport` only ever validates. A future v2 adds exactly
- * one entry to `MIGRATIONS` (`1: (v1Object) => v2Shape`) plus one new Zod
- * schema in `exportEnvelopeSchema.ts` - not a rewrite of this file.
+ * v2 is the current version (bumped from v1 by the P17 known-gaps sweep to
+ * add the four daily-goals tables); `MIGRATIONS[1]` upgrades a v1 file to v2.
+ * A future v3 adds exactly one more entry to `MIGRATIONS` (`2: (v2Object) =>
+ * v3Shape`) plus one new Zod schema in `exportEnvelopeSchema.ts` - not a
+ * rewrite of this file.
  */
 import type { z } from 'zod';
-import { exportEnvelopeV1Schema } from './exportEnvelopeSchema';
+import { exportEnvelopeV2Schema } from './exportEnvelopeSchema';
 import {
   CURRENT_EXPORT_ENVELOPE_VERSION,
   EXPORT_FORMAT,
-  type ExportEnvelopeV1,
+  type ExportEnvelopeV2,
 } from '../types/ExportEnvelope';
 
 /**
@@ -58,15 +59,39 @@ type EnvelopeMigration = (input: Record<string, unknown>) => Record<string, unkn
 
 /**
  * `fromVersion -> migration function that upgrades it to `fromVersion + 1`.
- * Empty today - see this file's own header comment.
+ *
+ * `1`: v1 -> v2, adding `dailyGoals`/`dailyGoalEntries`/`dailyReminders`/
+ * `dailyReminderResponses` (the four P17 tables ADR-0013's original v1
+ * envelope predates) as empty arrays when the file doesn't already carry
+ * them - a v1 backup was written before these tables existed, so "absent"
+ * always means "nothing to import for these four tables," never a validation
+ * error. `data` itself is read defensively (`?? {}`) even though every real
+ * v1 file has one - `exportEnvelopeDataSchema` is what actually rejects a
+ * file with no `data` object at all, this migration only needs to not throw
+ * before that schema gets the chance to.
  */
-const MIGRATIONS: Readonly<Record<number, EnvelopeMigration>> = {};
+const MIGRATIONS: Readonly<Record<number, EnvelopeMigration>> = {
+  1: (input) => {
+    const data = (input.data ?? {}) as Record<string, unknown>;
+    return {
+      ...input,
+      version: 2,
+      data: {
+        ...data,
+        dailyGoals: data.dailyGoals ?? [],
+        dailyGoalEntries: data.dailyGoalEntries ?? [],
+        dailyReminders: data.dailyReminders ?? [],
+        dailyReminderResponses: data.dailyReminderResponses ?? [],
+      },
+    };
+  },
+};
 
 /**
  * Validates and upgrades an arbitrary parsed-JSON value into the current
- * {@link ExportEnvelopeV1} shape. This is the one entry point a service
+ * {@link ExportEnvelopeV2} shape. This is the one entry point a service
  * layer should call on freshly-`JSON.parse`d file content - never
- * `exportEnvelopeV1Schema.parse()` directly, which would reject a real, older
+ * `exportEnvelopeV2Schema.parse()` directly, which would reject a real, older
  * backup this function could otherwise upgrade.
  *
  * @throws {InvalidExportFormatError} for a non-object, wrong `format`,
@@ -75,7 +100,7 @@ const MIGRATIONS: Readonly<Record<number, EnvelopeMigration>> = {};
  * @throws {UnsupportedExportVersionError} when `version` is newer than
  *   {@link CURRENT_EXPORT_ENVELOPE_VERSION}.
  */
-export function migrateExport(input: unknown): ExportEnvelopeV1 {
+export function migrateExport(input: unknown): ExportEnvelopeV2 {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     throw new InvalidExportFormatError('the file does not contain a JSON object.');
   }
@@ -100,11 +125,10 @@ export function migrateExport(input: unknown): ExportEnvelopeV1 {
   while (workingVersion < CURRENT_EXPORT_ENVELOPE_VERSION) {
     const migrate = MIGRATIONS[workingVersion];
     if (!migrate) {
-      // Unreachable today (MIGRATIONS is empty and the loop can only run
-      // when CURRENT_EXPORT_ENVELOPE_VERSION > 1, which it isn't yet), but a
-      // real, readable failure mode for the day a version gap opens up
-      // rather than a version-numbered app forever assuming every
-      // predecessor added a migration.
+      // A real, readable failure mode for the day a version gap opens up -
+      // a future v3+ file whose `fromVersion` has no entry here - rather
+      // than a version-numbered app forever assuming every predecessor
+      // added a migration.
       throw new InvalidExportFormatError(
         `no migration path from backup version ${workingVersion} to ${CURRENT_EXPORT_ENVELOPE_VERSION}.`,
       );
@@ -113,7 +137,7 @@ export function migrateExport(input: unknown): ExportEnvelopeV1 {
     workingVersion += 1;
   }
 
-  const result = exportEnvelopeV1Schema.safeParse(working);
+  const result = exportEnvelopeV2Schema.safeParse(working);
   if (!result.success) {
     throw new InvalidExportFormatError(summarizeZodIssues(result.error.issues));
   }

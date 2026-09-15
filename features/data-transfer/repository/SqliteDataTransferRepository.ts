@@ -5,12 +5,17 @@ import { boolFromSql, boolToSql, jsonFromSql, jsonToSql } from '@/repositories/m
 import type { ExerciseMuscleRef } from '@/features/exercise-library';
 import { computeSessionTotals } from '@/features/workout-logging';
 import type { SessionStatus, SetType } from '@/features/workout-logging';
+import type { GoalType, ReminderType, ReminderResponseValue } from '@/features/daily-goals';
 import { foldNameForMatch } from '../domain/csvImportGrouping';
 import type { CsvSetRowInput } from '../domain/csvRowMapper';
 import type { ExportCounts, DataTransferRepository } from './DataTransferRepository';
 import type {
   ExportBodyMetric,
   ExportCustomExercise,
+  ExportDailyGoal,
+  ExportDailyGoalEntry,
+  ExportDailyReminder,
+  ExportDailyReminderResponse,
   ExportExerciseUserData,
   ExportExerciseVideo,
   ExportPersonalRecord,
@@ -243,6 +248,54 @@ interface ProgressPhotoRow {
   created_at: number;
   updated_at: number;
   deleted_at: number | null;
+}
+
+interface DailyGoalRow {
+  id: string;
+  name: string;
+  icon: string | null;
+  goal_type: GoalType;
+  target_value: number | null;
+  unit: string | null;
+  active_weekdays: number;
+  is_enabled: number;
+  sort_order: number;
+  created_at: number;
+  updated_at: number;
+  deleted_at: number | null;
+}
+
+interface DailyGoalEntryRow {
+  id: string;
+  goal_id: string;
+  local_date: string;
+  progress_value: number;
+  created_at: number;
+  updated_at: number;
+}
+
+interface DailyReminderRow {
+  id: string;
+  goal_id: string | null;
+  name: string;
+  icon: string | null;
+  is_enabled: number;
+  reminder_type: ReminderType;
+  time_of_day: string | null;
+  interval_minutes: number | null;
+  active_weekdays: number;
+  created_at: number;
+  updated_at: number;
+  deleted_at: number | null;
+}
+
+interface DailyReminderResponseRow {
+  id: string;
+  reminder_id: string;
+  local_date: string;
+  response: ReminderResponseValue;
+  responded_at: number;
+  created_at: number;
 }
 
 /** The flat, already-joined-and-computed row `exportCsvSetRowsBatch`'s SQL produces - column-for-column what `CsvSetRowInput` needs, snake_case. */
@@ -517,6 +570,64 @@ function mapExportProgressPhotoRow(row: ProgressPhotoRow): ExportProgressPhoto {
   };
 }
 
+function mapExportDailyGoalRow(row: DailyGoalRow): ExportDailyGoal {
+  return {
+    id: row.id,
+    name: row.name,
+    icon: row.icon,
+    goalType: row.goal_type,
+    targetValue: row.target_value,
+    unit: row.unit,
+    activeWeekdays: row.active_weekdays,
+    isEnabled: boolFromSql(row.is_enabled),
+    sortOrder: row.sort_order,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  };
+}
+
+function mapExportDailyGoalEntryRow(row: DailyGoalEntryRow): ExportDailyGoalEntry {
+  return {
+    id: row.id,
+    goalId: row.goal_id,
+    localDate: row.local_date,
+    progressValue: row.progress_value,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapExportDailyReminderRow(row: DailyReminderRow): ExportDailyReminder {
+  return {
+    id: row.id,
+    goalId: row.goal_id,
+    name: row.name,
+    icon: row.icon,
+    isEnabled: boolFromSql(row.is_enabled),
+    reminderType: row.reminder_type,
+    timeOfDay: row.time_of_day,
+    intervalMinutes: row.interval_minutes,
+    activeWeekdays: row.active_weekdays,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  };
+}
+
+function mapExportDailyReminderResponseRow(
+  row: DailyReminderResponseRow,
+): ExportDailyReminderResponse {
+  return {
+    id: row.id,
+    reminderId: row.reminder_id,
+    localDate: row.local_date,
+    response: row.response,
+    respondedAt: row.responded_at,
+    createdAt: row.created_at,
+  };
+}
+
 function mapCsvJoinedRow(row: CsvJoinedRow): CsvSetRowInput {
   return {
     localDate: row.local_date,
@@ -737,6 +848,30 @@ export class SqliteDataTransferRepository implements DataTransferRepository {
   async exportProgressPhotos(tx?: SqlExecutor): Promise<ExportProgressPhoto[]> {
     const rows = await this.executor(tx).select<ProgressPhotoRow>('SELECT * FROM progress_photo');
     return rows.map(mapExportProgressPhotoRow);
+  }
+
+  async exportDailyGoals(tx?: SqlExecutor): Promise<ExportDailyGoal[]> {
+    const rows = await this.executor(tx).select<DailyGoalRow>('SELECT * FROM daily_goal');
+    return rows.map(mapExportDailyGoalRow);
+  }
+
+  async exportDailyGoalEntries(tx?: SqlExecutor): Promise<ExportDailyGoalEntry[]> {
+    const rows = await this.executor(tx).select<DailyGoalEntryRow>(
+      'SELECT * FROM daily_goal_entry',
+    );
+    return rows.map(mapExportDailyGoalEntryRow);
+  }
+
+  async exportDailyReminders(tx?: SqlExecutor): Promise<ExportDailyReminder[]> {
+    const rows = await this.executor(tx).select<DailyReminderRow>('SELECT * FROM daily_reminder');
+    return rows.map(mapExportDailyReminderRow);
+  }
+
+  async exportDailyReminderResponses(tx?: SqlExecutor): Promise<ExportDailyReminderResponse[]> {
+    const rows = await this.executor(tx).select<DailyReminderResponseRow>(
+      'SELECT * FROM daily_reminder_response',
+    );
+    return rows.map(mapExportDailyReminderResponseRow);
   }
 
   // --- export: large tables, batched/streamed -----------------------------
@@ -1190,6 +1325,120 @@ export class SqliteDataTransferRepository implements DataTransferRepository {
     return tx ? runner(tx) : this.deps.db.transaction(runner);
   }
 
+  async upsertDailyGoal(goal: ExportDailyGoal, tx?: SqlExecutor): Promise<void> {
+    const runner = async (t: SqlExecutor): Promise<void> => {
+      await this.upsertRow(
+        'daily_goal',
+        'id',
+        goal.id,
+        {
+          name: goal.name,
+          icon: goal.icon,
+          goal_type: goal.goalType,
+          target_value: goal.targetValue,
+          unit: goal.unit,
+          active_weekdays: goal.activeWeekdays,
+          is_enabled: boolToSql(goal.isEnabled),
+          sort_order: goal.sortOrder,
+          created_at: goal.createdAt,
+          updated_at: goal.updatedAt,
+          deleted_at: goal.deletedAt,
+        },
+        t,
+      );
+    };
+    return tx ? runner(tx) : this.deps.db.transaction(runner);
+  }
+
+  /**
+   * See {@link DataTransferRepository.upsertDailyGoalEntry}'s own doc comment
+   * for why this targets the `(goal_id, local_date)` composite key rather
+   * than reusing `upsertRow` - same shape as
+   * `SqliteDailyGoalRepository.upsertEntryForToday`'s own `ON
+   * CONFLICT(goal_id, local_date)`, except "newer `updated_at` wins" replaces
+   * that method's unconditional overwrite, matching every other merge-mode
+   * writer in this repository.
+   */
+  async upsertDailyGoalEntry(entry: ExportDailyGoalEntry, tx?: SqlExecutor): Promise<void> {
+    const runner = async (t: SqlExecutor): Promise<void> => {
+      await t.run(
+        `INSERT INTO daily_goal_entry (id, goal_id, local_date, progress_value, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(goal_id, local_date) DO UPDATE SET
+           progress_value = excluded.progress_value,
+           updated_at = excluded.updated_at
+         WHERE excluded.updated_at > daily_goal_entry.updated_at`,
+        [
+          entry.id,
+          entry.goalId,
+          entry.localDate,
+          entry.progressValue,
+          entry.createdAt,
+          entry.updatedAt,
+        ],
+      );
+    };
+    return tx ? runner(tx) : this.deps.db.transaction(runner);
+  }
+
+  async upsertDailyReminder(reminder: ExportDailyReminder, tx?: SqlExecutor): Promise<void> {
+    const runner = async (t: SqlExecutor): Promise<void> => {
+      await this.upsertRow(
+        'daily_reminder',
+        'id',
+        reminder.id,
+        {
+          goal_id: reminder.goalId,
+          name: reminder.name,
+          icon: reminder.icon,
+          is_enabled: boolToSql(reminder.isEnabled),
+          reminder_type: reminder.reminderType,
+          time_of_day: reminder.timeOfDay,
+          interval_minutes: reminder.intervalMinutes,
+          active_weekdays: reminder.activeWeekdays,
+          created_at: reminder.createdAt,
+          updated_at: reminder.updatedAt,
+          deleted_at: reminder.deletedAt,
+        },
+        t,
+      );
+    };
+    return tx ? runner(tx) : this.deps.db.transaction(runner);
+  }
+
+  /**
+   * See {@link DataTransferRepository.upsertDailyReminderResponse}'s own doc
+   * comment. Targets the `(reminder_id, local_date)` composite key - same
+   * shape as `SqliteDailyReminderRepository.recordResponse`'s own `ON
+   * CONFLICT(reminder_id, local_date)` - and uses `responded_at` (not
+   * `updated_at`, which this table has none of) as the "newer wins"
+   * comparator.
+   */
+  async upsertDailyReminderResponse(
+    response: ExportDailyReminderResponse,
+    tx?: SqlExecutor,
+  ): Promise<void> {
+    const runner = async (t: SqlExecutor): Promise<void> => {
+      await t.run(
+        `INSERT INTO daily_reminder_response (id, reminder_id, local_date, response, responded_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(reminder_id, local_date) DO UPDATE SET
+           response = excluded.response,
+           responded_at = excluded.responded_at
+         WHERE excluded.responded_at > daily_reminder_response.responded_at`,
+        [
+          response.id,
+          response.reminderId,
+          response.localDate,
+          response.response,
+          response.respondedAt,
+          response.createdAt,
+        ],
+      );
+    };
+    return tx ? runner(tx) : this.deps.db.transaction(runner);
+  }
+
   // --- import: replace mode ------------------------------------------------
 
   async purgeAllUserData(tx?: SqlExecutor): Promise<void> {
@@ -1210,6 +1459,10 @@ export class SqliteDataTransferRepository implements DataTransferRepository {
       await t.run("DELETE FROM exercise_video WHERE source = 'user'");
       await t.run('DELETE FROM body_metric_entry');
       await t.run('DELETE FROM progress_photo');
+      await t.run('DELETE FROM daily_reminder_response');
+      await t.run('DELETE FROM daily_goal_entry');
+      await t.run('DELETE FROM daily_reminder');
+      await t.run('DELETE FROM daily_goal');
       await t.run('DELETE FROM app_setting');
       // user_profile is deliberately never deleted - see this interface
       // method's own doc comment.

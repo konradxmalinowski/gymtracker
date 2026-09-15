@@ -24,6 +24,13 @@ import { RECORD_TYPES, WEIGHT_AT_REPS_BUCKETS } from '@/features/records';
 import { BODY_METRIC_TYPES } from '@/features/body-metrics';
 import { EXPORT_FORMAT, CURRENT_EXPORT_ENVELOPE_VERSION } from '../types/ExportEnvelope';
 
+// `daily-goals` exports its `GoalType`/`ReminderType`/`ReminderResponseValue`
+// unions as plain string-literal types, not `as const` arrays (unlike
+// `SET_TYPES`/`RECORD_TYPES`/`BODY_METRIC_TYPES` above) - there is nothing to
+// import for `z.enum` here, so the literal members are spelled out inline,
+// the same way `exportProfileSchema`'s own `sex` field already does for
+// `ProfileSex`.
+
 // --- profile / settings --------------------------------------------------
 
 export const exportProfileSchema = z.object({
@@ -267,6 +274,56 @@ export const exportProgressPhotoSchema = z.object({
   deletedAt: z.number().nullable(),
 });
 
+// --- daily goals / reminders (envelope v2) ---------------------------------
+
+export const exportDailyGoalSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  icon: z.string().nullable(),
+  goalType: z.enum(['boolean', 'counter', 'numeric']),
+  targetValue: z.number().nullable(),
+  unit: z.string().nullable(),
+  activeWeekdays: z.number(),
+  isEnabled: z.boolean(),
+  sortOrder: z.number(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+  deletedAt: z.number().nullable(),
+});
+
+export const exportDailyGoalEntrySchema = z.object({
+  id: z.string(),
+  goalId: z.string(),
+  localDate: z.string(),
+  progressValue: z.number(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
+export const exportDailyReminderSchema = z.object({
+  id: z.string(),
+  goalId: z.string().nullable(),
+  name: z.string(),
+  icon: z.string().nullable(),
+  isEnabled: z.boolean(),
+  reminderType: z.enum(['scheduled', 'interval']),
+  timeOfDay: z.string().nullable(),
+  intervalMinutes: z.number().nullable(),
+  activeWeekdays: z.number(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+  deletedAt: z.number().nullable(),
+});
+
+export const exportDailyReminderResponseSchema = z.object({
+  id: z.string(),
+  reminderId: z.string(),
+  localDate: z.string(),
+  response: z.enum(['done', 'not_done']),
+  respondedAt: z.number(),
+  createdAt: z.number(),
+});
+
 // --- the full envelope ------------------------------------------------
 
 export const exportEnvelopeDataSchema = z.object({
@@ -280,17 +337,21 @@ export const exportEnvelopeDataSchema = z.object({
   personalRecords: z.array(exportPersonalRecordSchema),
   bodyMetrics: z.array(exportBodyMetricSchema),
   progressPhotos: z.array(exportProgressPhotoSchema),
+  dailyGoals: z.array(exportDailyGoalSchema),
+  dailyGoalEntries: z.array(exportDailyGoalEntrySchema),
+  dailyReminders: z.array(exportDailyReminderSchema),
+  dailyReminderResponses: z.array(exportDailyReminderResponseSchema),
 });
 
 /**
- * The full v1 envelope. `format`/`version` are `z.literal`s, not `z.enum`s -
+ * The full v2 envelope. `format`/`version` are `z.literal`s, not `z.enum`s -
  * this schema only ever validates a file `migrateExport.ts` has already
- * confirmed is `version === 1` (or upgraded to it); a mismatched literal here
+ * confirmed is `version === 2` (or upgraded to it); a mismatched literal here
  * is a defensive double-check, not the primary format/version gate (that
  * gate is `migrateExport.ts`'s own explicit checks, which run first and
  * produce a more specific error message than a generic Zod issue would).
  */
-export const exportEnvelopeV1Schema = z.object({
+export const exportEnvelopeV2Schema = z.object({
   format: z.literal(EXPORT_FORMAT),
   version: z.literal(CURRENT_EXPORT_ENVELOPE_VERSION),
   exportedAt: z.number(),

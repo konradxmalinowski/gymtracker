@@ -20,10 +20,10 @@ const TONE_STYLE: Record<
 
 const SIZE_STYLE: Record<
   BadgeSize,
-  { height: number; paddingHorizontal: number; textVariant: 'caption' | 'footnote' }
+  { minHeight: number; paddingHorizontal: number; textVariant: 'caption' | 'footnote' }
 > = {
-  sm: { height: 20, paddingHorizontal: space[2], textVariant: 'caption' },
-  md: { height: 24, paddingHorizontal: space[2], textVariant: 'footnote' },
+  sm: { minHeight: 20, paddingHorizontal: space[2], textVariant: 'caption' },
+  md: { minHeight: 24, paddingHorizontal: space[2], textVariant: 'footnote' },
 };
 
 /** A non-interactive label pill - `accessibilityRole="text"` so it's read as a single unit, not tapped as a control. */
@@ -43,7 +43,7 @@ export function Badge({
     <View
       accessibilityRole="text"
       style={{
-        height: sizeStyle.height,
+        minHeight: sizeStyle.minHeight,
         paddingHorizontal: sizeStyle.paddingHorizontal,
         borderRadius: radius.full,
         backgroundColor: toneStyle.background,

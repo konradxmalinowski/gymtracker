@@ -38,6 +38,10 @@ const ENTITY_ROWS: readonly {
   { key: 'sessions', labelKey: 'dataTransfer.entities.sessions' },
   { key: 'bodyMetrics', labelKey: 'dataTransfer.entities.bodyMetrics' },
   { key: 'progressPhotos', labelKey: 'dataTransfer.entities.progressPhotos' },
+  { key: 'dailyGoals', labelKey: 'dataTransfer.entities.dailyGoals' },
+  { key: 'dailyGoalEntries', labelKey: 'dataTransfer.entities.dailyGoalEntries' },
+  { key: 'dailyReminders', labelKey: 'dataTransfer.entities.dailyReminders' },
+  { key: 'dailyReminderResponses', labelKey: 'dataTransfer.entities.dailyReminderResponses' },
 ];
 
 /**

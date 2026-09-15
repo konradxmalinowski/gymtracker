@@ -210,7 +210,7 @@ function RemindersControls({
             min={0}
             max={23}
             disabled={!enabled}
-            accessibilityLabel={t('remindersSettings.timeAccessibilityLabel')}
+            accessibilityLabel={t('remindersSettings.timeHourAccessibilityLabel')}
             testID="reminders-settings-hour"
           />
           <Text variant="title3" color="secondary">
@@ -223,7 +223,7 @@ function RemindersControls({
             min={0}
             max={55}
             disabled={!enabled}
-            accessibilityLabel={t('remindersSettings.timeAccessibilityLabel')}
+            accessibilityLabel={t('remindersSettings.timeMinuteAccessibilityLabel')}
             testID="reminders-settings-minute"
           />
         </Row>
