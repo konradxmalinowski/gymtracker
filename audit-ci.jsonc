@@ -36,5 +36,69 @@
     // "Patched versions: None" status as GHSA-w3rx-r6r6-pgpr above. Both clear
     // together when image-size publishes a patched release.
     "GHSA-5p2g-fcmc-qvqq",
+
+    // @xmldom/xmldom: 12 High-severity advisories (XML fragment/name/attribute
+    // injection bypassing requireWellFormed, ReDoS, quadratic-time/memory
+    // parsing). Two further xmldom advisories surfaced by npm audit in this
+    // dependency chain, GHSA-6gmq-8vp8-gcm6 and GHSA-6h8r-xr42-gp59, are
+    // Moderate severity (confirmed via `npm audit --json`'s per-advisory
+    // "severity" field) and are omitted here on purpose - they never trip
+    // this file's `"high": true` gate, so allowlisting them would be a stale,
+    // unnecessary entry from day one. Reachability verified 2026-09-15:
+    // @xmldom/xmldom is pulled in only via expo-sharing -> @expo/config-plugins
+    // -> xcode -> simple-plist -> plist (and expo-sharing -> @expo/plist
+    // directly). Both @expo/config-plugins
+    // and @expo/plist are used solely by expo-sharing's app.plugin.js
+    // (plugin/build/withShareExtension.js), which @expo/config-plugins invokes
+    // only during `expo prebuild` / native build generation on the developer
+    // machine to edit Info.plist/entitlements with developer-authored config -
+    // never end-user-supplied XML. Confirmed expo-sharing's runtime entry point
+    // (package.json "main": "build/index.js", what Metro actually bundles when
+    // the app does `import * as Sharing from 'expo-sharing'`) only re-exports
+    // useIncomingShare/Sharing and has no reference to config-plugins/plist/
+    // xmldom anywhere in build/index.js - the vulnerable code never reaches the
+    // shipped JS bundle. No fix available: npm audit reports fixAvailable but
+    // the fix is a major/breaking bump of the plist/@expo/config-plugins chain,
+    // not something this project controls directly (transitive via expo-sharing).
+    // Revisit when @expo/config-plugins or @expo/plist bumps their xmldom range
+    // upstream, or when npm audit stops reporting these as unresolved.
+    "GHSA-27p8-2357-5qqv",
+    "GHSA-3px3-54cx-rmw9",
+    "GHSA-4w3w-2rp5-g8jm",
+    "GHSA-6mj3-qw4j-hgrw",
+    "GHSA-8344-3jmq-59r6",
+    "GHSA-93r5-fhx6-vmg9",
+    "GHSA-965w-775f-mr7g",
+    "GHSA-c7q8-3ch8-vqpv",
+    "GHSA-g53g-w8rj-fmg7",
+    "GHSA-vr34-hp96-76pp",
+    "GHSA-w2rr-34g9-rvrj",
+    "GHSA-x4fp-j954-r2f4",
+
+    // fast-uri: 4 High-severity advisories (host confusion / SSRF via IDN,
+    // IPv6, and percent-encoding normalization bugs). Reachability verified
+    // 2026-09-15: fast-uri is pulled in only via @commitlint/cli ->
+    // @commitlint/load -> @commitlint/config-validator -> ajv -> fast-uri. This
+    // is the commit-msg git hook's linting chain (commitlint.config.js, run by
+    // Husky on `git commit`), never imported by app code and never part of
+    // `npx expo export`'s output bundle. Revisit if commitlint's ajv dependency
+    // bumps past a fast-uri range that resolves these.
+    "GHSA-5jgf-p345-68v8",
+    "GHSA-f65p-4m7j-42xc",
+    "GHSA-fph4-wmhf-6fwf",
+    "GHSA-jqff-g426-hqxp",
+
+    // js-yaml: CPU exhaustion via maxTotalMergeKeys not limiting empty merge
+    // sources (CWE-400). Reachability verified 2026-09-15: every js-yaml
+    // instance in the tree traces to build/dev/lint/test tooling only -
+    // @commitlint/cli (git hook), @react-native/jest-preset ->
+    // babel-plugin-istanbul (Jest coverage instrumentation), eslint's own
+    // config loader, and expo's @expo/cli -> @expo/xcpretty (xcodebuild output
+    // formatting for local builds). None of these are imported by the app's
+    // runtime code or reachable from `expo`'s runtime entry point
+    // (node_modules/expo/src/Expo.ts, which re-exports only expo-modules-core
+    // primitives and has no reference to @expo/cli). Revisit when these
+    // tools bump past the vulnerable js-yaml 3.x/4.x ranges.
+    "GHSA-2883-xcg3-v3hh",
   ],
 }
