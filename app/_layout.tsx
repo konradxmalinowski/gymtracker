@@ -43,6 +43,23 @@ import { color, space } from '@/theme/tokens';
 // predicted for fonts. Migrations + profile query are this phase's job.
 void SplashScreen.preventAutoHideAsync().catch(() => {});
 
+// Without a registered handler, expo-notifications' own documented default
+// is to never present a notification received while the app is foregrounded
+// (confirmed by reading ExpoHandlingDelegate.handleNotification on Android:
+// the foreground branch requires this handler's behavior before it will
+// call NotificationsService.present). Every local notification this app
+// schedules - rest timer, workout reminders, daily-goal reminders - shares
+// this one registration; none of them special-case foreground vs background
+// presentation, so one handler for all of them is correct.
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
 // ADR-0008 "Why TanStack Query at all" - global defaults: nothing external
 // can change local SQLite data, so a stale local read only gets fresher via
 // an explicit mutation invalidating it, never via a timer or a retry.

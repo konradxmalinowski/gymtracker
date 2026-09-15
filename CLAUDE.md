@@ -234,6 +234,9 @@ into `docs/ARCHITECTURE.md` section 9 (cosmetic, non-blocking).
   (`docs/adr/0016-shared-notification-scheduler.md`'s "P17 resolution" addendum).
   All three use disjoint notification-id prefixes and never call
   `cancelAllScheduledNotificationsAsync()`, so they do not conflict today.
+  `app/_layout.tsx` registers a single shared `Notifications.setNotificationHandler()`
+  at boot, right after `SplashScreen.preventAutoHideAsync()`, so all three paths now
+  present correctly even while the app is foregrounded at fire time.
 
 ## i18n
 
@@ -296,18 +299,6 @@ work.
 
 ## Known gaps (tracked, non-blocking)
 
-- **P17's `SCHEDULE_EXACT_ALARM` fix is unverified live on a freshly built APK.**
-  `android.permission.SCHEDULE_EXACT_ALARM` was added to `app.config.ts` to fix
-  scheduled daily-goal reminders silently never firing (root cause: without this
-  permission, `expo-notifications`' `ExpoSchedulingDelegate.setupAlarm()` falls
-  back to an inexact Android alarm, and its `DateTrigger` has zero delivery-delay
-  tolerance before discarding a late notification instead of showing it). The fix
-  is correct by direct inspection of the native conditional it changes, but a
-  fresh build is needed to confirm it live - a `./gradlew assembleDebug` hung
-  indefinitely in the implementing session's sandbox (ruled out: memory, stale
-  Gradle daemon/lock state, network/DNS). A future session with working Gradle
-  tooling should run `npx expo run:android`, schedule a near-future goal-linked
-  reminder, and confirm it fires on time with both action buttons working.
 - **Android 13+ has no in-app path to grant `SCHEDULE_EXACT_ALARM`.** The user
   must separately enable it via Settings > Apps > GymTracker > Alarms & reminders;
   this app has no deep link into that screen yet. Real, scoped UI work for a
