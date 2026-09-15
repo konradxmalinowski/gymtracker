@@ -39,7 +39,9 @@ Badge finding below. Verified live on the `gymtracker_test` Android emulator
 (exercise search) reconfirmed at 30ms against the 50ms budget via the benchmark
 suite, a clean DB-layer pass; NFR-02 (cold start) and NFR-04 (history-list scroll)
 were measured but only on a debug dev-client build on an emulator, not
-representative of production - see Known gaps for both open follow-ups.
+representative of production at the time - a later release-build re-measurement
+(post-P15 known-gaps sweep) confirmed NFR-02 passing; NFR-04 remains open - see
+Known gaps.
 
 Thirteen features total, each with real implementations under `features/`:
 `onboarding`, `profile`, `exercise-library`, `plans`, `workout-logging`,
@@ -303,53 +305,41 @@ work.
   must separately enable it via Settings > Apps > GymTracker > Alarms & reminders;
   this app has no deep link into that screen yet. Real, scoped UI work for a
   future pass.
-- **`data-transfer` (P14) does not yet export/import daily-goals data.** A JSON
-  backup taken today omits `daily_goal`/`daily_goal_entry`/`daily_reminder`/
-  `daily_reminder_response` - extending `DataTransferRepository` for the four
-  P17 tables is open work.
-- **`expo-asset` is not hoisted**, which breaks Jest module resolution for
-  `@expo/vector-icons` inside a rendered RNTL test (nested under
-  `node_modules/expo/node_modules/expo-asset` rather than top-level). Jest-resolver
-  only - confirmed via a successful `expo export` bundle that production/runtime is
-  unaffected. Worked around with a manual mock,
-  `__tests__/__mocks__/vectorIconsMock.tsx`; not fixed at the dependency level.
-- **Deleting an exercise's last remaining set during a historical edit**
-  (`WorkoutHistoryDetailScreen`'s edit mode) leaves that exercise as an empty card
-  instead of auto-removing it. A true fix needs the existing per-set undo toast to
-  become a combined set+exercise undo, not just a call-site change. Documented and
-  deferred with the user's explicit sign-off rather than rushed.
-- **A dev-only "state update on unmounted component" React warning** surfaces
-  occasionally, rooted at `ContextNavigator`/`ExpoRoot`/`App` (framework-level, not
-  attributable to one screen). Harmless, self-clears, will not appear in
-  production. Root call site not isolated; a candidate for a future static sweep
-  rather than a targeted fix.
-- **`ActiveWorkoutBanner` did not appear on Profile's nested "Training
-  calendar"/"Training history" screens** while a workout was minimized, despite
-  working correctly on Plans' nested screens. Low severity (the banner stays
-  reachable via Home and every other tab) - not confirmed as a real bug vs.
-  intentional stack-composition difference, not investigated further.
-- **`RemindersSettingsScreen.tsx`'s hour/minute `StepperField`s share one
-  identical `accessibilityLabel`**, making their Increase/Decrease buttons
-  indistinguishable to a screen reader. The identical bug was found and fixed in
-  `ReminderFormSheetContent.tsx` during the P17 accessibility review, but this
-  older, pre-existing occurrence (outside that review's file scope) was flagged
-  for awareness only, not fixed.
-- **`components/ui/Badge.tsx`'s fixed height (20/24px, `SIZE_STYLE`) could clip
-  its label text at very large accessibility font scales.** Affects
-  `TodayGoalRow`'s completed badge and `PRBadge`. Pre-existing (not introduced by
-  P15's animation pass on either component), found during P15's accessibility
-  audit, low severity, not yet fixed.
-- **NFR-02 (cold start) and NFR-04 (workout-history scroll, 1000+ sessions) are
-  measured but not representative of production.** P15 measured NFR-02 at 1566ms
-  `TotalTime` via `adb shell am start -W` (cold start to the Expo dev-launcher
-  screen, not Hermes-precompiled release bytecode) and NFR-04 via
-  `adb shell dumpsys gfxinfo` over a 500-session seeded fixture (25.11% janky
-  frames on a gentle scroll, 34ms median frame time; 53.12% janky on an
-  aggressive fling, 53ms median), both on the `gymtracker_test` emulator's debug
-  dev-client build - real numbers, but a debug build on an emulator's
-  software-rendered GPU runs substantially slower than a release build on real
-  hardware. Neither NFR is confirmed to pass or fail; a release-build plus
-  real-device re-measurement is open, P16-adjacent work.
+- **A dev-only "state update on unmounted component" React warning was
+  investigated and could not be reproduced or isolated to a call site.** React
+  19 (this project's installed version) removed the classic warning entirely -
+  `setState` on an unmounted function component is now a silent no-op, not a
+  console warning - confirmed by an exhaustive grep of the entire `node_modules`
+  tree finding zero occurrences of the warning text anywhere in the dependency
+  chain. All four real subscription/async-boot sites (`app/_layout.tsx`'s boot
+  chain, `hooks/useAppState.ts`, `useRestTimerTick.ts`, `BottomSheet.tsx`) were
+  re-audited and already guard cleanup correctly. If this recurs on a real
+  device, it is likely React Fabric's similarly-worded but distinct "hasn't
+  mounted yet" render-phase warning, not the classic one - re-transcribe it
+  verbatim from LogBox before investigating further.
+- **NFR-02 (cold start) is confirmed passing on a release build; NFR-04
+  (workout-history scroll, 1000+ sessions) remains open and is structurally
+  difficult to close.** A real release APK (not debug) was built and installed
+  on the `gymtracker_test` emulator; `adb shell am start -W`, run twice after
+  the one-time catalog-seed on first install, measured 686ms and 557ms cold
+  start, both comfortably under the 1.5s budget - Hermes-precompiled bytecode,
+  no dev-mode overhead, a real and representative number. NFR-02 is CONFIRMED
+  PASSING. NFR-04 could not be re-measured on the release build: the
+  large-fixture seeding tool used for the earlier debug-build measurement was
+  temporary `__DEV__`-gated dev tooling (a button on `/dev/db-health`, already
+  reverted), which a release build compiles out entirely - there is no way to
+  seed 500+ synthetic sessions into a release build's database without either
+  shipping dev-tooling in a release build (wrong) or building a separate
+  instrumented release-adjacent variant (out of scope for this pass). The
+  existing debug-build numbers remain the only measurement taken (25.11%
+  janky/34ms median frame time on a gentle scroll, 53.12% janky/53ms median on
+  an aggressive fling), still caveated as debug-build/emulator-not-
+  representative. Closing this out for real needs either a real device test
+  against a real user's accumulated history or a proper instrumented
+  release-variant build pipeline - P16-adjacent infrastructure work, not a
+  quick fix. Zero crashes were observed on the release build across
+  onboarding, Home, and basic navigation (`logcat` FATAL
+  EXCEPTION/AndroidRuntime grep clean).
 
 Two icon-library and `DraggableList`/`SwipeableRow` accessibility-collapse
 concerns tracked in earlier phases were verified false or resolved during P15's

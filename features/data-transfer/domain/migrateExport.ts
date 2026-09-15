@@ -7,8 +7,9 @@
  * `database/migrations/types.ts`) as closely as an envelope-shape upgrade
  * (a pure JS object transform) can mirror a SQL migration runner.
  *
- * v2 is the current version (bumped from v1 by the P17 known-gaps sweep to
- * add the four daily-goals tables); `MIGRATIONS[1]` upgrades a v1 file to v2.
+ * v2 is the current version (bumped from v1 during the post-P15 known-gaps
+ * sweep, to add support for the four daily-goals tables P17 had already added
+ * to the schema); `MIGRATIONS[1]` upgrades a v1 file to v2.
  * A future v3 adds exactly one more entry to `MIGRATIONS` (`2: (v2Object) =>
  * v3Shape`) plus one new Zod schema in `exportEnvelopeSchema.ts` - not a
  * rewrite of this file.
