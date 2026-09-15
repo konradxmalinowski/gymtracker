@@ -1,5 +1,5 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { memo, useState } from 'react';
 import { View } from 'react-native';
 
 import { Column, Row } from '@/components/layout';
@@ -14,6 +14,7 @@ import type {
   WorkoutSet,
 } from '@/features/workout-logging';
 import { PRBadge, type PersonalRecord } from '@/features/records';
+import { useRenderCount } from '@/hooks/useRenderCount';
 import { t } from '@/i18n';
 import { color, radius, space } from '@/theme/tokens';
 
@@ -80,8 +81,15 @@ export interface SetRowProps {
  * this was the approved trade). The expand/collapse trigger moved onto a
  * tap of the set-number/focus control below, so no functionality was lost,
  * just relocated.
+ *
+ * P15 (performance hardening): wrapped in `React.memo` with the default
+ * shallow prop comparison - every prop `SessionExerciseCard` passes down is
+ * already stable render-over-render for an untouched set (its own
+ * memoized `orderedSets`/`displayNumbers`, and the screen-level callbacks
+ * it forwards straight through unchanged), so this stops an edit to one set
+ * from re-rendering every other set in the same card.
  */
-export function SetRow({
+export const SetRow = memo(function SetRow({
   set,
   displayNumber,
   isFocused,
@@ -95,6 +103,8 @@ export function SetRow({
   onAddDropSet,
   testID,
 }: SetRowProps) {
+  useRenderCount(`SetRow:${set.id}`);
+
   const [expanded, setExpanded] = useState(false);
   const isDropSegment = displayNumber.isDropSegment;
 
@@ -355,4 +365,4 @@ export function SetRow({
       ) : null}
     </View>
   );
-}
+});

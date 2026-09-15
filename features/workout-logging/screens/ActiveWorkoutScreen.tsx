@@ -1,7 +1,7 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, View } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, type ListRenderItem } from '@shopify/flash-list';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -148,6 +148,226 @@ export function ActiveWorkoutScreen() {
     return () => clearTimeout(timeout);
   }, [latestPR]);
 
+  // --- Stable, identity-based mutation callbacks (P15: FlashList tuning +
+  // memoization audit) ------------------------------------------------------
+  //
+  // Every callback below reads the session fresh via
+  // `useActiveWorkoutStore.getState()` rather than closing over this render's
+  // `session` - the store's own `session` object gets a new top-level
+  // identity on every mutation (`patchSet`/`upsertSet`/... each return a new
+  // `{ ...state.session, exercises: [...] }`), so a callback that closed
+  // over it directly would itself get a new identity on every keystroke-
+  // driven render, exactly the instability this pass exists to remove.
+  // Reading through `getState()` at call time - the same pattern every hook
+  // in `useSetMutations.ts`/`useExerciseMutations.ts` already uses - keeps
+  // these `useCallback`s referentially stable for the entire lifetime of the
+  // mutation hooks they close over (`reorderExercises`/`removeExercise`/
+  // `setExerciseNote`/`appendSet`/`addDropSet`, each already stable per its
+  // own hook's `useCallback([sessionService], ...)`). Declared before the
+  // `isHydrated`/`session` early returns below, per the Rules of Hooks -
+  // every one of them is written to tolerate a `null` session since they can
+  // run on a render where `session` isn't hydrated yet, even though in
+  // practice they're only ever invoked from an already-rendered row.
+  const handleMoveExercise = useCallback(
+    (exerciseId: string, direction: -1 | 1) => {
+      const currentSession = useActiveWorkoutStore.getState().session;
+      if (!currentSession) {
+        return;
+      }
+      const index = currentSession.exercises.findIndex((candidate) => candidate.id === exerciseId);
+      if (index === -1) {
+        return;
+      }
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= currentSession.exercises.length) {
+        return;
+      }
+      const orderedIds = currentSession.exercises.map((candidate) => candidate.id);
+      const [moved] = orderedIds.splice(index, 1);
+      if (moved === undefined) {
+        return;
+      }
+      orderedIds.splice(nextIndex, 0, moved);
+      reorderExercises(currentSession.id, orderedIds);
+    },
+    [reorderExercises],
+  );
+
+  const handleRemoveExercise = useCallback(
+    (exerciseId: string) => {
+      const currentSession = useActiveWorkoutStore.getState().session;
+      const exercise = currentSession?.exercises.find((candidate) => candidate.id === exerciseId);
+      if (exercise) {
+        removeExercise(exercise);
+      }
+    },
+    [removeExercise],
+  );
+
+  const handleUpdateExerciseNote = useCallback(
+    (exerciseId: string, note: string | null) => {
+      void setExerciseNote(exerciseId, note);
+    },
+    [setExerciseNote],
+  );
+
+  const handleAddSetForExercise = useCallback(
+    async (sessionExerciseId: string) => {
+      setAppendingExerciseId(sessionExerciseId);
+      await appendSet(sessionExerciseId);
+      setAppendingExerciseId(null);
+    },
+    [appendSet],
+  );
+
+  const handleFocusSet = useCallback(
+    (setId: string) => {
+      setFocusedSetId(setId);
+      const currentSession = useActiveWorkoutStore.getState().session;
+      const owningExercise = currentSession?.exercises.find((exercise) =>
+        exercise.sets.some((candidate) => candidate.id === setId),
+      );
+      syncFocusedExercise(owningExercise?.id ?? null);
+    },
+    [setFocusedSetId, syncFocusedExercise],
+  );
+
+  const handleAddDropSet = useCallback(
+    (parentSetId: string) => {
+      void addDropSet(parentSetId);
+    },
+    [addDropSet],
+  );
+
+  // A per-exercise-id map of the five callbacks `SessionExerciseCard` needs
+  // (`onMoveUp`/`onMoveDown`/`onRemove`/`onUpdateNote`/`onAddSet`), rebuilt
+  // only when the *set* of exercise ids actually changes (add/remove/reorder)
+  // - never on a keystroke, a set completion, or any other edit that leaves
+  // the exercise list itself untouched. This is what lets an unrelated
+  // exercise's `SessionExerciseCard` see the exact same callback props across
+  // such a render, which is what lets `renderItem`'s own memoization (below)
+  // skip re-invoking for that row entirely - see
+  // `node_modules/@shopify/flash-list/dist/recyclerview/ViewHolder.js`'s own
+  // `useMemo(() => renderItem(...), [item, extraData, target, renderItem])`.
+  // Keyed on `exerciseIdsKey` (a joined string of ids), not the `exercises`
+  // array itself, precisely so a keystroke-driven `session` replacement -
+  // which always produces a new `exercises` array reference even when no
+  // exercise was added/removed/reordered - does not defeat this memo.
+  const exerciseIdsKey = (session?.exercises ?? []).map((exercise) => exercise.id).join(' ');
+  const exerciseHandlersById = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        onMoveUp: () => void;
+        onMoveDown: () => void;
+        onRemove: () => void;
+        onUpdateNote: (note: string | null) => void;
+        onAddSet: () => void;
+      }
+    >();
+    for (const exercise of session?.exercises ?? []) {
+      map.set(exercise.id, {
+        onMoveUp: () => handleMoveExercise(exercise.id, -1),
+        onMoveDown: () => handleMoveExercise(exercise.id, 1),
+        onRemove: () => handleRemoveExercise(exercise.id),
+        onUpdateNote: (note) => handleUpdateExerciseNote(exercise.id, note),
+        onAddSet: () => void handleAddSetForExercise(exercise.id),
+      });
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately keyed on `exerciseIdsKey` (the id list's content), not `session`/`session.exercises` (a fresh reference on every keystroke-driven mutation) - see this block's own comment above.
+  }, [
+    exerciseIdsKey,
+    handleMoveExercise,
+    handleRemoveExercise,
+    handleUpdateExerciseNote,
+    handleAddSetForExercise,
+  ]);
+
+  // Recreated only when `focusedSetId`/`latestPR` actually change, not on
+  // every render - an inline `{ focusedSetId, latestPR }` literal here would
+  // be a fresh object every render regardless of whether either value
+  // changed, which would defeat `renderItem`'s own memoization below just as
+  // completely as an unstable `renderItem` reference would (FlashList's
+  // `ViewHolder` treats `extraData` and `renderItem` as two independent,
+  // reference-compared props - see the comment above `exerciseHandlersById`).
+  const extraData = useMemo(() => ({ focusedSetId, latestPR }), [focusedSetId, latestPR]);
+
+  const exerciseCount = session?.exercises.length ?? 0;
+
+  // Hoisted out of the `<FlashList>` JSX and wrapped in `useCallback` -
+  // CLAUDE.md's own tracked "Known gap": as an inline arrow function, this
+  // was a fresh reference on every `ActiveWorkoutScreen` render, which is
+  // the actual reason `extraData` wasn't load-bearing yet (FlashList's
+  // `ViewHolder` bails on calling `renderItem` only when `item`/`extraData`/
+  // `target`/`renderItem` are ALL referentially unchanged - an unstable
+  // `renderItem` alone was enough to force every cell to re-render on every
+  // parent render, `extraData` or not). With `renderItem` and `extraData`
+  // both now stable, and `exerciseHandlersById` giving every untouched
+  // exercise the exact same callback props render over render, an unrelated
+  // card no longer repaints when a sibling card's own set/field changes.
+  const renderItem: ListRenderItem<SessionExercise> = useCallback(
+    ({ item: exercise, index }) => {
+      const handlers = exerciseHandlersById.get(exercise.id);
+      if (!handlers) {
+        // Cannot happen in practice - `exerciseHandlersById` is built from
+        // the same `session.exercises` FlashList's own `data` prop is - but
+        // `Map#get` is typed to return `undefined`, so this stays type-safe
+        // rather than asserting past it.
+        return null;
+      }
+      const card = (
+        <SessionExerciseCard
+          exercise={exercise}
+          canMoveUp={index > 0}
+          canMoveDown={index < exerciseCount - 1}
+          focusedSetId={focusedSetId}
+          latestPR={latestPR}
+          onMoveUp={handlers.onMoveUp}
+          onMoveDown={handlers.onMoveDown}
+          onRemove={handlers.onRemove}
+          onUpdateNote={handlers.onUpdateNote}
+          onFocusSet={handleFocusSet}
+          onCompleteSet={completeSet}
+          onUncompleteSet={uncompleteSet}
+          onUpdateSet={updateSet}
+          onDeleteSet={deleteSet}
+          onAddDropSet={handleAddDropSet}
+          onAddSet={handlers.onAddSet}
+          isAddingSet={appendingExerciseId === exercise.id}
+          testID={`session-exercise-card-${exercise.id}`}
+        />
+      );
+      return (
+        <View style={{ marginBottom: space[3] }}>
+          {exercise.supersetGroup !== null ? (
+            <SupersetBracket
+              group={exercise.supersetGroup}
+              testID={`superset-bracket-${exercise.supersetGroup}-${exercise.id}`}
+            >
+              {card}
+            </SupersetBracket>
+          ) : (
+            card
+          )}
+        </View>
+      );
+    },
+    [
+      exerciseCount,
+      exerciseHandlersById,
+      focusedSetId,
+      latestPR,
+      appendingExerciseId,
+      handleFocusSet,
+      completeSet,
+      uncompleteSet,
+      updateSet,
+      deleteSet,
+      handleAddDropSet,
+    ],
+  );
+
   if (!isHydrated) {
     return (
       <View style={{ flex: 1, backgroundColor: color.background, padding: space[4] }}>
@@ -178,9 +398,12 @@ export function ActiveWorkoutScreen() {
   // above by the `if (!session)` guard) is deliberate: TypeScript's
   // control-flow narrowing does not carry into function declarations defined
   // later in this same component body (`handleDiscardRequest`,
-  // `handleFocusSet`, `moveExercise` below), so every closure that touches
-  // the session reads `activeSession`, which is non-null from the moment
-  // it's declared.
+  // `handleOpenRestTimerSettings` below), so every closure that touches the
+  // session reads `activeSession`, which is non-null from the moment it's
+  // declared. The stable, identity-based mutation callbacks above
+  // (`handleMoveExercise` etc.) don't need this - they read the session
+  // fresh via `useActiveWorkoutStore.getState()` at call time instead, per
+  // their own comment.
   const activeSession = session;
   const focusedSet = findSet(activeSession.exercises, focusedSetId);
   const alreadySelectedIds = activeSession.exercises.map((exercise) => exercise.exerciseId);
@@ -202,20 +425,6 @@ export function ActiveWorkoutScreen() {
     }
   }
 
-  function handleFocusSet(setId: string) {
-    setFocusedSetId(setId);
-    const owningExercise = activeSession.exercises.find((exercise) =>
-      exercise.sets.some((candidate) => candidate.id === setId),
-    );
-    syncFocusedExercise(owningExercise?.id ?? null);
-  }
-
-  async function handleAddSet(sessionExerciseId: string) {
-    setAppendingExerciseId(sessionExerciseId);
-    await appendSet(sessionExerciseId);
-    setAppendingExerciseId(null);
-  }
-
   function handleOpenRestTimerSettings() {
     const targetId =
       runningTimerSessionExerciseId ?? activeSession.activeState.focusedSessionExerciseId;
@@ -223,20 +432,6 @@ export function ActiveWorkoutScreen() {
       return;
     }
     router.push(routes.modals.restTimerSettings(targetId));
-  }
-
-  function moveExercise(index: number, direction: -1 | 1) {
-    const nextIndex = index + direction;
-    if (nextIndex < 0 || nextIndex >= activeSession.exercises.length) {
-      return;
-    }
-    const orderedIds = activeSession.exercises.map((exercise) => exercise.id);
-    const [moved] = orderedIds.splice(index, 1);
-    if (moved === undefined) {
-      return;
-    }
-    orderedIds.splice(nextIndex, 0, moved);
-    reorderExercises(activeSession.id, orderedIds);
   }
 
   return (
@@ -278,51 +473,8 @@ export function ActiveWorkoutScreen() {
             onScroll={(event) => syncScrollOffset(event.nativeEvent.contentOffset.y)}
             scrollEventThrottle={250}
             contentContainerStyle={{ padding: space[4] }}
-            // `focusedSetId`/`latestPR` are read from closures inside
-            // `renderItem`, not from `data` itself - FlashList (like
-            // FlatList) only re-renders a cell when the cell's own item
-            // reference or `extraData` changes, so without this a P8 PR
-            // badge (or the existing focus highlight) could go stale until
-            // some unrelated `data` change happened to also touch that row.
-            extraData={{ focusedSetId, latestPR }}
-            renderItem={({ item: exercise, index }) => {
-              const card = (
-                <SessionExerciseCard
-                  exercise={exercise}
-                  canMoveUp={index > 0}
-                  canMoveDown={index < activeSession.exercises.length - 1}
-                  focusedSetId={focusedSetId}
-                  latestPR={latestPR}
-                  onMoveUp={() => moveExercise(index, -1)}
-                  onMoveDown={() => moveExercise(index, 1)}
-                  onRemove={() => removeExercise(exercise)}
-                  onUpdateNote={(note) => void setExerciseNote(exercise.id, note)}
-                  onFocusSet={handleFocusSet}
-                  onCompleteSet={completeSet}
-                  onUncompleteSet={uncompleteSet}
-                  onUpdateSet={updateSet}
-                  onDeleteSet={deleteSet}
-                  onAddDropSet={(parentSetId) => void addDropSet(parentSetId)}
-                  onAddSet={() => void handleAddSet(exercise.id)}
-                  isAddingSet={appendingExerciseId === exercise.id}
-                  testID={`session-exercise-card-${exercise.id}`}
-                />
-              );
-              return (
-                <View style={{ marginBottom: space[3] }}>
-                  {exercise.supersetGroup !== null ? (
-                    <SupersetBracket
-                      group={exercise.supersetGroup}
-                      testID={`superset-bracket-${exercise.supersetGroup}-${exercise.id}`}
-                    >
-                      {card}
-                    </SupersetBracket>
-                  ) : (
-                    card
-                  )}
-                </View>
-              );
-            }}
+            extraData={extraData}
+            renderItem={renderItem}
             testID="active-workout-exercise-list"
           />
         )}

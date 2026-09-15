@@ -293,10 +293,15 @@ export const useActiveWorkoutStore = create<ActiveWorkoutStore>((set) => ({
       return {
         session: {
           ...state.session,
-          exercises: state.session.exercises.map((exercise) => ({
-            ...exercise,
-            sets: exercise.sets.filter((candidate) => candidate.id !== setId),
-          })),
+          exercises: state.session.exercises.map((exercise) => {
+            if (!exercise.sets.some((candidate) => candidate.id === setId)) {
+              return exercise;
+            }
+            return {
+              ...exercise,
+              sets: exercise.sets.filter((candidate) => candidate.id !== setId),
+            };
+          }),
         },
       };
     }),
