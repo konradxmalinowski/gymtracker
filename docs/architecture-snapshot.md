@@ -33,10 +33,10 @@ foundation), P3 (onboarding, profile and core settings), P4 (exercise library), 
 (workout plans), P6 (workout logging), P7 (rest timer), P8 (progressive overload
 and personal records), P9 (workout summary and history), P10 (home dashboard), P11
 (statistics and charts), P12 (training calendar), P13 (body measurements and
-progress photos), P14 (data export and import), and P17 (daily goals and reminders)
-are complete - `docs/ROADMAP.md`'s MVP line closed at P10, and P11-P14 plus P17 are
-the five post-MVP phases shipped so far (P15-P16, performance hardening and release
-engineering, remain unbuilt). `onboarding`, `profile`, `exercise-library`, `plans`,
+progress photos), P14 (data export and import), P17 (daily goals and reminders),
+and P15 (performance hardening and polish) are complete - `docs/ROADMAP.md`'s MVP
+line closed at P10, and P11-P14, P17, and P15 are the six post-MVP phases shipped
+so far (P16, release engineering, remains unbuilt). `onboarding`, `profile`, `exercise-library`, `plans`,
 `workout-logging`, `rest-timer`, `records`, `home`, `statistics`, `calendar`,
 `body-metrics`, `data-transfer`, and `daily-goals` are the thirteen features with
 real implementations (`rest-timer` owns no database table and therefore no
@@ -469,7 +469,7 @@ rest-timer-adjacent writes (see above); `ActiveWorkoutScreen` mounts both `RestT
 carries P8's `recordRepository`/`recordService`/`exerciseHistoryRepository` alongside
 P7's unchanged four-pair shape.
 
-**P13-P17 catch-up (condensed - see `CLAUDE.md` for full detail):** `body-metrics`
+**P13-P17 and P15 catch-up (condensed - see `CLAUDE.md` for full detail):** `body-metrics`
 (P13) shipped bodyweight/circumference/body-fat logging plus progress photos, two
 repository/service pairs (`BodyMetricRepository`, `ProgressPhotoRepository`), and a
 new `services/images/ImageProcessor` abstraction (`expo-image-manipulator`); a
@@ -501,7 +501,25 @@ upstream `expo-sqlite`/FTS5 double-free crash fix and a `SwipeableRow` Worklets
 serialization crash fix) and a routine dependency/security pass. Every phase in this
 window kept the full Jest suite green as its regression gate and shipped its own
 `reports/security-*.md` (P13-P17 all clean, zero critical/high/medium findings) and,
-where UI changed, `reports/accessibility-*.md` review.
+where UI changed, `reports/accessibility-*.md` review. P15 (performance hardening
+and polish, `feat/p15-performance-hardening`, 2026-09-15) then shipped: an Ionicons
+deep-import bundle-size fix (~55 files, ~4MB of unused icon-font weight removed);
+`ActiveWorkoutScreen`'s `renderItem` hoisted to a stable `useCallback` with a
+memoized `exerciseHandlersById` map and memoized `extraData` (`SetRow`/
+`SessionExerciseCard` wrapped in `React.memo`, `activeWorkoutStore`'s `deleteSet`
+reducer made identity-preserving to support it) - this closes the `extraData`/
+`renderItem` gap this file and `CLAUDE.md` previously tracked; and a Reanimated
+micro-interaction pass on five components (`Checkbox`, `RestTimerBar`,
+`ActiveWorkoutBanner`, `PRBadge`, `TodayGoalRow`), all using existing
+`theme/tokens.ts` motion tokens, no new dependency. Verified live on the
+`gymtracker_test` emulator, including a 500-session/15,000-set soak test of the
+training-history FlashList. NFR-03 reconfirmed cleanly via the benchmark suite;
+NFR-02 and NFR-04 were measured on that same debug dev-client build but flagged as
+not representative of production, with a release-build/real-device re-measurement
+left open (see `CLAUDE.md`'s Known gaps). A new, pre-existing (not introduced this
+phase) accessibility finding surfaced during the same pass: `components/ui/
+Badge.tsx`'s fixed height could clip label text at very large accessibility font
+scales (`TodayGoalRow`, `PRBadge`).
 
 ## Product
 
