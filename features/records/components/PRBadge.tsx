@@ -1,11 +1,11 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useRef } from 'react';
-import { View } from 'react-native';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 
 import { Text } from '@/components/ui';
 import { t } from '@/i18n';
 import { haptics } from '@/services/haptics';
-import { color, radius, space } from '@/theme/tokens';
+import { color, motion, radius, space } from '@/theme/tokens';
 
 import type { PersonalRecord } from '../repository/PersonalRecordRepository';
 
@@ -52,7 +52,15 @@ export function PRBadge({ records, testID }: PRBadgeProps) {
   }
 
   return (
-    <View
+    <Animated.View
+      // A celebratory pop for a personal record, not a routine content swap -
+      // `ZoomIn`'s spring matches `motion.spring.snappy` (the same feel
+      // `PressScale`'s own press-in uses) rather than the plain fades used
+      // elsewhere for routine appearance/disappearance.
+      entering={ZoomIn.springify()
+        .damping(motion.spring.snappy.damping)
+        .stiffness(motion.spring.snappy.stiffness)
+        .mass(motion.spring.snappy.mass)}
       accessible
       accessibilityRole="text"
       style={{
@@ -71,6 +79,6 @@ export function PRBadge({ records, testID }: PRBadgeProps) {
       <Text variant="caption" color="achievement" numberOfLines={1}>
         {t('records.badge.label', { count: records.length })}
       </Text>
-    </View>
+    </Animated.View>
   );
 }
