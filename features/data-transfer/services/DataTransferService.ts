@@ -31,7 +31,7 @@ import { InvalidExportFormatError, migrateExport } from '../domain/migrateExport
 import {
   EXPORT_FORMAT,
   CURRENT_EXPORT_ENVELOPE_VERSION,
-  type ExportEnvelopeV1,
+  type ExportEnvelopeV2,
   type ExportSession,
   type ExportSessionExercise,
   type ExportWorkoutSet,
@@ -170,16 +170,21 @@ interface WithUpdatedAt {
 /**
  * `ImportEntityCounts` for one entity array: every file row is looked up
  * locally by `keyFn`; missing -> `toCreate`, present with an older-or-equal
- * local `updatedAt` -> `unchanged`, present with a newer file `updatedAt` ->
- * `toUpdate`. Mirrors `upsertRow`'s own "newer `updated_at` wins" comparison
- * exactly (`SqliteDataTransferRepository.upsertRow`'s `WHERE excluded.updated_at
- * > table.updated_at`), so preview counts agree with what a real import
- * would actually do.
+ * local freshness value -> `unchanged`, present with a newer file freshness
+ * value -> `toUpdate`. Mirrors the repository's own "newer wins" upsert
+ * comparison exactly, so preview counts agree with what a real import would
+ * actually do - `freshnessFn` is `(row) => row.updatedAt` for every table
+ * that merges on `updated_at` (`SqliteDataTransferRepository.upsertRow`'s
+ * `WHERE excluded.updated_at > table.updated_at`), and `(row) =>
+ * row.respondedAt` for `dailyReminderResponses`, the one table with no
+ * `updated_at` column (`upsertDailyReminderResponse`'s own `WHERE
+ * excluded.responded_at > table.responded_at`).
  */
-function compareEntityCounts<T extends WithUpdatedAt>(
+function compareEntityCounts<T>(
   localRows: readonly T[],
   fileRows: readonly T[],
   keyFn: (row: T) => string,
+  freshnessFn: (row: T) => number,
 ): ImportEntityCounts {
   const localByKey = new Map<string, T>();
   for (const row of localRows) {
@@ -192,13 +197,18 @@ function compareEntityCounts<T extends WithUpdatedAt>(
     const local = localByKey.get(keyFn(fileRow));
     if (!local) {
       toCreate += 1;
-    } else if (fileRow.updatedAt > local.updatedAt) {
+    } else if (freshnessFn(fileRow) > freshnessFn(local)) {
       toUpdate += 1;
     } else {
       unchanged += 1;
     }
   }
   return { toCreate, toUpdate, unchanged };
+}
+
+/** `freshnessFn` for every `compareEntityCounts` call whose entity merges on `updatedAt` - see that function's own doc comment. */
+function byUpdatedAt(row: WithUpdatedAt): number {
+  return row.updatedAt;
 }
 
 const EMPTY_ENTITY_COUNTS: ImportEntityCounts = { toCreate: 0, toUpdate: 0, unchanged: 0 };
@@ -292,6 +302,10 @@ export class DataTransferService {
       localPlans,
       localBodyMetrics,
       localProgressPhotos,
+      localDailyGoals,
+      localDailyGoalEntries,
+      localDailyReminders,
+      localDailyReminderResponses,
     ] = await Promise.all([
       this.deps.repository.exportProfile(),
       this.deps.repository.exportSettings(),
@@ -301,6 +315,10 @@ export class DataTransferService {
       this.deps.repository.exportPlans(),
       this.deps.repository.exportBodyMetrics(),
       this.deps.repository.exportProgressPhotos(),
+      this.deps.repository.exportDailyGoals(),
+      this.deps.repository.exportDailyGoalEntries(),
+      this.deps.repository.exportDailyReminders(),
+      this.deps.repository.exportDailyReminderResponses(),
     ]);
 
     const localSessionUpdatedAt = await this.loadLocalSessionUpdatedAtMap();
@@ -309,33 +327,73 @@ export class DataTransferService {
 
     return {
       profile: compareProfileCounts(localProfile, envelope.data.profile),
-      settings: compareEntityCounts(localSettings, envelope.data.settings, (row) => row.key),
+      settings: compareEntityCounts(
+        localSettings,
+        envelope.data.settings,
+        (row) => row.key,
+        byUpdatedAt,
+      ),
       customExercises: compareEntityCounts(
         localCustomExercises,
         envelope.data.customExercises,
         (row) => row.id,
+        byUpdatedAt,
       ),
       exerciseUserData: compareEntityCounts(
         localExerciseUserData,
         envelope.data.exerciseUserData,
         (row) => row.exerciseId,
+        byUpdatedAt,
       ),
       exerciseVideos: compareEntityCounts(
         localExerciseVideos,
         envelope.data.exerciseVideos,
         (row) => row.id,
+        byUpdatedAt,
       ),
-      plans: compareEntityCounts(localPlans, envelope.data.plans, (row) => row.id),
+      plans: compareEntityCounts(localPlans, envelope.data.plans, (row) => row.id, byUpdatedAt),
       sessions: compareSessionCounts(localSessionUpdatedAt, envelope.data.sessions),
       bodyMetrics: compareEntityCounts(
         localBodyMetrics,
         envelope.data.bodyMetrics,
         (row) => row.id,
+        byUpdatedAt,
       ),
       progressPhotos: compareEntityCounts(
         localProgressPhotos,
         envelope.data.progressPhotos,
         (row) => row.id,
+        byUpdatedAt,
+      ),
+      dailyGoals: compareEntityCounts(
+        localDailyGoals,
+        envelope.data.dailyGoals,
+        (row) => row.id,
+        byUpdatedAt,
+      ),
+      // Keyed by the same `(goalId, localDate)` composite the upsert itself
+      // conflicts on - not `id` - see `upsertDailyGoalEntry`'s own doc
+      // comment for why.
+      dailyGoalEntries: compareEntityCounts(
+        localDailyGoalEntries,
+        envelope.data.dailyGoalEntries,
+        (row) => `${row.goalId}|${row.localDate}`,
+        byUpdatedAt,
+      ),
+      dailyReminders: compareEntityCounts(
+        localDailyReminders,
+        envelope.data.dailyReminders,
+        (row) => row.id,
+        byUpdatedAt,
+      ),
+      // Same composite-key-not-id reasoning as `dailyGoalEntries`, and
+      // `respondedAt` rather than `updatedAt` as the freshness signal - see
+      // `upsertDailyReminderResponse`'s own doc comment.
+      dailyReminderResponses: compareEntityCounts(
+        localDailyReminderResponses,
+        envelope.data.dailyReminderResponses,
+        (row) => `${row.reminderId}|${row.localDate}`,
+        (row) => row.respondedAt,
       ),
       warnings,
     };
@@ -400,6 +458,12 @@ export class DataTransferService {
       sessions: { toCreate: sessionsToCreate, toUpdate: sessionsToUpdate, unchanged: 0 },
       bodyMetrics: EMPTY_ENTITY_COUNTS,
       progressPhotos: EMPTY_ENTITY_COUNTS,
+      // CSV import never touches daily goals/reminders - ADR-0013's own CSV
+      // column list has no such data to carry.
+      dailyGoals: EMPTY_ENTITY_COUNTS,
+      dailyGoalEntries: EMPTY_ENTITY_COUNTS,
+      dailyReminders: EMPTY_ENTITY_COUNTS,
+      dailyReminderResponses: EMPTY_ENTITY_COUNTS,
       warnings,
     };
   }
@@ -548,6 +612,10 @@ export class DataTransferService {
         sets: setsWritten,
         bodyMetrics: 0,
         progressPhotos: 0,
+        dailyGoals: 0,
+        dailyGoalEntries: 0,
+        dailyReminders: 0,
+        dailyReminderResponses: 0,
       };
     });
 
@@ -573,10 +641,11 @@ export class DataTransferService {
    *
    * - The small/unbounded tables (`profile`, `settings`, `customExercises`,
    *   `exerciseUserData`, `exerciseVideos`, `plans`, `personalRecords`,
-   *   `bodyMetrics`, `progressPhotos`) are each one `JSON.stringify` call over
-   *   an already-bounded array/object (`DataTransferRepository`'s own "smaller
-   *   tables... single unbounded reads" guidance) - never the whole envelope,
-   *   never `data.sessions`.
+   *   `bodyMetrics`, `progressPhotos`, `dailyGoals`, `dailyGoalEntries`,
+   *   `dailyReminders`, `dailyReminderResponses`) are each one
+   *   `JSON.stringify` call over an already-bounded array/object
+   *   (`DataTransferRepository`'s own "smaller tables... single unbounded
+   *   reads" guidance) - never the whole envelope, never `data.sessions`.
    * - `data.sessions` is the one array that can reach real scale. It is
    *   streamed via `countExportSessions`/`exportSessionsBatch(offset, limit)`
    *   in {@link SESSION_EXPORT_PAGE_SIZE}-session pages, each page's sessions
@@ -615,6 +684,10 @@ export class DataTransferService {
       personalRecords,
       bodyMetrics,
       progressPhotos,
+      dailyGoals,
+      dailyGoalEntries,
+      dailyReminders,
+      dailyReminderResponses,
     ] = await Promise.all([
       this.deps.repository.exportProfile(),
       this.deps.repository.exportSettings(),
@@ -625,6 +698,10 @@ export class DataTransferService {
       this.deps.repository.exportPersonalRecords(),
       this.deps.repository.exportBodyMetrics(),
       this.deps.repository.exportProgressPhotos(),
+      this.deps.repository.exportDailyGoals(),
+      this.deps.repository.exportDailyGoalEntries(),
+      this.deps.repository.exportDailyReminders(),
+      this.deps.repository.exportDailyReminderResponses(),
     ]);
 
     if (profile === null) {
@@ -692,7 +769,23 @@ export class DataTransferService {
     );
     await this.deps.files.appendText(
       tempRelativePath,
-      `"progressPhotos":${JSON.stringify(progressPhotos)}`,
+      `"progressPhotos":${JSON.stringify(progressPhotos)},`,
+    );
+    await this.deps.files.appendText(
+      tempRelativePath,
+      `"dailyGoals":${JSON.stringify(dailyGoals)},`,
+    );
+    await this.deps.files.appendText(
+      tempRelativePath,
+      `"dailyGoalEntries":${JSON.stringify(dailyGoalEntries)},`,
+    );
+    await this.deps.files.appendText(
+      tempRelativePath,
+      `"dailyReminders":${JSON.stringify(dailyReminders)},`,
+    );
+    await this.deps.files.appendText(
+      tempRelativePath,
+      `"dailyReminderResponses":${JSON.stringify(dailyReminderResponses)}`,
     );
     await this.deps.files.appendText(tempRelativePath, `}}`);
 
@@ -715,7 +808,7 @@ export class DataTransferService {
   // Private: JSON parsing / preview comparison support
   // ==========================================================================
 
-  private parseJsonEnvelope(fileContent: string): ExportEnvelopeV1 {
+  private parseJsonEnvelope(fileContent: string): ExportEnvelopeV2 {
     let parsed: unknown;
     try {
       parsed = JSON.parse(fileContent);
@@ -767,7 +860,7 @@ export class DataTransferService {
    * user see it coming.
    */
   private appendSingleActiveInvariantWarnings(
-    envelope: ExportEnvelopeV1,
+    envelope: ExportEnvelopeV2,
     warnings: ImportWarning[],
   ): void {
     const activePlanCount = envelope.data.plans.filter((plan) => plan.isActive).length;
@@ -805,7 +898,7 @@ export class DataTransferService {
    * doc comment.
    */
   private async applyEnvelopeWrites(
-    envelope: ExportEnvelopeV1,
+    envelope: ExportEnvelopeV2,
     tx: SqlExecutor,
   ): Promise<ImportResult['written']> {
     await this.deps.repository.upsertProfile(envelope.data.profile, tx);
@@ -843,6 +936,22 @@ export class DataTransferService {
       await this.deps.repository.upsertProgressPhoto(photo, tx);
     }
 
+    // Goals before reminders (a reminder's `goalId` FK may point at one),
+    // entries after their own goal, responses after their own reminder -
+    // the envelope's own `data.*` key order already matches this.
+    for (const goal of envelope.data.dailyGoals) {
+      await this.deps.repository.upsertDailyGoal(goal, tx);
+    }
+    for (const entry of envelope.data.dailyGoalEntries) {
+      await this.deps.repository.upsertDailyGoalEntry(entry, tx);
+    }
+    for (const reminder of envelope.data.dailyReminders) {
+      await this.deps.repository.upsertDailyReminder(reminder, tx);
+    }
+    for (const response of envelope.data.dailyReminderResponses) {
+      await this.deps.repository.upsertDailyReminderResponse(response, tx);
+    }
+
     // In-transaction half of the post-import rebuild sequence - see
     // `importJson`'s own doc comment for why these two specifically join
     // this transaction while the other two run after commit.
@@ -862,6 +971,10 @@ export class DataTransferService {
       sets: setsWritten,
       bodyMetrics: envelope.data.bodyMetrics.length,
       progressPhotos: envelope.data.progressPhotos.length,
+      dailyGoals: envelope.data.dailyGoals.length,
+      dailyGoalEntries: envelope.data.dailyGoalEntries.length,
+      dailyReminders: envelope.data.dailyReminders.length,
+      dailyReminderResponses: envelope.data.dailyReminderResponses.length,
     };
   }
 

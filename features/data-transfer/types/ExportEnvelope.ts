@@ -10,6 +10,7 @@ import type { ProfileSex } from '@/features/profile';
 import type { SessionStatus, SetType } from '@/features/workout-logging';
 import type { RecordType } from '@/features/records';
 import type { BodyMetricType, PhotoPose } from '@/features/body-metrics';
+import type { GoalType, ReminderType, ReminderResponseValue } from '@/features/daily-goals';
 
 /**
  * The JSON backup envelope - ADR-0013's authoritative shape, reproduced here
@@ -273,6 +274,72 @@ export interface ExportProgressPhoto {
   deletedAt: number | null;
 }
 
+/** One `daily_goal` row (`database/schema.sql` section 7.12, P17). */
+export interface ExportDailyGoal {
+  id: EntityId;
+  name: string;
+  icon: string | null;
+  goalType: GoalType;
+  targetValue: number | null;
+  unit: string | null;
+  activeWeekdays: number;
+  isEnabled: boolean;
+  sortOrder: number;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt: number | null;
+}
+
+/**
+ * One `daily_goal_entry` row. No `deletedAt` - the table has none (an
+ * entry's history is only ever removed by its parent goal's own `ON DELETE
+ * CASCADE`). Merged on import by its `(goalId, localDate)` composite key
+ * (matching `ux_daily_goal_entry_goal_date`, the same conflict target
+ * `SqliteDailyGoalRepository.upsertEntryForToday` itself uses), not by `id` -
+ * see `SqliteDataTransferRepository.upsertDailyGoalEntry`'s own doc comment.
+ */
+export interface ExportDailyGoalEntry {
+  id: EntityId;
+  goalId: EntityId;
+  localDate: string;
+  progressValue: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** One `daily_reminder` row. `goalId` is `null` for a standalone reminder. */
+export interface ExportDailyReminder {
+  id: EntityId;
+  goalId: EntityId | null;
+  name: string;
+  icon: string | null;
+  isEnabled: boolean;
+  reminderType: ReminderType;
+  timeOfDay: string | null;
+  intervalMinutes: number | null;
+  activeWeekdays: number;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt: number | null;
+}
+
+/**
+ * One `daily_reminder_response` row - a "last tap wins" log entry, one row
+ * per `(reminderId, localDate)`. No `updatedAt` at all (the table has none)
+ * and no `deletedAt` (same reasoning as {@link ExportDailyGoalEntry}) -
+ * merged on import by its `(reminderId, localDate)` composite key using
+ * `respondedAt` as the "newer wins" comparator, mirroring
+ * `SqliteDailyReminderRepository.recordResponse`'s own conflict target.
+ */
+export interface ExportDailyReminderResponse {
+  id: EntityId;
+  reminderId: EntityId;
+  localDate: string;
+  response: ReminderResponseValue;
+  respondedAt: number;
+  createdAt: number;
+}
+
 /** `data.*` - one array per entity, per ADR-0013's "Shape" row. */
 export interface ExportEnvelopeData {
   profile: ExportProfile;
@@ -286,16 +353,29 @@ export interface ExportEnvelopeData {
   personalRecords: ExportPersonalRecord[];
   bodyMetrics: ExportBodyMetric[];
   progressPhotos: ExportProgressPhoto[];
+  /** Added in envelope v2 (P17 known-gaps sweep) - see `migrateExport.ts`'s own `MIGRATIONS[1]` entry for how a v1 file without these keys migrates cleanly. */
+  dailyGoals: ExportDailyGoal[];
+  dailyGoalEntries: ExportDailyGoalEntry[];
+  dailyReminders: ExportDailyReminder[];
+  dailyReminderResponses: ExportDailyReminderResponse[];
 }
 
 /** The literal string every valid backup file's `format` field must hold. */
 export const EXPORT_FORMAT = 'gymtracker.backup' as const;
 
-/** The current envelope version this app writes and fully understands. `migrateExport.ts` upgrades an older file's `version` to this one before validation. */
-export const CURRENT_EXPORT_ENVELOPE_VERSION = 1 as const;
+/**
+ * The current envelope version this app writes and fully understands.
+ * `migrateExport.ts` upgrades an older file's `version` to this one before
+ * validation. Bumped 1 -> 2 to add `dailyGoals`/`dailyGoalEntries`/
+ * `dailyReminders`/`dailyReminderResponses` (the four P17 tables a v1 backup
+ * never carried) - exactly the "future v2 adds one migration entry plus one
+ * new Zod schema" path `migrateExport.ts`'s own header comment already
+ * anticipated.
+ */
+export const CURRENT_EXPORT_ENVELOPE_VERSION = 2 as const;
 
-/** The full JSON backup envelope - ADR-0013's "JSON format" section, verbatim. */
-export interface ExportEnvelopeV1 {
+/** The full JSON backup envelope - ADR-0013's "JSON format" section, plus the v2 daily-goals addition. */
+export interface ExportEnvelopeV2 {
   format: typeof EXPORT_FORMAT;
   version: typeof CURRENT_EXPORT_ENVELOPE_VERSION;
   exportedAt: number;

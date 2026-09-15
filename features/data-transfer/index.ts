@@ -28,7 +28,7 @@ export type { ExportCounts, DataTransferRepository } from './repository/DataTran
 export {
   EXPORT_FORMAT,
   CURRENT_EXPORT_ENVELOPE_VERSION,
-  type ExportEnvelopeV1,
+  type ExportEnvelopeV2,
   type ExportEnvelopeData,
 } from './types/ExportEnvelope';
 

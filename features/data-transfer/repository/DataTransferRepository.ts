@@ -4,6 +4,10 @@ import type { CsvSetRowInput } from '../domain/csvRowMapper';
 import type {
   ExportBodyMetric,
   ExportCustomExercise,
+  ExportDailyGoal,
+  ExportDailyGoalEntry,
+  ExportDailyReminder,
+  ExportDailyReminderResponse,
   ExportExerciseUserData,
   ExportExerciseVideo,
   ExportPersonalRecord,
@@ -105,6 +109,14 @@ export interface DataTransferRepository {
   exportBodyMetrics(tx?: SqlExecutor): Promise<ExportBodyMetric[]>;
   /** Every `progress_photo` row - metadata only, no binary (ADR-0012). */
   exportProgressPhotos(tx?: SqlExecutor): Promise<ExportProgressPhoto[]>;
+  /** Every `daily_goal` row, unfiltered by `deleted_at` (same fidelity rule as every other table in this interface - see `types/ExportEnvelope.ts`'s own header comment). Envelope v2. */
+  exportDailyGoals(tx?: SqlExecutor): Promise<ExportDailyGoal[]>;
+  /** Every `daily_goal_entry` row. Envelope v2. */
+  exportDailyGoalEntries(tx?: SqlExecutor): Promise<ExportDailyGoalEntry[]>;
+  /** Every `daily_reminder` row, unfiltered by `deleted_at`. Envelope v2. */
+  exportDailyReminders(tx?: SqlExecutor): Promise<ExportDailyReminder[]>;
+  /** Every `daily_reminder_response` row. Envelope v2. */
+  exportDailyReminderResponses(tx?: SqlExecutor): Promise<ExportDailyReminderResponse[]>;
 
   // --- export: large tables, batched/streamed ---------------------------
 
@@ -181,6 +193,35 @@ export interface DataTransferRepository {
   upsertBodyMetric(entry: ExportBodyMetric, tx?: SqlExecutor): Promise<void>;
   /** Upserts one `progress_photo` **metadata** row by `id`, newer `updatedAt` wins - never writes a file, the binary stays absent (ADR-0012/ADR-0013). A later `ProgressPhotoRepository.verifyIntegrity()` pass (part of the post-import rebuild sequence, outside this repository) is what surfaces the missing file to the user. */
   upsertProgressPhoto(photo: ExportProgressPhoto, tx?: SqlExecutor): Promise<void>;
+  /** Upserts one `daily_goal` row by `id`, newer `updatedAt` wins. Envelope v2. */
+  upsertDailyGoal(goal: ExportDailyGoal, tx?: SqlExecutor): Promise<void>;
+  /**
+   * Upserts one `daily_goal_entry` row by its `(goalId, localDate)`
+   * composite key (`ux_daily_goal_entry_goal_date`), newer `updatedAt` wins -
+   * **not** by `id`, since this table's own real writer
+   * (`SqliteDailyGoalRepository.upsertEntryForToday`) already treats that
+   * composite key as the row's true identity: two devices independently
+   * logging progress for the same goal on the same day generate different
+   * `id`s for what is semantically one row, and upserting by `id` would
+   * create a duplicate that then violates the composite unique index instead
+   * of merging. Envelope v2.
+   */
+  upsertDailyGoalEntry(entry: ExportDailyGoalEntry, tx?: SqlExecutor): Promise<void>;
+  /** Upserts one `daily_reminder` row by `id`, newer `updatedAt` wins. Envelope v2. */
+  upsertDailyReminder(reminder: ExportDailyReminder, tx?: SqlExecutor): Promise<void>;
+  /**
+   * Upserts one `daily_reminder_response` row by its `(reminderId,
+   * localDate)` composite key (`ux_daily_reminder_response_reminder_date`),
+   * using `respondedAt` as the "newer wins" comparator - this table has no
+   * `updatedAt` column at all, and `respondedAt` is what
+   * `SqliteDailyReminderRepository.recordResponse`'s own "last tap wins"
+   * semantics already treat as the row's freshness signal. Same identity
+   * reasoning as {@link upsertDailyGoalEntry}. Envelope v2.
+   */
+  upsertDailyReminderResponse(
+    response: ExportDailyReminderResponse,
+    tx?: SqlExecutor,
+  ): Promise<void>;
 
   // --- import: replace mode ----------------------------------------------
 
@@ -192,7 +233,9 @@ export interface DataTransferRepository {
    * (`exercise_muscle` for custom exercises only) -> `exercise_user_data`
    * (wholesale, not scoped to custom exercises) -> `exercise WHERE source =
    * 'custom'` -> `exercise_video WHERE source = 'user'` ->
-   * `body_metric_entry` -> `progress_photo` -> `app_setting` (all rows).
+   * `body_metric_entry` -> `progress_photo` -> `daily_reminder_response` ->
+   * `daily_goal_entry` -> `daily_reminder` -> `daily_goal` -> `app_setting`
+   * (all rows).
    *
    * Deliberately explicit rather than relying solely on this schema's own
    * `ON DELETE CASCADE`/`ON DELETE SET NULL` to do the fan-out - matches

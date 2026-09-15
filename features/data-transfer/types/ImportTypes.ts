@@ -51,6 +51,10 @@ export interface ImportPreview {
   sessions: ImportEntityCounts;
   bodyMetrics: ImportEntityCounts;
   progressPhotos: ImportEntityCounts;
+  dailyGoals: ImportEntityCounts;
+  dailyGoalEntries: ImportEntityCounts;
+  dailyReminders: ImportEntityCounts;
+  dailyReminderResponses: ImportEntityCounts;
   warnings: ImportWarning[];
 }
 
@@ -68,6 +72,10 @@ export interface ImportResult {
     sets: number;
     bodyMetrics: number;
     progressPhotos: number;
+    dailyGoals: number;
+    dailyGoalEntries: number;
+    dailyReminders: number;
+    dailyReminderResponses: number;
   };
   /**
    * Path to the automatic pre-replace backup JSON file written to the cache
