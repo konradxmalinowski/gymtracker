@@ -148,7 +148,8 @@ export const en = {
     enabledRowSubtitle: 'A local notification on the days and time you choose',
     daysSectionTitle: 'Days',
     timeSectionTitle: 'Time',
-    timeAccessibilityLabel: 'Reminder time',
+    timeHourAccessibilityLabel: 'Reminder hour',
+    timeMinuteAccessibilityLabel: 'Reminder minute',
     dayMon: 'Mon',
     dayTue: 'Tue',
     dayWed: 'Wed',
@@ -180,6 +181,10 @@ export const en = {
       sessions: 'Workouts',
       bodyMetrics: 'Body measurements',
       progressPhotos: 'Progress photos',
+      dailyGoals: 'Daily goals',
+      dailyGoalEntries: 'Daily goal progress',
+      dailyReminders: 'Reminders',
+      dailyReminderResponses: 'Reminder responses',
     },
     export: {
       title: 'Export & backup',
@@ -581,6 +586,7 @@ export const en = {
       deleteConfirmMessage:
         'This permanently deletes the workout and every set logged in it, and recalculates any personal records it held. This cannot be undone.',
       deleteErrorMessage: 'Could not delete this workout. Please try again.',
+      lastSetDeletedUndoMessageTemplate: 'Last set deleted - "{{name}}" removed',
     },
   },
   restTimer: {
