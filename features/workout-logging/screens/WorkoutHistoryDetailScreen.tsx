@@ -10,7 +10,7 @@ import { ConfirmDialog, EmptyState, ErrorState, Skeleton } from '@/components/fe
 import { formatExerciseName } from '@/features/exercise-library';
 import { formatAchievedDate } from '@/features/records';
 import { Weight } from '@/domain/Weight';
-import { t } from '@/i18n';
+import { t, type TranslationKey } from '@/i18n';
 import { routes } from '@/navigation/routes';
 import { useContainer } from '@/services/container';
 import { haptics } from '@/services/haptics';
@@ -28,7 +28,7 @@ import {
   useHistoricalSessionMutations,
   useSessionDetail,
 } from '../hooks/useSessionHistory';
-import type { SessionExercise } from '../repository/WorkoutSessionRepository';
+import type { SessionExercise, WorkoutSet } from '../repository/WorkoutSessionRepository';
 
 export interface WorkoutHistoryDetailScreenProps {
   sessionId: string;
@@ -131,16 +131,26 @@ export function WorkoutHistoryDetailScreen({ sessionId }: WorkoutHistoryDetailSc
       );
   }
 
-  function handleRemoveExercise(exercise: SessionExercise) {
+  /**
+   * Shared by a direct "remove exercise" tap and by {@link handleDeleteSet}'s
+   * last-set case - `removeExercise`/`restoreExercise` already cascade to the
+   * exercise's own sets (see `SqliteWorkoutSessionRepository.removeExercise`'s
+   * doc comment), so routing the last-set delete through this same pair gets
+   * the combined "set + exercise" undo for free instead of needing a second,
+   * parallel undo mechanism.
+   */
+  function removeExerciseWithUndo(exercise: SessionExercise, messageKey: TranslationKey) {
     haptics.destructive();
     void mutations.removeExercise(exercise.id);
     useToastStore.getState().show({
-      message: t('workoutLogging.active.exerciseRemovedUndoMessageTemplate', {
-        name: exercise.exerciseNameSnapshot,
-      }),
+      message: t(messageKey, { name: exercise.exerciseNameSnapshot }),
       actionLabel: t('common.undo'),
       onAction: () => void mutations.restoreExercise(exercise.id),
     });
+  }
+
+  function handleRemoveExercise(exercise: SessionExercise) {
+    removeExerciseWithUndo(exercise, 'workoutLogging.active.exerciseRemovedUndoMessageTemplate');
   }
 
   // Sequential, not `exerciseIds.forEach((id) => void mutations.addExercise(id))`:
@@ -157,7 +167,19 @@ export function WorkoutHistoryDetailScreen({ sessionId }: WorkoutHistoryDetailSc
     }
   }
 
-  function handleDeleteSet(set: { id: string }) {
+  /**
+   * A set that would leave its exercise with zero sets is routed through
+   * {@link removeExerciseWithUndo} instead of a plain `deleteSet` - restoring
+   * only the set into an already-removed exercise card would be a worse,
+   * confusing half-state than the pre-fix bug this replaces (see the
+   * "Known gaps" entry in CLAUDE.md this fixes). An exercise with 2+
+   * remaining sets keeps the plain per-set undo unchanged.
+   */
+  function handleDeleteSet(exercise: SessionExercise, set: WorkoutSet) {
+    if (isLastRemainingSet(exercise, set)) {
+      removeExerciseWithUndo(exercise, 'workoutLogging.history.lastSetDeletedUndoMessageTemplate');
+      return;
+    }
     haptics.destructive();
     void mutations.deleteSet(set.id);
     useToastStore.getState().show({
@@ -312,7 +334,7 @@ export function WorkoutHistoryDetailScreen({ sessionId }: WorkoutHistoryDetailSc
                     onCompleteSet={(set) => void mutations.completeSet(set.id)}
                     onUncompleteSet={(setId) => void mutations.uncompleteSet(setId)}
                     onUpdateSet={(setId, patch) => void mutations.updateSet(setId, patch)}
-                    onDeleteSet={handleDeleteSet}
+                    onDeleteSet={(set) => handleDeleteSet(exercise, set)}
                     onAddDropSet={(parentSetId) => void mutations.addDropSet(parentSetId)}
                     onAddSet={() => void mutations.appendSet(exercise.id)}
                     isAddingSet={false}
@@ -364,6 +386,20 @@ export function WorkoutHistoryDetailScreen({ sessionId }: WorkoutHistoryDetailSc
         testID="workout-history-detail-delete-confirm-dialog"
       />
     </Screen>
+  );
+}
+
+/**
+ * Whether deleting `set` would leave `exercise` with zero sets - accounting
+ * for `deleteSet`'s own cascade (a parent set's drop segments go with it, see
+ * `SqliteWorkoutSessionRepository.deleteSet`'s doc comment), not just the one
+ * row. A drop segment has no children of its own, so only a parent set's
+ * removal needs the extra filter.
+ */
+function isLastRemainingSet(exercise: SessionExercise, set: WorkoutSet): boolean {
+  const isParent = set.parentSetId === null;
+  return exercise.sets.every(
+    (candidate) => candidate.id === set.id || (isParent && candidate.parentSetId === set.id),
   );
 }
 
