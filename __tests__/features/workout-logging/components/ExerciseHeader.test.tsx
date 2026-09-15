@@ -4,6 +4,7 @@ import type { SessionExercise } from '@/features/workout-logging';
 import { ExerciseHeader } from '@/features/workout-logging/components/ExerciseHeader';
 
 jest.mock('@expo/vector-icons', () => require('../../../__mocks__/vectorIconsMock'));
+jest.mock('@expo/vector-icons/Ionicons', () => require('../../../__mocks__/vectorIconsMock'));
 
 const DEBOUNCE_MS = 400;
 
