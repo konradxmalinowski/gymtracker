@@ -17,3 +17,11 @@ import { Text } from 'react-native';
 export function Ionicons({ name }: { name?: string; [key: string]: unknown }) {
   return <Text>{name ?? ''}</Text>;
 }
+
+// P15 changed ~55 call sites from the barrel's named export
+// (`import { Ionicons } from '@expo/vector-icons'`) to the deep subpath's
+// default export (`import Ionicons from '@expo/vector-icons/Ionicons'`) for
+// bundle-size reasons. Re-exporting the same stub as the default export lets
+// one `jest.mock()` factory module serve both `jest.mock('@expo/vector-icons', ...)`
+// and `jest.mock('@expo/vector-icons/Ionicons', ...)`.
+export default Ionicons;

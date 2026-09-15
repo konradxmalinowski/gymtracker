@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { forwardRef } from 'react';
 import { View, type LayoutChangeEvent } from 'react-native';
 

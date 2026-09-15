@@ -7,6 +7,7 @@ import { WorkoutHeader } from '@/features/workout-logging/components/WorkoutHead
 import { ContainerProvider, createContainer } from '@/services/container';
 
 jest.mock('@expo/vector-icons', () => require('../../../__mocks__/vectorIconsMock'));
+jest.mock('@expo/vector-icons/Ionicons', () => require('../../../__mocks__/vectorIconsMock'));
 
 const SAFE_AREA_METRICS = {
   insets: { top: 0, left: 0, right: 0, bottom: 0 },

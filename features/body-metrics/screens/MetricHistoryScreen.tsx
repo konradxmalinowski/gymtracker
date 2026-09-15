@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { AccessibilityInfo } from 'react-native';
 import { Stack } from 'expo-router';
 

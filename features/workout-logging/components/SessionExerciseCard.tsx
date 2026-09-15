@@ -1,3 +1,5 @@
+import { memo, useMemo } from 'react';
+
 import { Column, Row } from '@/components/layout';
 import { Card, Divider } from '@/components/ui';
 import {
@@ -9,6 +11,7 @@ import {
   type WorkoutSet,
 } from '@/features/workout-logging';
 import { ProgressionHint, type PersonalRecord } from '@/features/records';
+import { useRenderCount } from '@/hooks/useRenderCount';
 import { useContainer } from '@/services/container';
 import { useSheetStore } from '@/stores/sheetStore';
 import { space } from '@/theme/tokens';
@@ -52,8 +55,17 @@ export interface SessionExerciseCardProps {
  * `FlashList` item in `ActiveWorkoutScreen` - sets inside are a plain mapped
  * list, never their own virtualized list, per the same section's explicit
  * "nested virtualized lists are a known source of scroll jank" note.
+ *
+ * P15 (performance hardening): wrapped in `React.memo` with the default
+ * shallow prop comparison - no custom comparator, since `ActiveWorkoutScreen`
+ * now gives every prop here a stable identity across renders that don't
+ * actually touch this exercise (`exerciseHandlersById`'s per-id callback map,
+ * a memoized `extraData`, and the store's own "only the touched exercise
+ * gets a new object" mutation shape - see that screen's own comments). This
+ * is the fix for CLAUDE.md's tracked "Known gap": completing a set in one
+ * exercise no longer re-renders every other exercise's card.
  */
-export function SessionExerciseCard({
+export const SessionExerciseCard = memo(function SessionExerciseCard({
   exercise,
   canMoveUp,
   canMoveDown,
@@ -73,8 +85,17 @@ export function SessionExerciseCard({
   isAddingSet,
   testID,
 }: SessionExerciseCardProps) {
-  const orderedSets = orderSetsForDisplay(exercise.sets);
-  const displayNumbers = assignSetDisplayNumbers(exercise.sets);
+  useRenderCount(`SessionExerciseCard:${exercise.id}`);
+
+  // Memoized on `exercise.sets` (not called unconditionally on every render)
+  // so these two pure calculators keep returning the exact same `Map`/array
+  // references - and not just equal-by-value ones - across a re-render this
+  // card takes for a reason unrelated to its own sets (e.g. `isAddingSet`
+  // toggling, or the previous-performance query settling). A fresh object
+  // every render here would otherwise defeat `SetRow`'s own `React.memo`
+  // for every set in this card, even the ones that didn't change.
+  const orderedSets = useMemo(() => orderSetsForDisplay(exercise.sets), [exercise.sets]);
+  const displayNumbers = useMemo(() => assignSetDisplayNumbers(exercise.sets), [exercise.sets]);
 
   const { exerciseHistoryRepository, settings } = useContainer();
   const {
@@ -205,4 +226,4 @@ export function SessionExerciseCard({
       </Column>
     </Card>
   );
-}
+});

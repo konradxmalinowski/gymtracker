@@ -1,7 +1,8 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { router, usePathname } from 'expo-router';
+import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Row } from '@/components/layout';
@@ -13,7 +14,7 @@ import { routes } from '@/navigation/routes';
 import { useContainer } from '@/services/container';
 import { useActiveWorkoutStore } from '@/stores/activeWorkoutStore';
 import { selectRemainingSeconds, useRestTimerStore } from '@/stores/restTimerStore';
-import { color, radius, space } from '@/theme/tokens';
+import { color, motion, radius, space } from '@/theme/tokens';
 
 import { formatElapsedSeconds } from './formatElapsed';
 
@@ -100,45 +101,52 @@ export function ActiveWorkoutBanner() {
         });
 
   return (
-    <PressScale
-      onPress={() => router.push(routes.workout.active())}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
+    <Animated.View
+      entering={FadeInDown.duration(motion.duration.normal)}
+      exiting={FadeOutDown.duration(motion.duration.fast)}
       style={{
         position: 'absolute',
         left: space[3],
         right: space[3],
         bottom: insets.bottom + TAB_BAR_CONTENT_HEIGHT + space[2],
-        paddingHorizontal: space[4],
-        paddingVertical: space[3],
-        borderRadius: radius.lg,
-        backgroundColor: color.accent,
       }}
-      testID="active-workout-banner"
     >
-      <Row justify="space-between" align="center">
-        <Row gap={2} align="center" style={{ flex: 1 }}>
-          <Ionicons name="barbell" size={18} color={color.textInverse} />
-          <Text variant="bodyMedium" color="inverse" numberOfLines={1}>
-            {session.title}
-          </Text>
+      <PressScale
+        onPress={() => router.push(routes.workout.active())}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        style={{
+          paddingHorizontal: space[4],
+          paddingVertical: space[3],
+          borderRadius: radius.lg,
+          backgroundColor: color.accent,
+        }}
+        testID="active-workout-banner"
+      >
+        <Row justify="space-between" align="center">
+          <Row gap={2} align="center" style={{ flex: 1 }}>
+            <Ionicons name="barbell" size={18} color={color.textInverse} />
+            <Text variant="bodyMedium" color="inverse" numberOfLines={1}>
+              {session.title}
+            </Text>
+          </Row>
+          <Row gap={2} align="center">
+            {restRemainingSeconds !== null ? (
+              <View testID="active-workout-banner-rest">
+                <Row gap={1} align="center">
+                  <Ionicons name="time-outline" size={16} color={color.textInverse} />
+                  <Text variant="numeric" color="inverse">
+                    {formatRestSeconds(restRemainingSeconds)}
+                  </Text>
+                </Row>
+              </View>
+            ) : null}
+            <Text variant="numeric" color="inverse">
+              {elapsed}
+            </Text>
+          </Row>
         </Row>
-        <Row gap={2} align="center">
-          {restRemainingSeconds !== null ? (
-            <View testID="active-workout-banner-rest">
-              <Row gap={1} align="center">
-                <Ionicons name="time-outline" size={16} color={color.textInverse} />
-                <Text variant="numeric" color="inverse">
-                  {formatRestSeconds(restRemainingSeconds)}
-                </Text>
-              </Row>
-            </View>
-          ) : null}
-          <Text variant="numeric" color="inverse">
-            {elapsed}
-          </Text>
-        </Row>
-      </Row>
-    </PressScale>
+      </PressScale>
+    </Animated.View>
   );
 }

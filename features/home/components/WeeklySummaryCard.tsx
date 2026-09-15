@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Column, Row } from '@/components/layout';
 import { Card, Text } from '@/components/ui';

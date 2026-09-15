@@ -1,6 +1,7 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useRef } from 'react';
 import { AccessibilityInfo, Pressable, View } from 'react-native';
+import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
 
 import { PressScale } from '@/components/gestures/PressScale';
 import { SwipeableRow, type SwipeableRowAction } from '@/components/gestures/SwipeableRow';
@@ -12,7 +13,7 @@ import {
   selectRemainingSeconds,
   useRestTimerStore,
 } from '@/stores/restTimerStore';
-import { color, elevation, hitSlop, radius, space } from '@/theme/tokens';
+import { color, elevation, hitSlop, motion, radius, space } from '@/theme/tokens';
 
 import { formatRestSeconds } from './formatRestSeconds';
 
@@ -128,7 +129,9 @@ export function RestTimerBar({
     : t('restTimer.remainingAnnouncementTemplate', { seconds: remainingSeconds });
 
   return (
-    <View
+    <Animated.View
+      entering={FadeInDown.duration(motion.duration.normal)}
+      exiting={FadeOutUp.duration(motion.duration.fast)}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -204,7 +207,7 @@ export function RestTimerBar({
         onPress={() => onAdjust(ADJUST_DELTA_SECONDS)}
         testID={testID ? `${testID}-increase` : undefined}
       />
-    </View>
+    </Animated.View>
   );
 }
 

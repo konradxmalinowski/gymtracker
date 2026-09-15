@@ -559,6 +559,9 @@ Commit: `feat: add json backup and csv export with import support`
 
 ## P15 - Performance hardening and polish
 
+**Status: complete** (`feat/p15-performance-hardening`, 2026-09-15) - see
+`CLAUDE.md`'s Status section for the full write-up.
+
 Scope: run the full benchmark suite against the large fixture and fix what misses;
 FlashList tuning (`estimatedItemSize`, `getItemType`, `keyExtractor` stability);
 memoization audit of `SetRow` and `SessionExerciseCard`; render-count instrumentation on
@@ -568,7 +571,17 @@ loading skeleton reviewed; full VoiceOver and TalkBack pass; dynamic type check;
 long-history soak test on a low-end Android device.
 
 Acceptance: every NFR in ARCHITECTURE.md section 2.2 is measured and met, with the
-numbers recorded.
+numbers recorded. Met with a caveat: the benchmark suite re-run confirmed NFR-03
+cleanly (exercise search 30ms against the 50ms budget), but NFR-02 (cold start) and
+NFR-04 (history-list scroll) were only measurable on a debug dev-client build on
+the `gymtracker_test` emulator, not a production release build on real hardware -
+both were measured and recorded (see `CLAUDE.md`'s Known gaps) rather than silently
+skipped, but neither is confirmed to pass or fail; a release-build/real-device
+re-measurement is open, P16-adjacent work. `estimatedItemSize` was scoped out
+during implementation: `@shopify/flash-list` v2 (already the installed version)
+removed the prop entirely, so this bullet's "FlashList tuning" resolved to
+confirming `getItemType`/`keyExtractor` were already correct pre-P15 rather than
+reintroducing a prop that no longer exists.
 
 Commit: `perf: optimize large history rendering and polish interactions`
 

@@ -1,10 +1,11 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 
 import { Column, Row } from '@/components/layout';
 import { Badge, Card, Checkbox, IconButton, Text } from '@/components/ui';
 import { PressScale } from '@/components/gestures/PressScale';
 import { t } from '@/i18n';
-import { color, hitSlop, radius, space } from '@/theme/tokens';
+import { color, hitSlop, motion, radius, space } from '@/theme/tokens';
 
 import { resolveGoalIconName } from './goalIcons';
 import { isGoalComplete } from '../domain/goalCompletion';
@@ -52,7 +53,14 @@ export function TodayGoalRow({
               {goal.name}
             </Text>
             {complete ? (
-              <Badge label={t('dailyGoals.today.completedBadgeLabel')} tone="success" size="sm" />
+              <Animated.View
+                entering={ZoomIn.springify()
+                  .damping(motion.spring.snappy.damping)
+                  .stiffness(motion.spring.snappy.stiffness)
+                  .mass(motion.spring.snappy.mass)}
+              >
+                <Badge label={t('dailyGoals.today.completedBadgeLabel')} tone="success" size="sm" />
+              </Animated.View>
             ) : null}
           </Row>
           {goal.goalType !== 'boolean' ? (

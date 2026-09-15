@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ChartCard, StackedBarChartView, type CategorySlice } from '@/components/charts';
 import { t, type TranslationKey } from '@/i18n';
