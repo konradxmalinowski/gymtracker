@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Card, StatTile } from '@/components/ui';
 import { t } from '@/i18n';

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image, View } from 'react-native';
 
 import { PressScale } from '@/components/gestures/PressScale';

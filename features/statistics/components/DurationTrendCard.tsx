@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ChartCard, LineChartView, summarizeSeries, type SeriesPoint } from '@/components/charts';
 import { t } from '@/i18n';

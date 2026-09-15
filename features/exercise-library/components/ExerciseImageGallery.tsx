@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image, ScrollView, View } from 'react-native';
 
 // No `@/assets/*` tsconfig path alias exists yet (only the aliases already
