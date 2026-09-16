@@ -8,19 +8,31 @@ import { z } from 'zod';
 
 import { Column, Row, Screen } from '@/components/layout';
 import { Button, Chip, NumberField, Switch, Text, TextField } from '@/components/ui';
-import { ErrorState, Skeleton } from '@/components/feedback';
+import { ConfirmDialog, ErrorState, Skeleton } from '@/components/feedback';
 import {
   DAILY_GOAL_NAME_MAX_LENGTH,
   DAILY_GOAL_UNIT_MAX_LENGTH,
   DailyGoalValidationError,
+  type DailyReminder,
   type GoalType,
 } from '@/features/daily-goals';
 import { t } from '@/i18n';
-import { color, space } from '@/theme/tokens';
+import { routes } from '@/navigation/routes';
+import { useSheetStore } from '@/stores/sheetStore';
+import { color, radius, space } from '@/theme/tokens';
 
 import { getGoalIconOptions } from '../components/goalIcons';
+import { ReminderFormSheetContent } from '../components/ReminderFormSheetContent';
+import { ReminderRow } from '../components/ReminderRow';
 import { WeekdayPicker } from '../components/WeekdayPicker';
 import { useCreateGoal, useGoal, useSetGoalEnabled, useUpdateGoal } from '../hooks/useDailyGoals';
+import {
+  useDeleteReminder,
+  useRemindersForGoal,
+  useSetReminderEnabled,
+} from '../hooks/useDailyReminders';
+
+const REMINDER_FORM_SHEET_ID = 'daily-reminder-form';
 
 const GOAL_TYPES: readonly GoalType[] = ['boolean', 'counter', 'numeric'];
 const ALL_WEEKDAYS = 127;
@@ -71,8 +83,8 @@ const EMPTY_FORM_VALUES: GoalFormValues = {
 export type GoalFormScreenProps = { mode: 'create' } | { mode: 'edit'; goalId: string };
 
 /**
- * Shared body for `app/goals/manage/create.tsx` and
- * `app/goals/manage/edit/[goalId].tsx` - React Hook Form + `zodResolver`,
+ * Shared body for `app/(tabs)/goals/manage/create.tsx` and
+ * `app/(tabs)/goals/manage/edit/[goalId].tsx` - React Hook Form + `zodResolver`,
  * mirroring `ExerciseFormScreen`'s exact shape (client-side schema as a
  * belt-and-suspenders mirror of `DailyGoalService`'s own Zod validation, a
  * `hasInitialized` ref so `useGoal`'s async load only resets the form once).
@@ -86,12 +98,23 @@ export type GoalFormScreenProps = { mode: 'create' } | { mode: 'edit'; goalId: s
  */
 export function GoalFormScreen(props: GoalFormScreenProps) {
   const isEditMode = props.mode === 'edit';
-  const existing = useGoal(isEditMode ? props.goalId : undefined);
+  const goalId = isEditMode ? props.goalId : undefined;
+  const existing = useGoal(goalId);
   const createGoal = useCreateGoal();
   const updateGoal = useUpdateGoal();
   const setGoalEnabled = useSetGoalEnabled();
   const hasInitialized = useRef(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Item 5 fix: `DailyReminderService.listByGoal` already existed "for the
+  // goal detail/edit screen" per its own doc comment, but nothing called it
+  // - a goal's reminder(s) were only reachable via a separate "Manage goals"
+  // -> "Reminders" screen with no link back to the goal that owns them. This
+  // surfaces them (and a way to add one) right on the goal's own edit form.
+  const reminders = useRemindersForGoal(goalId);
+  const setReminderEnabled = useSetReminderEnabled();
+  const deleteReminder = useDeleteReminder();
+  const [deleteReminderTarget, setDeleteReminderTarget] = useState<DailyReminder | null>(null);
 
   const {
     control,
@@ -167,6 +190,34 @@ export function GoalFormScreen(props: GoalFormScreenProps) {
       }
     }
   });
+
+  function openReminderSheet(reminder?: DailyReminder) {
+    if (!goalId) {
+      return;
+    }
+    // Scoped to just this goal (plus "no goal") rather than every goal in
+    // the app - relinking a reminder to some other goal from here would be
+    // a strange affordance on a screen about *this* goal.
+    const goalOption = existing.data ? [existing.data] : [];
+    useSheetStore.getState().present({
+      id: REMINDER_FORM_SHEET_ID,
+      content: reminder ? (
+        <ReminderFormSheetContent mode="edit" reminder={reminder} goals={goalOption} />
+      ) : (
+        <ReminderFormSheetContent mode="create" goals={goalOption} initialGoalId={goalId} />
+      ),
+      snapPoints: [0.85],
+    });
+  }
+
+  async function handleConfirmDeleteReminder() {
+    if (!deleteReminderTarget) {
+      return;
+    }
+    const target = deleteReminderTarget;
+    setDeleteReminderTarget(null);
+    await deleteReminder.mutateAsync(target.id);
+  }
 
   function applyServerIssues(issues: DailyGoalValidationError['issues']) {
     let mapped = false;
@@ -382,6 +433,48 @@ export function GoalFormScreen(props: GoalFormScreenProps) {
           />
         ) : null}
 
+        {isEditMode ? (
+          <Column gap={2}>
+            <Row justify="space-between" align="center">
+              <Text variant="label" color="secondary">
+                {t('dailyGoals.form.remindersSectionTitle')}
+              </Text>
+              <Button
+                variant="ghost"
+                size="sm"
+                label={t('dailyGoals.form.addReminderButtonLabel')}
+                onPress={() => openReminderSheet()}
+                testID="goal-form-add-reminder-button"
+              />
+            </Row>
+
+            {reminders.isPending ? (
+              <Skeleton width="100%" height={64} radius="lg" />
+            ) : reminders.data && reminders.data.length > 0 ? (
+              <Column style={{ borderRadius: radius.lg, overflow: 'hidden' }}>
+                {reminders.data.map((reminder) => (
+                  <ReminderRow
+                    key={reminder.id}
+                    reminder={reminder}
+                    linkedGoalName={existing.data?.name ?? null}
+                    onPress={() => openReminderSheet(reminder)}
+                    onToggleEnabled={(isEnabledNext) =>
+                      setReminderEnabled.mutate({ reminder, isEnabled: isEnabledNext })
+                    }
+                    onViewStats={() => router.push(routes.goals.reminderStats(reminder.id))}
+                    onDelete={() => setDeleteReminderTarget(reminder)}
+                    testID={`goal-form-reminder-${reminder.id}`}
+                  />
+                ))}
+              </Column>
+            ) : (
+              <Text variant="footnote" color="tertiary">
+                {t('dailyGoals.form.noRemindersMessage')}
+              </Text>
+            )}
+          </Column>
+        ) : null}
+
         {submitError ? (
           <Text
             variant="caption"
@@ -403,6 +496,19 @@ export function GoalFormScreen(props: GoalFormScreenProps) {
           testID="goal-form-save-button"
         />
       </Column>
+
+      <ConfirmDialog
+        visible={deleteReminderTarget !== null}
+        title={t('dailyGoals.reminders.deleteConfirmTitle')}
+        message={t('dailyGoals.reminders.deleteConfirmMessageTemplate', {
+          name: deleteReminderTarget?.name ?? '',
+        })}
+        confirmLabel={t('common.delete')}
+        destructive
+        onConfirm={() => void handleConfirmDeleteReminder()}
+        onCancel={() => setDeleteReminderTarget(null)}
+        testID="goal-form-reminder-delete-confirm-dialog"
+      />
     </Screen>
   );
 }
