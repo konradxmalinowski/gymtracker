@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Column, Row } from '@/components/layout';
-import { Button, Card, Text } from '@/components/ui';
+import { Button, Card, IconButton, Text } from '@/components/ui';
 import { EmptyState } from '@/components/feedback';
 import type { PlanAggregate, PlanDay } from '@/features/plans';
 import { t } from '@/i18n';
@@ -78,18 +78,33 @@ export function ActivePlanCard({
   return (
     <Card variant="elevated" testID={testID}>
       <Column gap={3}>
-        <Text variant="label" color="secondary">
-          {t('home.activePlan.title')}
-        </Text>
-        <Column gap={1}>
-          <Text variant="title3" color="primary" numberOfLines={1}>
-            {activePlan.name}
+        <Row justify="space-between" align="center">
+          <Text variant="label" color="secondary">
+            {t('home.activePlan.title')}
           </Text>
-          <Text variant="body" color="secondary" numberOfLines={1}>
-            {t('home.activePlan.suggestedDayLabelTemplate', { name: suggestedDay.name })}
-          </Text>
-        </Column>
-        <Row gap={2}>
+          {activePlan.days.length > 1 ? (
+            <IconButton
+              icon={<Ionicons name="calendar-outline" size={18} color={color.textSecondary} />}
+              variant="ghost"
+              size="sm"
+              accessibilityLabel={t('home.activePlan.changeDayButtonLabel')}
+              onPress={() => onChangeDay(activePlan.id)}
+              testID={testID ? `${testID}-change-day-button` : undefined}
+            />
+          ) : null}
+        </Row>
+        {/* Content-left, action-right row (the standard list-row pattern) -
+            the name column takes the remaining space and truncates so a long
+            plan name can never push the Start button off the card. */}
+        <Row gap={3} align="center">
+          <Column gap={1} style={{ flex: 1 }}>
+            <Text variant="title3" color="primary" numberOfLines={1}>
+              {activePlan.name}
+            </Text>
+            <Text variant="body" color="secondary" numberOfLines={1}>
+              {t('home.activePlan.suggestedDayLabelTemplate', { name: suggestedDay.name })}
+            </Text>
+          </Column>
           <Button
             variant="primary"
             label={t('home.activePlan.startButtonLabelTemplate', { name: suggestedDay.name })}
@@ -97,14 +112,6 @@ export function ActivePlanCard({
             loading={isStarting}
             testID={testID ? `${testID}-start-button` : undefined}
           />
-          {activePlan.days.length > 1 ? (
-            <Button
-              variant="ghost"
-              label={t('home.activePlan.changeDayButtonLabel')}
-              onPress={() => onChangeDay(activePlan.id)}
-              testID={testID ? `${testID}-change-day-button` : undefined}
-            />
-          ) : null}
         </Row>
       </Column>
     </Card>
