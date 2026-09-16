@@ -3,7 +3,6 @@ import { AccessibilityInfo } from 'react-native';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
 import { z } from 'zod';
 
 import { Column, Screen } from '@/components/layout';
@@ -11,7 +10,6 @@ import { Avatar, Button, Text, TextField } from '@/components/ui';
 import { NICKNAME_MAX_LENGTH } from '@/features/profile';
 import { useCompleteOnboarding } from '@/features/onboarding/hooks/useCompleteOnboarding';
 import { t } from '@/i18n';
-import { routes } from '@/navigation/routes';
 import { space } from '@/theme/tokens';
 
 const onboardingSchema = z.object({
@@ -82,35 +80,49 @@ export function OnboardingScreen() {
     }
 
     try {
+      // No `allowsEditing`/`aspect` here on purpose (root cause of a
+      // confirmed Android bug: the photo picker and its native crop step
+      // both opened fine, but tapping the crop step's own confirm button
+      // could resolve `launchImageLibraryAsync` as a plain
+      // `{ canceled: true }` - indistinguishable from the user backing out
+      // - silently dropping the picked photo with no error shown. This
+      // avoids that separate native crop activity
+      // (`ExpoCropImageActivity`/`com.canhub.cropper`) entirely, matching
+      // the pattern `body-metrics`' `PhotoSourceSheetContent` already uses
+      // for every picked photo. `Avatar`'s circular frame plus `Image`'s
+      // default `cover` resizeMode already center-crops whatever aspect
+      // ratio comes back, so no client-side crop step is needed here.
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
         quality: 0.8,
       });
 
-      if (!result.canceled) {
-        const asset = result.assets[0];
-        if (asset) {
-          setAvatarUri(asset.uri);
-        }
+      if (result.canceled) {
+        return;
       }
+      const asset = result.assets[0];
+      if (!asset) {
+        return;
+      }
+
+      setAvatarUri(asset.uri);
     } catch {
-      // e.g. a failed iOS crop now rejects instead of resolving with the
-      // uncropped original (expo-image-picker 57.0.8+). An avatar is
-      // optional, so onboarding stays completable without one.
       setAvatarPickFailed(true);
     }
   }, []);
 
+  // No manual `router.replace()` on success here on purpose (root cause of a
+  // confirmed bug: this used to race the `['profile']` query invalidation
+  // `useCompleteOnboarding`'s own `onSuccess` triggers, which is async and
+  // often lost the race, bouncing the user straight back to `/onboarding`
+  // via `RootNavigationGate`'s stale-profile guard with no forward redirect
+  // to recover - see that file's `RootNavigationGate` comment). Once the
+  // mutation succeeds, the invalidated query resolving is the single signal
+  // `RootNavigationGate` needs to leave onboarding; navigating here too just
+  // reintroduces the race.
   const onSubmit = handleSubmit((values) => {
     completeOnboarding.mutate(
       avatarUri ? { nickname: values.nickname, avatarUri } : { nickname: values.nickname },
-      {
-        onSuccess: () => {
-          router.replace(routes.tabs.home());
-        },
-      },
     );
   });
 
