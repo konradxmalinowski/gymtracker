@@ -8,7 +8,7 @@ import { invalidateDailyGoalQueries } from './invalidation';
 import { dailyGoalKeys } from './queryKeys';
 
 /**
- * Confined to `app/goals/**`'s own screens (never barrel-exported) - these
+ * Confined to `app/(tabs)/goals/**`'s own screens (never barrel-exported) - these
  * hooks call `useContainer()` internally rather than taking
  * `dailyGoalService` as a parameter, which is safe specifically because
  * nothing outside this feature's own screens consumes them. `home`'s

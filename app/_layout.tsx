@@ -7,7 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
-import { Redirect, router, Stack } from 'expo-router';
+import { Redirect, router, Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 
 import { Screen } from '@/components/layout';
@@ -258,6 +258,7 @@ function useSessionResumeGate(ready: boolean): SessionGateState {
  */
 export function RootNavigationGate() {
   const container = useContainer();
+  const pathname = usePathname();
   const { data: profile, isLoading } = useQuery({
     queryKey: ['profile'],
     queryFn: () => container.profileService.getProfile(),
@@ -433,9 +434,46 @@ export function RootNavigationGate() {
 
   const showStaleDialog = sessionGate.status === 'stale' && !staleGateResolved;
 
+  // `pathname !== routes.onboarding()` guards against a real, confirmed bug:
+  // `expo-router`'s `<Redirect>` re-fires `router.replace` on every
+  // `useFocusEffect` refocus, not just on first mount. Without this guard,
+  // returning to the app from any backgrounding native activity (the photo
+  // picker chief among them, since it always backgrounds the app) while
+  // `profile` is still null - true for the whole onboarding flow - replaced
+  // `/onboarding` with itself on refocus, remounting `OnboardingScreen` and
+  // silently discarding any in-flight state (confirmed live: the picker's
+  // promise still resolved with a valid picked photo, but `setAvatarUri` ran
+  // on the just-unmounted screen instance and was lost, leaving the avatar on
+  // its placeholder with no error shown). Skipping the redirect once already
+  // on `/onboarding` keeps the boot gate's job - getting a profileless user
+  // there in the first place - without tearing the screen down on every
+  // refocus while they're still on it.
+  // The symmetric case: once `profile` resolves to non-null while still
+  // sitting on `/onboarding`, nothing else forwards the user off that
+  // screen. This matters because `OnboardingScreen`'s own
+  // `router.replace(routes.tabs.home())` (fired in its mutation's
+  // `onSuccess`) races the `['profile']` query invalidation that same
+  // `onSuccess` triggers - `invalidateQueries` is async (a fresh
+  // `profileService.getProfile()` SQLite round trip), so `profile` is often
+  // still stale-null by the time `router.replace` lands, which the guard
+  // above bounces straight back to `/onboarding` before the invalidated
+  // query resolves. Once it does resolve, `profile === null` is false, so
+  // that guard renders nothing - the user was stuck on `/onboarding` forever
+  // with a fully valid profile already in the database (confirmed live: a
+  // profile row existed after a "stuck" onboarding submission, and a second
+  // submission from that same stuck screen then hit the real
+  // `ProfileAlreadyExistsError` guard, surfacing as a generic error). This
+  // redirect is the single source of truth for leaving onboarding once a
+  // profile exists, regardless of whether `OnboardingScreen`'s own
+  // `router.replace` won or lost its race.
   return (
     <>
-      {profile === null ? <Redirect href={routes.onboarding()} /> : null}
+      {profile === null && pathname !== routes.onboarding() ? (
+        <Redirect href={routes.onboarding()} />
+      ) : null}
+      {profile !== null && pathname === routes.onboarding() ? (
+        <Redirect href={routes.tabs.home()} />
+      ) : null}
       {sessionGate.status === 'resume' ? <Redirect href={routes.workout.active()} /> : null}
       <Stack
         screenOptions={{

@@ -24,7 +24,7 @@ import type { DailyGoal } from '../types/DailyGoal';
 const ROW_HEIGHT = 76;
 
 /**
- * `app/goals/manage/index.tsx`'s screen body - every goal, enabled or not
+ * `app/(tabs)/goals/manage/index.tsx`'s screen body - every goal, enabled or not
  * (`useAllGoals`, not `useTodaysGoals`), with reorder, edit, enable/disable,
  * and delete. Mirrors `PlanListScreen`'s exact shape (`DraggableList` +
  * `dragHandle="handle"` + a `ConfirmDialog`-gated hard delete) - the closest

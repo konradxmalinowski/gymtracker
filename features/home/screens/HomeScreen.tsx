@@ -104,58 +104,69 @@ export function HomeScreen() {
         />
       }
     >
-      <Column gap={4} style={{ paddingVertical: space[4] }}>
-        <Column gap={1}>
-          <Text variant="display" color="primary">
-            {t('home.title')}
-          </Text>
-          <Text variant="body" color="secondary">
-            {t('home.tagline')}
-          </Text>
+      <Column gap={6} style={{ paddingVertical: space[4] }}>
+        {/* Hero group - title, tagline, and the Quick Start CTA read as one
+            unit (tight internal gap={4}); the larger gap={6} on the outer
+            Column below separates this header from the dashboard card stack,
+            which keeps its own established gap={4} rhythm (matches
+            StatisticsScreen/CalendarScreen) instead of both regions
+            competing for the same uniform spacing. */}
+        <Column gap={4}>
+          <Column gap={1}>
+            <Text variant="display" color="primary">
+              {t('home.title')}
+            </Text>
+            <Text variant="body" color="secondary">
+              {t('home.tagline')}
+            </Text>
+          </Column>
+
+          <Button
+            variant="primary"
+            size="lg"
+            label={t('workoutLogging.quickStartButtonLabel')}
+            onPress={() => void startEmpty()}
+            loading={isStarting}
+            fullWidth
+            testID="home-quick-start-button"
+          />
         </Column>
 
-        <Button
-          variant="primary"
-          label={t('workoutLogging.quickStartButtonLabel')}
-          onPress={() => void startEmpty()}
-          loading={isStarting}
-          fullWidth
-          testID="home-quick-start-button"
-        />
+        <Column gap={4}>
+          <ActivePlanCard
+            activePlan={data.activePlan}
+            suggestedDay={data.suggestedDay}
+            onStart={(planDayId) => void startFromPlanDay(planDayId)}
+            isStarting={isStarting}
+            onChangeDay={(planId) => router.push(routes.modals.planDayPicker(planId))}
+            onOpenPlan={(planId) => router.push(routes.plans.detail(planId))}
+            onGoToPlans={() => router.push(routes.tabs.plans())}
+            testID="home-active-plan-card"
+          />
 
-        <ActivePlanCard
-          activePlan={data.activePlan}
-          suggestedDay={data.suggestedDay}
-          onStart={(planDayId) => void startFromPlanDay(planDayId)}
-          isStarting={isStarting}
-          onChangeDay={(planId) => router.push(routes.modals.planDayPicker(planId))}
-          onOpenPlan={(planId) => router.push(routes.plans.detail(planId))}
-          onGoToPlans={() => router.push(routes.tabs.plans())}
-          testID="home-active-plan-card"
-        />
+          <LastWorkoutCard
+            lastSession={data.lastSession}
+            onPress={(sessionId) => router.push(routes.history.detail(sessionId))}
+            testID="home-last-workout-card"
+          />
 
-        <LastWorkoutCard
-          lastSession={data.lastSession}
-          onPress={(sessionId) => router.push(routes.history.detail(sessionId))}
-          testID="home-last-workout-card"
-        />
+          <StreakCard streak={data.streak} testID="home-streak-card" />
 
-        <StreakCard streak={data.streak} testID="home-streak-card" />
+          <LatestPRCard
+            latestRecord={data.latestRecord}
+            exerciseName={data.latestRecordExerciseName}
+            testID="home-latest-pr-card"
+          />
 
-        <LatestPRCard
-          latestRecord={data.latestRecord}
-          exerciseName={data.latestRecordExerciseName}
-          testID="home-latest-pr-card"
-        />
+          <TodaysGoalsCard
+            todaysGoals={data.todaysGoals}
+            hasAnyGoals={data.hasAnyGoals}
+            onPress={() => router.push(routes.goals.list())}
+            testID="home-todays-goals-card"
+          />
 
-        <TodaysGoalsCard
-          todaysGoals={data.todaysGoals}
-          hasAnyGoals={data.hasAnyGoals}
-          onPress={() => router.push(routes.goals.list())}
-          testID="home-todays-goals-card"
-        />
-
-        <WeeklySummaryCard weeklySummary={data.weeklySummary} testID="home-weekly-summary-card" />
+          <WeeklySummaryCard weeklySummary={data.weeklySummary} testID="home-weekly-summary-card" />
+        </Column>
       </Column>
 
       {/* Shared by Quick Start and `ActivePlanCard`'s "Start" action - both

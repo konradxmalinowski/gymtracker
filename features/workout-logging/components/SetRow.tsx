@@ -16,10 +16,12 @@ import type {
 import { PRBadge, type PersonalRecord } from '@/features/records';
 import { useRenderCount } from '@/hooks/useRenderCount';
 import { t } from '@/i18n';
+import { useSheetStore } from '@/stores/sheetStore';
 import { color, radius, space } from '@/theme/tokens';
 
 import { useDebouncedFieldCommit } from '../hooks/useDebouncedFieldCommit';
-import { PICKABLE_SET_TYPES, setTypeBadgeColor, setTypeLabel } from './setTypeDisplay';
+import { setTypeBadgeColor, setTypeLabel } from './setTypeDisplay';
+import { SetTypePickerSheetContent } from './SetTypePickerSheetContent';
 
 export interface SetRowProps {
   set: WorkoutSet;
@@ -178,6 +180,29 @@ export const SetRow = memo(function SetRow({
     color: color.danger,
     onTrigger: () => onDelete(set),
   };
+  // Item 4 fix: the type picker used to be an inline `Row wrap` of `Chip`s
+  // inside this row's own expanding section, which pushed every row below
+  // it down the screen on every tap. It now opens as a bottom sheet instead
+  // (the app's established "present a sheet with this content" pattern,
+  // see `ExerciseFilterSheetContent`) - the row itself never changes height
+  // for this interaction.
+  function openTypePicker() {
+    useSheetStore.getState().present({
+      id: `set-type-picker-${set.id}`,
+      content: (
+        <SetTypePickerSheetContent
+          currentType={set.setType}
+          onSelect={(setType) => {
+            onUpdate(set.id, { setType });
+            useSheetStore.getState().dismissCurrent();
+          }}
+          testID={testID ? `${testID}-type-picker` : undefined}
+        />
+      ),
+      snapPoints: [0.35],
+    });
+  }
+
   const rightAction: SwipeableRowAction | undefined = canCopyPrevious
     ? {
         icon: <Ionicons name="copy-outline" size={20} color={color.textInverse} />,
@@ -221,43 +246,54 @@ export const SetRow = memo(function SetRow({
               marginLeft: isDropSegment ? space[6] : 0,
             }}
           >
-            <PressScale
-              onPress={() => {
-                onFocus(set.id);
-                setExpanded((current) => !current);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={t('workoutLogging.set.focusAccessibilityLabelTemplate', {
-                number: displayNumber.label,
-                type: setTypeLabel(set.setType),
-              })}
-              accessibilityHint={t('workoutLogging.set.editAccessibilityHint')}
-              style={{ minWidth: 56, alignItems: 'flex-start' }}
-            >
-              <Column gap={1}>
+            <Column gap={1} style={{ minWidth: 56, alignItems: 'flex-start' }}>
+              <PressScale
+                onPress={() => {
+                  onFocus(set.id);
+                  setExpanded((current) => !current);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={t('workoutLogging.set.focusAccessibilityLabelTemplate', {
+                  number: displayNumber.label,
+                  type: setTypeLabel(set.setType),
+                })}
+                accessibilityHint={t('workoutLogging.set.editAccessibilityHint')}
+              >
                 <Text variant="numeric" color="primary">
                   {displayNumber.label}
                 </Text>
-                {isDropSegment ? (
-                  <Text variant="caption" color="tertiary">
-                    {t('workoutLogging.set.dropLabel')}
+              </PressScale>
+              {isDropSegment ? (
+                <Text variant="caption" color="tertiary">
+                  {t('workoutLogging.set.dropLabel')}
+                </Text>
+              ) : (
+                // Item 4 fix: tapping the badge opens the set-type picker as
+                // a bottom sheet (`openTypePicker` above) instead of
+                // expanding this row inline - the badge itself never grows,
+                // so it also doubles as the always-visible "currently
+                // selected type" indicator the row already had.
+                <PressScale
+                  onPress={openTypePicker}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('workoutLogging.set.typeAccessibilityLabelTemplate', {
+                    type: setTypeLabel(set.setType),
+                  })}
+                  accessibilityHint={t('workoutLogging.set.typePickerAccessibilityHint')}
+                  style={{
+                    paddingHorizontal: space[1],
+                    borderRadius: radius.sm,
+                    backgroundColor: setTypeBadgeColor(set.setType),
+                    alignSelf: 'flex-start',
+                  }}
+                  testID={testID ? `${testID}-type-badge` : undefined}
+                >
+                  <Text variant="caption" color="inverse" numberOfLines={1}>
+                    {setTypeLabel(set.setType)}
                   </Text>
-                ) : (
-                  <View
-                    style={{
-                      paddingHorizontal: space[1],
-                      borderRadius: radius.sm,
-                      backgroundColor: setTypeBadgeColor(set.setType),
-                      alignSelf: 'flex-start',
-                    }}
-                  >
-                    <Text variant="caption" color="inverse" numberOfLines={1}>
-                      {setTypeLabel(set.setType)}
-                    </Text>
-                  </View>
-                )}
-              </Column>
-            </PressScale>
+                </PressScale>
+              )}
+            </Column>
 
             <NumberField
               value={weightDraft}
@@ -296,25 +332,6 @@ export const SetRow = memo(function SetRow({
                 marginLeft: isDropSegment ? space[6] : 0,
               }}
             >
-              {!isDropSegment ? (
-                <Row gap={2} wrap>
-                  {PICKABLE_SET_TYPES.map((type) => (
-                    <Chip
-                      key={type}
-                      label={setTypeLabel(type)}
-                      selected={set.setType === type}
-                      onPress={() => onUpdate(set.id, { setType: type })}
-                      size="sm"
-                      testID={testID ? `${testID}-type-${type}` : undefined}
-                    />
-                  ))}
-                </Row>
-              ) : (
-                <Text variant="footnote" color="secondary">
-                  {t('workoutLogging.set.dropSegmentLabel')}
-                </Text>
-              )}
-
               <Row gap={3} align="center">
                 <Text variant="footnote" color="secondary">
                   {t('workoutLogging.set.rpeAccessibilityLabel')}

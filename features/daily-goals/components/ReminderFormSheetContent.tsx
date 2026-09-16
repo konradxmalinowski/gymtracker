@@ -34,7 +34,7 @@ const DEFAULT_INTERVAL_MINUTES = 60;
 const ALL_WEEKDAYS = 127;
 
 export type ReminderFormSheetContentProps =
-  | { mode: 'create'; goals: readonly DailyGoal[] }
+  | { mode: 'create'; goals: readonly DailyGoal[]; initialGoalId?: string | null | undefined }
   | { mode: 'edit'; reminder: DailyReminder; goals: readonly DailyGoal[] };
 
 interface ReminderDraft {
@@ -75,7 +75,7 @@ function initialDraft(props: ReminderFormSheetContentProps): ReminderDraft {
     timeOfDay: DEFAULT_TIME_OF_DAY,
     intervalMinutes: DEFAULT_INTERVAL_MINUTES,
     activeWeekdays: ALL_WEEKDAYS,
-    goalId: null,
+    goalId: props.initialGoalId ?? null,
     isEnabled: true,
   };
 }

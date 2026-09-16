@@ -21,4 +21,5 @@ export const dailyReminderKeys = {
   detail: (id: string) => ['dailyReminders', 'detail', id] as const,
   stats: (id: string, from: string, to: string) =>
     ['dailyReminders', 'stats', id, from, to] as const,
+  byGoal: (goalId: string) => ['dailyReminders', 'byGoal', goalId] as const,
 };

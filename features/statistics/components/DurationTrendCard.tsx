@@ -4,11 +4,15 @@ import { ChartCard, LineChartView, summarizeSeries, type SeriesPoint } from '@/c
 import { t } from '@/i18n';
 import { color } from '@/theme/tokens';
 
+import { RANGE_BUCKET, type StatRange } from '../domain/statRange';
 import type { TimeBucket } from '../repository/StatisticsRepository';
+import { formatChartAxisLabel } from './formatChartAxisLabel';
 
 export interface DurationTrendCardProps {
   data: readonly TimeBucket[] | undefined;
   isPending: boolean;
+  /** Drives the x-axis tick format (day/week/month) - defaults to `'3m'` for callers (tests, mostly) that don't track a range selector. */
+  range?: StatRange | undefined;
   testID?: string | undefined;
 }
 
@@ -17,10 +21,16 @@ export interface DurationTrendCardProps {
  * phase's plan). Average completed-session duration per bucket, roadmap
  * P11's "duration trend."
  */
-export function DurationTrendCard({ data, isPending, testID }: DurationTrendCardProps) {
-  const points: SeriesPoint[] = (data ?? []).map((bucket) => ({
-    x: bucket.bucketStart,
-    value: bucket.value > 0 ? bucket.value / 60 : null,
+export function DurationTrendCard({
+  data,
+  isPending,
+  range = '3m',
+  testID,
+}: DurationTrendCardProps) {
+  const bucket = RANGE_BUCKET[range];
+  const points: SeriesPoint[] = (data ?? []).map((bucketPoint) => ({
+    x: bucketPoint.bucketStart,
+    value: bucketPoint.value > 0 ? bucketPoint.value / 60 : null,
   }));
   const isEmpty = points.every((point) => point.value === null);
   const summary = summarizeSeries(points);
@@ -47,6 +57,7 @@ export function DurationTrendCard({ data, isPending, testID }: DurationTrendCard
     >
       <LineChartView
         data={points}
+        formatX={(x) => formatChartAxisLabel(x, bucket)}
         formatY={(value) => `${Math.round(value)}m`}
         color={color.chart[2]}
       />

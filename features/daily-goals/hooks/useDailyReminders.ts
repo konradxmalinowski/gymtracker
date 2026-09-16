@@ -13,7 +13,7 @@ import { invalidateDailyReminderQueries } from './invalidation';
 import { dailyReminderKeys } from './queryKeys';
 
 /**
- * Same "confined to `app/goals/**`'s own screens" DI shape as
+ * Same "confined to `app/(tabs)/goals/**`'s own screens" DI shape as
  * `useDailyGoals.ts` - see that file's own header comment for the full
  * reasoning.
  *
@@ -43,6 +43,25 @@ export function useAllReminders() {
   return useQuery({
     queryKey: dailyReminderKeys.list,
     queryFn: () => dailyReminderService.listAll(),
+  });
+}
+
+/**
+ * `GoalFormScreen`'s own read (item 5 discoverability fix) - every reminder
+ * linked to one goal, so a user editing a goal can see and set its reminder
+ * time right there instead of having to separately find "Manage goals" ->
+ * "Reminders" -> the right one. `DailyReminderService.listByGoal` already
+ * existed for exactly this ("for the goal detail/edit screen" per its own
+ * doc comment) but nothing called it until now. `goalId` may be `undefined`
+ * while `GoalFormScreen`'s create mode has no id yet.
+ */
+export function useRemindersForGoal(goalId: EntityId | undefined) {
+  const { dailyReminderService } = useContainer();
+
+  return useQuery({
+    queryKey: dailyReminderKeys.byGoal(goalId ?? ''),
+    queryFn: () => dailyReminderService.listByGoal(goalId as EntityId),
+    enabled: Boolean(goalId),
   });
 }
 

@@ -73,6 +73,7 @@ export const en = {
     plans: 'Plans',
     exercises: 'Exercises',
     stats: 'Stats',
+    goals: 'Goals',
     profile: 'Profile',
   },
   onboarding: {
@@ -474,7 +475,7 @@ export const en = {
     set: {
       deleteAccessibilityLabel: 'Delete set',
       editAccessibilityLabel: 'Edit set',
-      editAccessibilityHint: 'Shows set type, RPE, and note options',
+      editAccessibilityHint: 'Shows RPE and note options',
       copyPreviousAccessibilityLabel: 'Copy previous set',
       weightAccessibilityLabel: 'Weight',
       repsAccessibilityLabel: 'Reps',
@@ -486,6 +487,9 @@ export const en = {
       dropLabel: 'Drop',
       dropSegmentLabel: 'Drop segment',
       addDropSetButtonLabel: 'Add drop set',
+      typeAccessibilityLabelTemplate: 'Set type: {{type}}',
+      typePickerAccessibilityHint: 'Opens the set type picker',
+      typePickerTitle: 'Set type',
       noteLabel: 'Note',
       notePlaceholder: 'Anything worth remembering about this set',
       typeWarmup: 'Warm-up',
@@ -779,6 +783,7 @@ export const en = {
       subtitle: 'Completed workouts',
       emptyTitle: 'No workouts yet',
       emptyMessage: 'Finish a workout to see how often you train.',
+      unitSuffix: 'workouts',
       accessibilityLabelTemplate:
         'Workout frequency chart, {{count}} periods, ranging from {{min}} to {{max}} workouts',
     },
@@ -821,6 +826,7 @@ export const en = {
       emptyTitle: 'No data yet',
       emptyMessage: 'Log a working set for this exercise to see its progression.',
       viewFullButtonLabel: 'View full progression',
+      unitSuffix: 'kg',
       accessibilityLabelTemplate:
         '{{metric}} progression chart, {{count}} periods, ranging from {{min}} to {{max}} kg',
       metric: {
@@ -1068,6 +1074,9 @@ export const en = {
       daysRequiredError: 'Choose at least one day.',
       enabledRowTitle: 'Enabled',
       enabledRowSubtitle: 'Show this goal on the days it is active',
+      remindersSectionTitle: 'Reminders',
+      addReminderButtonLabel: 'Add reminder',
+      noRemindersMessage: 'No reminders set for this goal yet.',
       saveLabel: 'Save',
       genericErrorMessage: 'Something went wrong saving this goal. Please try again.',
       loadErrorMessage: 'Could not load this goal.',

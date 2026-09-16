@@ -65,7 +65,7 @@ async function renderOnboarding() {
 }
 
 describe('OnboardingScreen', () => {
-  it('completes onboarding with a nickname and no avatar (skip path), then navigates to tabs', async () => {
+  it('completes onboarding with a nickname and no avatar (skip path)', async () => {
     const { container, getByTestId } = await renderOnboarding();
 
     await fireEvent.changeText(getByTestId('onboarding-nickname-field'), 'Konrad');
@@ -77,9 +77,14 @@ describe('OnboardingScreen', () => {
       expect(profile?.avatarFileName).toBeNull();
     });
 
-    await waitFor(() => {
-      expect(router.replace).toHaveBeenCalledWith('/');
-    });
+    // No `router.replace` assertion here on purpose: leaving onboarding is
+    // `RootNavigationGate`'s job (`app/_layout.tsx`), reacting to the
+    // `['profile']` query it owns - not something this screen does itself.
+    // Asserting a direct navigation call here is what let a real bug ship
+    // (see that file's `RootNavigationGate` comment): the screen used to
+    // call `router.replace` itself, racing the query invalidation this same
+    // mutation triggers, which could bounce the user straight back to
+    // `/onboarding` before the invalidated query resolved.
   });
 
   it('shows a validation error and does not submit when the nickname is empty', async () => {
