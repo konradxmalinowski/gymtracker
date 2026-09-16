@@ -62,6 +62,38 @@ const OVERLAY_ANDROID_ELEVATION = 24;
  * `ConfirmDialog`, sheet content isn't assumed destructive, so accidental-
  * tap-through protection isn't the default here).
  *
+ * **Why the pan gesture only wraps the drag handle, not `children`**: this
+ * component's content slot is generic - `children` might be a plain
+ * `ScrollView` (e.g. `ExerciseFilterSheetContent`), a `FlatList`, or static
+ * text, and `BottomSheet` has no ref into whatever scrollable a consumer
+ * renders. Gesture Handler's documented way to let an outer `Gesture.Pan()`
+ * coexist with a specific inner scrollable is `.simultaneousWithExternalGesture()`
+ * against a `Gesture.Native()` attached directly to that scrollable (see
+ * Gesture Handler's "Touchables and gesture composition" docs) - that
+ * requires the pan and the scrollable to share a ref, which a generic
+ * `children` prop cannot provide without either reaching into consumer
+ * internals or adding a required ref prop every sheet content file would
+ * have to wire up. Earlier, the pan gesture wrapped the whole sheet
+ * (including `children`), which meant any vertical touch inside the content
+ * area competed with that content's own `ScrollView` for the gesture -
+ * confirmed live as the root cause of a bug report where a filter sheet's
+ * `ScrollView` could not be scrolled at all, because the ancestor pan (no
+ * `activeOffsetY`, no simultaneous/`waitFor` relationship declared) won that
+ * conflict and swallowed the touch. Scoping the `GestureDetector` to just
+ * the handle View below removes the conflict entirely and generically -
+ * every sheet's content area is now a normal, uncontested touch surface,
+ * scrollable or not, with no per-consumer opt-in required. The handle's
+ * touch target is grown via padding (kept purely inside the `GestureDetector`
+ * child so the 36x4 pill's own visual size is unchanged) plus the pan
+ * gesture's own `hitSlop`, since the draggable region is now smaller than
+ * the full sheet. Dismiss is still reachable three ways: dragging the
+ * handle (this gesture), tapping the scrim `Pressable` below, and Android's
+ * hardware back button (the `BackHandler` listener above) - only the
+ * "drag from anywhere in the content, dismiss once scrolled to the top" nice-
+ * to-have is out of scope here, since it is the exact case that needs the
+ * ref-based cooperation described above and no consumer plumbs that in
+ * today.
+ *
  * **Keyboard avoidance / why this isn't a `Modal` (third attempt, this
  * one's final)**: the first two attempts both tried to make Android's
  * keyboard shift the sheet's content while still rendering inside RN's
@@ -167,6 +199,11 @@ export function BottomSheet({
   }, [visible, onDismiss]);
 
   const pan = Gesture.Pan()
+    // The handle's own visual footprint stays a small 36x4 pill (see the
+    // `View` it wraps below) - `hitSlop` widens only the *gesture's* hit
+    // region around it, since that pill is now the sheet's sole drag-to-
+    // dismiss surface (see the file header for why).
+    .hitSlop({ top: space[3], bottom: space[3], left: space[4], right: space[4] })
     .onUpdate((event) => {
       translateY.value = Math.max(0, event.translationY);
     })
@@ -220,37 +257,49 @@ export function BottomSheet({
           backgroundColor: color.surfaceOverlay,
         }}
       />
-      <GestureDetector gesture={pan}>
-        <Animated.View
-          accessibilityViewIsModal
-          style={[
-            {
-              height: openHeight + insets.bottom,
-              paddingBottom: insets.bottom,
-              backgroundColor: color.surfaceElevated,
-              borderTopLeftRadius: radius['2xl'],
-              borderTopRightRadius: radius['2xl'],
-              ...elevation.sheet,
-            },
-            sheetStyle,
-          ]}
-        >
+      <Animated.View
+        accessibilityViewIsModal
+        style={[
+          {
+            height: openHeight + insets.bottom,
+            paddingBottom: insets.bottom,
+            backgroundColor: color.surfaceElevated,
+            borderTopLeftRadius: radius['2xl'],
+            borderTopRightRadius: radius['2xl'],
+            ...elevation.sheet,
+          },
+          sheetStyle,
+        ]}
+      >
+        {/* Only this handle is gesture-detected (see the file header's "Why
+            the pan gesture only wraps the drag handle" note) - `children`
+            below is a plain, gesture-free `View` so any scrollable content
+            it renders gets uncontested touch input. Padding here (rather
+            than the pill's own size) grows the draggable hit region while
+            keeping the visible pill's size and position identical to before. */}
+        <GestureDetector gesture={pan}>
           <View
             accessibilityElementsHidden
             importantForAccessibility="no-hide-descendants"
             style={{
               alignSelf: 'center',
-              width: 36,
-              height: 4,
-              borderRadius: radius.full,
-              backgroundColor: color.borderStrong,
-              marginTop: space[2],
-              marginBottom: space[3],
+              paddingTop: space[2],
+              paddingBottom: space[3],
+              paddingHorizontal: space[4],
             }}
-          />
-          <View style={{ flex: 1, paddingHorizontal: space[4] }}>{children}</View>
-        </Animated.View>
-      </GestureDetector>
+          >
+            <View
+              style={{
+                width: 36,
+                height: 4,
+                borderRadius: radius.full,
+                backgroundColor: color.borderStrong,
+              }}
+            />
+          </View>
+        </GestureDetector>
+        <View style={{ flex: 1, paddingHorizontal: space[4] }}>{children}</View>
+      </Animated.View>
     </View>
   );
 }
