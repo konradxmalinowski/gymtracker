@@ -16,7 +16,7 @@ import { useAllGoals, useRecordGoalProgress, useTodaysGoals } from '../hooks/use
 import type { DailyGoalWithTodayEntry } from '../types/DailyGoal';
 
 /**
- * `app/goals/index.tsx`'s screen body - the daily view (`docs/ROADMAP.md`
+ * `app/(tabs)/goals/index.tsx`'s screen body - the daily view (`docs/ROADMAP.md`
  * P17's own acceptance line: "today's active goals, each updatable with no
  * navigation"). `useTodaysGoals` already filters to enabled goals active on
  * today's weekday; `useAllGoals` is fetched alongside purely to distinguish

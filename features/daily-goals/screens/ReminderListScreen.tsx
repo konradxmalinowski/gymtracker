@@ -25,7 +25,7 @@ import type { DailyReminder } from '../types/DailyReminder';
 const REMINDER_FORM_SHEET_ID = 'daily-reminder-form';
 
 /**
- * `app/goals/manage/reminders/index.tsx`'s screen body - every reminder,
+ * `app/(tabs)/goals/manage/reminders/index.tsx`'s screen body - every reminder,
  * standalone and goal-linked alike (`docs/ROADMAP.md` P17's own reminder
  * management acceptance line). `useAllGoals` is fetched alongside purely to
  * resolve each row's "linked to X" label and to populate the sheet's goal

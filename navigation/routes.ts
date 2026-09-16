@@ -234,16 +234,18 @@ export const routes = {
   },
 
   /**
-   * P17: the daily-goals feature's own root-level Stack
-   * (`app/goals/_layout.tsx`) - same `bodyMetrics` precedent (not one of the
-   * 5 tabs, dedicated Stack rather than a single flat route since this flow
-   * has more than one screen). Reached from `home`'s `TodaysGoalsCard`
-   * (`list()`, always visible on Home regardless of whether any goal is
-   * configured yet) rather than a `ProfileScreen` row - this feature's own
-   * brief scoped its one entry point to the Home card. `manage`/`create`/
-   * `edit`/`reminders`/`reminderStats` mirror `bodyMetrics.list`/`history`/
-   * `photos`/`photoDetail`'s own flat-path, plain-param shape; `reminders`'s
-   * screen file lives at `app/goals/manage/reminders/index.tsx` (not a flat
+   * The daily-goals feature's own nested Stack, now the 6th bottom tab
+   * (`app/(tabs)/goals/_layout.tsx`) as of the UI/UX polish sweep - it
+   * previously lived at a root-level `app/goals/_layout.tsx` outside
+   * `(tabs)`, same `bodyMetrics` precedent as this comment used to describe.
+   * A route group in parentheses contributes nothing to the URL, so every
+   * `Href` below is unchanged by that move. Still reachable from `home`'s
+   * `TodaysGoalsCard` (`list()`) as a glanceable dashboard shortcut, exactly
+   * the way `home` also links into `plans`/`exercises` alongside their own
+   * tabs. `manage`/`create`/`edit`/`reminders`/`reminderStats` mirror
+   * `bodyMetrics.list`/`history`/`photos`/`photoDetail`'s own flat-path,
+   * plain-param shape; `reminders`'s screen file lives at
+   * `app/(tabs)/goals/manage/reminders/index.tsx` (not a flat
    * `reminders.tsx`) purely for on-disk consistency with
    * `reminders/[reminderId]/stats.tsx` sitting right next to it - the route
    * surface here is unaffected either way.
