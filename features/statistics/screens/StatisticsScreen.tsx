@@ -85,16 +85,19 @@ export function StatisticsScreen() {
         <VolumeChartCard
           data={data.volume}
           isPending={isFetching}
+          range={range}
           testID="statistics-volume-card"
         />
         <FrequencyChartCard
           data={data.frequency}
           isPending={isFetching}
+          range={range}
           testID="statistics-frequency-card"
         />
         <DurationTrendCard
           data={data.duration}
           isPending={isFetching}
+          range={range}
           testID="statistics-duration-card"
         />
         <MuscleVolumeCard

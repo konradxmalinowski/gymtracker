@@ -7,11 +7,15 @@ import { t } from '@/i18n';
 import { color, space } from '@/theme/tokens';
 
 import type { ProgressionMetric, SeriesPoint } from '../domain/exerciseProgressionReducer';
+import { RANGE_BUCKET, type StatRange } from '../domain/statRange';
+import { formatChartAxisLabel } from './formatChartAxisLabel';
 
 export interface ExerciseProgressionCardProps {
   data: readonly SeriesPoint[] | undefined;
   isPending: boolean;
   metric: ProgressionMetric;
+  /** Drives the x-axis tick format (day/week/month) - defaults to `'3m'` for callers (tests, mostly) that don't track a range selector. */
+  range?: StatRange | undefined;
   onMetricChange?: ((metric: ProgressionMetric) => void) | undefined;
   testID?: string | undefined;
 }
@@ -45,9 +49,15 @@ export function ExerciseProgressionCard({
   data,
   isPending,
   metric,
+  range = '3m',
   onMetricChange,
   testID,
 }: ExerciseProgressionCardProps) {
+  const bucket = RANGE_BUCKET[range];
+  // Every metric (`top_set`, `e1rm`, `volume`) is a weight-in-kg quantity -
+  // `reduceExerciseProgression` (`exerciseProgressionReducer.ts`) reduces all
+  // three from `weightKg`/`volumeKg` working-set fields, never a bare count.
+  const unitSuffix = t('statistics.exerciseProgression.unitSuffix');
   const points = (data ?? []).map((point) => ({ x: point.bucketStart, value: point.value }));
   const isEmpty = points.every((point) => point.value === null);
   const summary = summarizeSeries(points);
@@ -84,7 +94,8 @@ export function ExerciseProgressionCard({
         <LineChartView
           data={points}
           color={METRIC_COLOR[metric]}
-          formatY={(value) => `${Math.round(value)}`}
+          formatX={(x) => formatChartAxisLabel(x, bucket)}
+          formatY={(value) => `${Math.round(value)} ${unitSuffix}`}
         />
       </ChartCard>
     </View>

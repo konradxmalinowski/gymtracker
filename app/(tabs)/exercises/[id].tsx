@@ -123,6 +123,7 @@ function ProgressChartSlot({ exerciseId }: { exerciseId: string | undefined }) {
         data={data}
         isPending={isPending}
         metric="top_set"
+        range="3m"
         testID="exercise-detail-progress-chart"
       />
       {exerciseId ? (

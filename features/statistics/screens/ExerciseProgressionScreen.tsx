@@ -108,6 +108,7 @@ export function ExerciseProgressionScreen() {
               data={data}
               isPending={isFetching}
               metric={metric}
+              range={range}
               onMetricChange={setMetric}
               testID="exercise-progression-card"
             />
