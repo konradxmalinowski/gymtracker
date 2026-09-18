@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react';
 
-import { Column, Row } from '@/components/layout';
+import { Column } from '@/components/layout';
 import { Card, Divider } from '@/components/ui';
 import {
   assignSetDisplayNumbers,
@@ -18,9 +18,7 @@ import { space } from '@/theme/tokens';
 
 import { AddSetButton } from './AddSetButton';
 import { ExerciseHeader } from './ExerciseHeader';
-import { PlateCalculatorButton } from './PlateCalculatorButton';
 import { PlateCalculatorSheetContent } from './PlateCalculatorSheetContent';
-import { PreviousPerformancePanel } from './PreviousPerformancePanel';
 import { SetRow, SetRowHeader } from './SetRow';
 
 const PLATE_CALCULATOR_SHEET_ID = 'plate-calculator';
@@ -49,12 +47,15 @@ export interface SessionExerciseCardProps {
 
 /**
  * `SessionExerciseCard` from ARCHITECTURE.md section 10.3: `ExerciseHeader`,
- * `PreviousPerformancePanel`, the set list (drop segments rendered indented
- * under their parent via `orderSetsForDisplay`/`assignSetDisplayNumbers` from
- * the feature barrel, not re-derived here), `AddSetButton`. One card is one
- * `FlashList` item in `ActiveWorkoutScreen` - sets inside are a plain mapped
- * list, never their own virtualized list, per the same section's explicit
- * "nested virtualized lists are a known source of scroll jank" note.
+ * the set list (drop segments rendered indented under their parent via
+ * `orderSetsForDisplay`/`assignSetDisplayNumbers` from the feature barrel,
+ * not re-derived here), `AddSetButton`. Reference-layout pass: the previous
+ * per-session "Last time" summary (`PreviousPerformancePanel`) was removed -
+ * each `SetRow` now shows its own previous value inline, making the
+ * per-exercise summary redundant. One card is one `FlashList` item in
+ * `ActiveWorkoutScreen` - sets inside are a plain mapped list, never their
+ * own virtualized list, per the same section's explicit "nested virtualized
+ * lists are a known source of scroll jank" note.
  *
  * P15 (performance hardening): wrapped in `React.memo` with the default
  * shallow prop comparison - no custom comparator, since `ActiveWorkoutScreen`
@@ -98,11 +99,7 @@ export const SessionExerciseCard = memo(function SessionExerciseCard({
   const displayNumbers = useMemo(() => assignSetDisplayNumbers(exercise.sets), [exercise.sets]);
 
   const { exerciseHistoryRepository, settings } = useContainer();
-  const {
-    previousPerformance,
-    suggestion,
-    isPending: isHistoryPending,
-  } = useProgressionSuggestion(
+  const { previousPerformance, suggestion } = useProgressionSuggestion(
     { exerciseHistoryRepository, settings },
     {
       exerciseId: exercise.exerciseId,
@@ -161,20 +158,8 @@ export const SessionExerciseCard = memo(function SessionExerciseCard({
           onMoveDown={onMoveDown}
           onRemove={onRemove}
           onUpdateNote={onUpdateNote}
+          onOpenPlateCalculator={handleOpenPlateCalculator}
           testID={testID ? `${testID}-header` : undefined}
-        />
-
-        <Row>
-          <PlateCalculatorButton
-            onPress={handleOpenPlateCalculator}
-            testID={testID ? `${testID}-plate-calculator-button` : undefined}
-          />
-        </Row>
-
-        <PreviousPerformancePanel
-          previousPerformance={previousPerformance}
-          isPending={isHistoryPending}
-          testID={testID ? `${testID}-previous-performance` : undefined}
         />
 
         <ProgressionHint

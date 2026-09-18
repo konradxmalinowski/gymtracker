@@ -20,6 +20,7 @@ interface ExerciseActionsSheetContentProps {
   onMoveUp: () => void;
   onMoveDown: () => void;
   onRemove: () => void;
+  onOpenPlateCalculator: () => void;
 }
 
 /**
@@ -40,6 +41,7 @@ function ExerciseActionsSheetContent({
   onMoveUp,
   onMoveDown,
   onRemove,
+  onOpenPlateCalculator,
 }: ExerciseActionsSheetContentProps) {
   return (
     <Column gap={4}>
@@ -62,6 +64,12 @@ function ExerciseActionsSheetContent({
           testID="exercise-actions-move-down"
         />
         <ListRow
+          title={t('workoutLogging.plateCalculator.title')}
+          leading={<Ionicons name="barbell-outline" size={20} color={color.textSecondary} />}
+          onPress={onOpenPlateCalculator}
+          testID="exercise-actions-plate-calculator"
+        />
+        <ListRow
           title={t('workoutLogging.active.removeExerciseActionLabel')}
           leading={<Ionicons name="close-circle-outline" size={20} color={color.danger} />}
           onPress={onRemove}
@@ -82,6 +90,8 @@ export interface ExerciseHeaderProps {
   onRemove: () => void;
   /** FR-16 exercise-level note - `setExerciseNote(sessionExerciseId, note)` through `useSetExerciseNote`. `null` clears it. */
   onUpdateNote: (note: string | null) => void;
+  /** Gravitus-inspired refresh's plate calculator, relocated from the card's own always-visible row into this overflow sheet - declutters the card to match the reference layout. */
+  onOpenPlateCalculator: () => void;
   testID?: string | undefined;
 }
 
@@ -109,6 +119,7 @@ export function ExerciseHeader({
   onMoveDown,
   onRemove,
   onUpdateNote,
+  onOpenPlateCalculator,
   testID,
 }: ExerciseHeaderProps) {
   const [noteExpanded, setNoteExpanded] = useState(false);
@@ -141,6 +152,10 @@ export function ExerciseHeader({
           onRemove={() => {
             useSheetStore.getState().dismissCurrent();
             onRemove();
+          }}
+          onOpenPlateCalculator={() => {
+            useSheetStore.getState().dismissCurrent();
+            onOpenPlateCalculator();
           }}
         />
       ),

@@ -46,6 +46,7 @@ async function renderHeader(overrides: Partial<Parameters<typeof ExerciseHeader>
     onMoveDown: jest.fn(),
     onRemove: jest.fn(),
     onUpdateNote: jest.fn(),
+    onOpenPlateCalculator: jest.fn(),
   };
 
   const view = await render(
@@ -57,6 +58,7 @@ async function renderHeader(overrides: Partial<Parameters<typeof ExerciseHeader>
       onMoveDown={handlers.onMoveDown}
       onRemove={handlers.onRemove}
       onUpdateNote={handlers.onUpdateNote}
+      onOpenPlateCalculator={handlers.onOpenPlateCalculator}
       testID="exercise-header"
       {...overrides}
     />,
