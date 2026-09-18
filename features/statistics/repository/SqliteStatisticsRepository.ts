@@ -15,7 +15,12 @@ import {
 } from '../domain/exerciseProgressionReducer';
 import type { BucketGranularity } from '../domain/statRange';
 import { computeYearlyHeatmap, type DayIntensity } from '../domain/yearlyHeatmapBinning';
-import type { MuscleVolumeSlice, StatisticsRepository, TimeBucket } from './StatisticsRepository';
+import type {
+  BodyWeightPoint,
+  MuscleVolumeSlice,
+  StatisticsRepository,
+  TimeBucket,
+} from './StatisticsRepository';
 
 export interface StatisticsRepositoryDependencies {
   db: DatabaseContext;
@@ -41,6 +46,11 @@ interface DailyDurationRow {
 interface MuscleVolumeRow {
   body_part: string;
   volume_kg: number | null;
+}
+
+interface BodyWeightRow {
+  local_date: string;
+  value: number;
 }
 
 interface WorkingSetRow {
@@ -212,6 +222,29 @@ export class SqliteStatisticsRepository implements StatisticsRepository {
       rows.map((row) => ({ localDate: row.local_date, volumeKg: row.volume_kg ?? 0 })),
       year,
     );
+  }
+
+  async bodyWeightTrend(
+    localDateFrom: string,
+    localDateTo: string,
+    tx?: SqlExecutor,
+  ): Promise<BodyWeightPoint[]> {
+    const executor = tx ?? this.deps.db;
+    // The bare `value` column alongside `MAX(measured_at)` relies on
+    // SQLite's documented `min()`/`max()` aggregate behavior: when a query
+    // has exactly one `min()`/`max()` in its result columns, every other
+    // bare column takes its value from the same row that produced the
+    // min/max - so this returns each day's *last* entry, not an
+    // undefined/arbitrary row, without a second correlated subquery.
+    const rows = await executor.select<BodyWeightRow>(
+      `SELECT local_date, value, MAX(measured_at)
+       FROM body_metric_entry
+       WHERE metric = 'body_weight' AND deleted_at IS NULL AND local_date BETWEEN ? AND ?
+       GROUP BY local_date
+       ORDER BY local_date ASC`,
+      [localDateFrom, localDateTo],
+    );
+    return rows.map((row) => ({ localDate: row.local_date, valueKg: row.value }));
   }
 
   /** Same `oneRm.formula` resolution `SqlitePersonalRecordRepository.resolveFormula` already establishes (ADR-0015) - only called for `metric === 'e1rm'`, never for `top_set`/`volume`. */

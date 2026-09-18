@@ -22,6 +22,7 @@ export type {
   StatisticsRepository,
   TimeBucket,
   MuscleVolumeSlice,
+  BodyWeightPoint,
   DayIntensity,
   HeatmapLevel,
 } from './repository/StatisticsRepository';

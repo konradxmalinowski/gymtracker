@@ -8,6 +8,7 @@ import { t } from '@/i18n';
 import { useContainer } from '@/services/container';
 import { color, space } from '@/theme/tokens';
 
+import { BodyWeightTrendCard } from '../components/BodyWeightTrendCard';
 import { DurationTrendCard } from '../components/DurationTrendCard';
 import { FrequencyChartCard } from '../components/FrequencyChartCard';
 import { MuscleVolumeCard } from '../components/MuscleVolumeCard';
@@ -105,6 +106,12 @@ export function StatisticsScreen() {
           isPending={isFetching}
           testID="statistics-muscle-volume-card"
         />
+        <BodyWeightTrendCard
+          data={data.bodyWeight}
+          isPending={isFetching}
+          range={range}
+          testID="statistics-body-weight-card"
+        />
         <YearlyHeatmapCard
           data={data.heatmap}
           year={data.heatmapYear}
@@ -121,7 +128,7 @@ function StatisticsSkeleton() {
     <Column gap={4} style={{ paddingVertical: space[4] }}>
       <Skeleton width="50%" height={40} />
       <Skeleton width="100%" height={40} radius="xl" />
-      {[0, 1, 2, 3, 4].map((index) => (
+      {[0, 1, 2, 3, 4, 5].map((index) => (
         <Skeleton key={index} width="100%" height={220} radius="xl" />
       ))}
     </Column>

@@ -4,6 +4,7 @@ import type { Clock } from '@/services/clock';
 
 import { resolveStatRange, type StatRange } from '../domain/statRange';
 import type {
+  BodyWeightPoint,
   DayIntensity,
   MuscleVolumeSlice,
   StatisticsRepository,
@@ -22,6 +23,7 @@ export interface StatisticsDashboardData {
   frequency: TimeBucket[];
   duration: TimeBucket[];
   muscleVolume: MuscleVolumeSlice[];
+  bodyWeight: BodyWeightPoint[];
   heatmap: DayIntensity[];
   heatmapYear: number;
 }
@@ -47,15 +49,16 @@ export function useStatisticsDashboard(
       const { localDateFrom, localDateTo, bucket } = resolveStatRange(range, today);
       const heatmapYear = Number(today.slice(0, 4));
 
-      const [volume, frequency, duration, muscleVolume, heatmap] = await Promise.all([
+      const [volume, frequency, duration, muscleVolume, bodyWeight, heatmap] = await Promise.all([
         statisticsRepository.volumeByPeriod(localDateFrom, localDateTo, bucket),
         statisticsRepository.sessionFrequency(localDateFrom, localDateTo, bucket),
         statisticsRepository.durationTrend(localDateFrom, localDateTo, bucket),
         statisticsRepository.muscleGroupVolume(localDateFrom, localDateTo),
+        statisticsRepository.bodyWeightTrend(localDateFrom, localDateTo),
         statisticsRepository.yearlyHeatmap(heatmapYear),
       ]);
 
-      return { volume, frequency, duration, muscleVolume, heatmap, heatmapYear };
+      return { volume, frequency, duration, muscleVolume, bodyWeight, heatmap, heatmapYear };
     },
   });
 }

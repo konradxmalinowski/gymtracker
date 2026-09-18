@@ -41,6 +41,7 @@ export function FrequencyChartCard({
       emptyIcon={<Ionicons name="calendar-outline" size={32} color={color.textTertiary} />}
       emptyTitle={t('statistics.frequency.emptyTitle')}
       emptyMessage={t('statistics.frequency.emptyMessage')}
+      unitLabel={unitSuffix}
       contentAccessibilityLabel={
         summary
           ? t('statistics.frequency.accessibilityLabelTemplate', {

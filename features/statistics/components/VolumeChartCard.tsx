@@ -36,6 +36,7 @@ export function VolumeChartCard({ data, isPending, range = '3m', testID }: Volum
       emptyIcon={<Ionicons name="barbell-outline" size={32} color={color.textTertiary} />}
       emptyTitle={t('statistics.volume.emptyTitle')}
       emptyMessage={t('statistics.volume.emptyMessage')}
+      unitLabel={unitSuffix}
       contentAccessibilityLabel={
         summary
           ? t('statistics.volume.accessibilityLabelTemplate', {

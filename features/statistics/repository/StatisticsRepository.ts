@@ -17,6 +17,13 @@ export interface MuscleVolumeSlice {
   volumeKg: number;
 }
 
+export interface BodyWeightPoint {
+  /** `YYYY-MM-DD` this entry was measured on. */
+  localDate: string;
+  /** Always kg (`body_metric_entry.value`'s canonical unit for `body_weight`) - display-unit conversion is a presentation-layer concern (ADR-0009), not this repository's. */
+  valueKg: number;
+}
+
 export type { ProgressionMetric, SeriesPoint } from '../domain/exerciseProgressionReducer';
 export type { DayIntensity, HeatmapLevel } from '../domain/yearlyHeatmapBinning';
 
@@ -86,4 +93,20 @@ export interface StatisticsRepository {
 
   /** Every day of `year`, gap-filled and quantile-binned per Step 0 decision 3. */
   yearlyHeatmap(year: number, tx?: SqlExecutor): Promise<DayIntensity[]>;
+
+  /**
+   * Body-weight entries (`body_metric_entry` where `metric = 'body_weight'`)
+   * in `[localDateFrom, localDateTo]`, one point per day (a day with more
+   * than one entry keeps only its last measurement) - a direct-SQL read of
+   * another feature's table, the same ADR-0019/ADR-0020 precedent `home`/
+   * `calendar` already established for reading `workout_session`/
+   * `v_working_set` without importing that feature's service. No
+   * gap-filling/bucketing: body-weight entries are sparse, user-logged
+   * events, not an aggregatable daily sum like `volumeByPeriod`.
+   */
+  bodyWeightTrend(
+    localDateFrom: string,
+    localDateTo: string,
+    tx?: SqlExecutor,
+  ): Promise<BodyWeightPoint[]>;
 }

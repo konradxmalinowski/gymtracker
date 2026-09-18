@@ -79,6 +79,7 @@ export function ExerciseProgressionCard({
         emptyIcon={<Ionicons name="trending-up-outline" size={32} color={color.textTertiary} />}
         emptyTitle={t('statistics.exerciseProgression.emptyTitle')}
         emptyMessage={t('statistics.exerciseProgression.emptyMessage')}
+        unitLabel={unitSuffix}
         contentAccessibilityLabel={
           summary
             ? t('statistics.exerciseProgression.accessibilityLabelTemplate', {
