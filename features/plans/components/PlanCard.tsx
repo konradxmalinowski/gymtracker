@@ -75,7 +75,7 @@ export function PlanCard({
 
         <Column gap={1} style={{ flex: 1 }}>
           <Row gap={2} align="center">
-            <Text variant="bodyMedium" color="primary" numberOfLines={1} style={{ flex: 1 }}>
+            <Text variant="bodyMedium" color="primary" numberOfLines={1} style={{ flexShrink: 1 }}>
               {plan.name}
             </Text>
             {plan.isActive ? (

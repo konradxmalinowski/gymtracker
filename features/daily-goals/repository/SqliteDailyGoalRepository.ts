@@ -14,6 +14,7 @@ import type {
 } from '../types/DailyGoal';
 import type {
   CreateDailyGoalInput,
+  DailyGoalRangeEntry,
   DailyGoalRepository,
   UpdateDailyGoalPatch,
 } from './DailyGoalRepository';
@@ -40,6 +41,16 @@ interface DailyGoalEntryRow {
 
 /** Row shape of `listActiveGoalsForWeekday`'s own `LEFT JOIN` - `entry_*` columns are all `NULL` when the goal has no entry for `localDate` yet. */
 interface GoalWithEntryRow extends DailyGoalRow {
+  entry_id: string | null;
+  entry_local_date: string | null;
+  entry_progress_value: number | null;
+  entry_created_at: number | null;
+  entry_updated_at: number | null;
+}
+
+/** Row shape of `listActiveGoalsForDateRange`'s own recursive-CTE join - `GoalWithEntryRow` plus the generated `range_local_date` the goal was active on (the same goal can appear once per day it's active in the range, each time carrying that day's own `entry_*` columns). */
+interface GoalWithEntryForRangeRow extends DailyGoalRow {
+  range_local_date: string;
   entry_id: string | null;
   entry_local_date: string | null;
   entry_progress_value: number | null;
@@ -268,5 +279,59 @@ export class SqliteDailyGoalRepository
       [goalId, dateRangeFrom, dateRangeTo],
     );
     return rows.map(mapEntryRow);
+  }
+
+  /**
+   * One query for the whole `[dateFrom, dateTo]` range - `range_dates` is a
+   * `WITH RECURSIVE` day-by-day date series (SQLite's own documented
+   * "generate a series of dates" idiom), joined against `daily_goal` with
+   * exactly `listActiveGoalsForWeekday`'s own bitmask test
+   * (`(active_weekdays >> weekdayIndex) & 1 = 1`), just with `weekdayIndex`
+   * computed per generated date via `strftime('%w', ...)` (0=Sunday..
+   * 6=Saturday) converted to this feature's Monday-based convention with the
+   * same `(jsDay + 6) % 7` transform `weekdayIndexOf()` uses in JS - rather
+   * than looping `listActiveGoalsForWeekday` once per day, which would be a
+   * real N+1 across a month's worth of days. `LEFT JOIN daily_goal_entry`
+   * mirrors that same method's own join, scoped per generated date instead
+   * of a single fixed one.
+   */
+  async listActiveGoalsForDateRange(
+    dateFrom: string,
+    dateTo: string,
+    tx?: SqlExecutor,
+  ): Promise<DailyGoalRangeEntry[]> {
+    const rows = await this.executor(tx).select<GoalWithEntryForRangeRow>(
+      `WITH RECURSIVE range_dates(local_date) AS (
+         SELECT ?
+         UNION ALL
+         SELECT date(local_date, '+1 day') FROM range_dates WHERE local_date < ?
+       )
+       SELECT rd.local_date AS range_local_date, g.*,
+              e.id AS entry_id, e.local_date AS entry_local_date,
+              e.progress_value AS entry_progress_value, e.created_at AS entry_created_at,
+              e.updated_at AS entry_updated_at
+       FROM range_dates rd
+       JOIN daily_goal g
+         ON g.is_enabled = 1 AND g.deleted_at IS NULL
+        AND (g.active_weekdays >> ((CAST(strftime('%w', rd.local_date) AS INTEGER) + 6) % 7)) & 1 = 1
+       LEFT JOIN daily_goal_entry e ON e.goal_id = g.id AND e.local_date = rd.local_date
+       ORDER BY rd.local_date ASC, g.sort_order ASC`,
+      [dateFrom, dateTo],
+    );
+    return rows.map((row) => ({
+      localDate: row.range_local_date,
+      goal: mapGoalRow(row),
+      entry:
+        row.entry_id !== null
+          ? mapEntryRow({
+              id: row.entry_id,
+              goal_id: row.id,
+              local_date: row.entry_local_date!,
+              progress_value: row.entry_progress_value!,
+              created_at: row.entry_created_at!,
+              updated_at: row.entry_updated_at!,
+            })
+          : null,
+    }));
   }
 }

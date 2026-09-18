@@ -28,6 +28,7 @@ export function DurationTrendCard({
   testID,
 }: DurationTrendCardProps) {
   const bucket = RANGE_BUCKET[range];
+  const unitSuffix = t('statistics.duration.unitSuffix');
   const points: SeriesPoint[] = (data ?? []).map((bucketPoint) => ({
     x: bucketPoint.bucketStart,
     value: bucketPoint.value > 0 ? bucketPoint.value / 60 : null,
@@ -44,6 +45,7 @@ export function DurationTrendCard({
       emptyIcon={<Ionicons name="time-outline" size={32} color={color.textTertiary} />}
       emptyTitle={t('statistics.duration.emptyTitle')}
       emptyMessage={t('statistics.duration.emptyMessage')}
+      unitLabel={unitSuffix}
       contentAccessibilityLabel={
         summary
           ? t('statistics.duration.accessibilityLabelTemplate', {
@@ -58,7 +60,7 @@ export function DurationTrendCard({
       <LineChartView
         data={points}
         formatX={(x) => formatChartAxisLabel(x, bucket)}
-        formatY={(value) => `${Math.round(value)}m`}
+        formatY={(value) => `${Math.round(value)} ${unitSuffix}`}
         color={color.chart[2]}
       />
     </ChartCard>

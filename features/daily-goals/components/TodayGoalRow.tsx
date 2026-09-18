@@ -23,12 +23,14 @@ export interface TodayGoalRowProps {
 }
 
 /**
- * `DailyGoalsScreen`'s row - one per active goal, each rendering exactly one
- * of three quick-action shapes based on `goal.goalType`, requiring no
- * navigation to update (this phase's own acceptance criterion). Built on
- * `Card` rather than `PressScale`/`ListRow` - there is no single "tap the
- * row" action here (every control on the row is its own independent target,
- * unlike `GoalCard`'s row-level "tap to edit").
+ * `DailyGoalsScreen`'s day-view row - one per active goal on whichever date
+ * is currently selected (not necessarily today - the component itself is
+ * date-agnostic, driven entirely by `goalWithEntry`/the callbacks a caller
+ * supplies), each rendering exactly one of three quick-action shapes based
+ * on `goal.goalType`, requiring no navigation to update (this phase's own
+ * acceptance criterion). Built on `Card` rather than `PressScale`/`ListRow` -
+ * there is no single "tap the row" action here (every control on the row is
+ * its own independent target, unlike `GoalCard`'s row-level "tap to edit").
  */
 export function TodayGoalRow({
   goalWithEntry,
@@ -52,14 +54,24 @@ export function TodayGoalRow({
             <Text variant="bodyMedium" color="primary" numberOfLines={1} style={{ flex: 1 }}>
               {goal.name}
             </Text>
-            {complete ? (
+            {/*
+              Boolean goals never render this badge - the `Checkbox` below
+              already conveys the exact same "done" state, and a badge next
+              to it was a literal duplicate signal (design-review finding).
+              Counter/numeric goals have no checkbox, so this badge stays
+              their only completion signal - `tone="accent"` rather than the
+              previous `"success"`, matching every other status badge in the
+              app (Plans' Active label, exercise level badge, etc.); `success`
+              (green) was the one inconsistent outlier.
+            */}
+            {complete && goal.goalType !== 'boolean' ? (
               <Animated.View
                 entering={ZoomIn.springify()
                   .damping(motion.spring.snappy.damping)
                   .stiffness(motion.spring.snappy.stiffness)
                   .mass(motion.spring.snappy.mass)}
               >
-                <Badge label={t('dailyGoals.today.completedBadgeLabel')} tone="success" size="sm" />
+                <Badge label={t('dailyGoals.today.completedBadgeLabel')} tone="accent" size="sm" />
               </Animated.View>
             ) : null}
           </Row>

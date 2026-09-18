@@ -22,6 +22,7 @@ import { useSheetStore } from '@/stores/sheetStore';
 import { color, radius, space } from '@/theme/tokens';
 
 import { getGoalIconOptions } from '../components/goalIcons';
+import { GoalProgressChartCard } from '../components/GoalProgressChartCard';
 import { ReminderFormSheetContent } from '../components/ReminderFormSheetContent';
 import { ReminderRow } from '../components/ReminderRow';
 import { WeekdayPicker } from '../components/WeekdayPicker';
@@ -31,6 +32,7 @@ import {
   useRemindersForGoal,
   useSetReminderEnabled,
 } from '../hooks/useDailyReminders';
+import { useGoalProgress } from '../hooks/useGoalProgress';
 
 const REMINDER_FORM_SHEET_ID = 'daily-reminder-form';
 
@@ -115,6 +117,13 @@ export function GoalFormScreen(props: GoalFormScreenProps) {
   const setReminderEnabled = useSetReminderEnabled();
   const deleteReminder = useDeleteReminder();
   const [deleteReminderTarget, setDeleteReminderTarget] = useState<DailyReminder | null>(null);
+
+  // Edit-mode-only progress trend, the same condition the Reminders section
+  // above already uses - a goal that doesn't exist yet has no history to
+  // chart. `useGoalProgress` stays defensive on an `undefined` `goalId` the
+  // same way `useRemindersForGoal` does, so this is safe to call
+  // unconditionally.
+  const goalProgress = useGoalProgress(goalId);
 
   const {
     control,
@@ -472,6 +481,24 @@ export function GoalFormScreen(props: GoalFormScreenProps) {
                 {t('dailyGoals.form.noRemindersMessage')}
               </Text>
             )}
+          </Column>
+        ) : null}
+
+        {isEditMode && existing.data ? (
+          <Column gap={2}>
+            <Text variant="label" color="secondary">
+              {t('dailyGoals.form.progressChartSectionTitle')}
+            </Text>
+            <GoalProgressChartCard
+              goalType={existing.data.goalType}
+              unit={existing.data.unit}
+              activeWeekdays={existing.data.activeWeekdays}
+              entries={goalProgress.data}
+              isPending={goalProgress.isPending}
+              from={goalProgress.from}
+              to={goalProgress.to}
+              testID="goal-form-progress-chart"
+            />
           </Column>
         ) : null}
 

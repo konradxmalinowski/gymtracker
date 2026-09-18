@@ -16,6 +16,7 @@ import { color } from '@/theme/tokens';
 import type { BodyMetricType } from '../domain/metrics';
 import { MeasurementQuickEntrySheetContent } from '../components/MeasurementQuickEntrySheetContent';
 import { formatBodyMetricsDate } from '../components/formatBodyMetricsDate';
+import { formatMetricHistoryAxisLabel } from '../components/formatMetricHistoryAxisLabel';
 import { metricLabel } from '../components/metricPresentation';
 import { useDisplayUnits } from '../hooks/useDisplayUnits';
 import {
@@ -47,9 +48,13 @@ export function MetricHistoryScreen({ metric }: MetricHistoryScreenProps) {
     if (!metric || !entries) {
       return [];
     }
-    // `listHistory` returns newest-first; the chart reads oldest-first left to right.
+    // `listHistory` returns newest-first; the chart reads oldest-first left
+    // to right. `x` stays the raw `YYYY-MM-DD` `localDate` here (not
+    // `formatBodyMetricsDate`'s pre-formatted string) so `LineChartView`'s
+    // `formatX` can render it as a short axis tick label - the same
+    // raw-value-in/formatted-label-out shape every `statistics` chart uses.
     return [...entries].reverse().map((entry) => ({
-      x: formatBodyMetricsDate(entry.measuredAt),
+      x: entry.localDate,
       value: toDisplayValue(metric, entry.value, weightUnit ?? 'kg', lengthUnit ?? 'cm'),
     }));
   }, [metric, entries, weightUnit, lengthUnit]);
@@ -120,6 +125,7 @@ export function MetricHistoryScreen({ metric }: MetricHistoryScreenProps) {
             emptyIcon={<Ionicons name="analytics-outline" size={32} color={color.textTertiary} />}
             emptyTitle={t('bodyMetrics.history.emptyTitle')}
             emptyMessage={t('bodyMetrics.history.emptyMessage')}
+            unitLabel={unit}
             contentAccessibilityLabel={
               summary
                 ? t('bodyMetrics.history.chartAccessibilityLabelTemplate', {
@@ -133,7 +139,11 @@ export function MetricHistoryScreen({ metric }: MetricHistoryScreenProps) {
             }
             testID="body-metrics-history-chart"
           >
-            <LineChartView data={chartPoints} formatY={(value) => value.toFixed(0)} />
+            <LineChartView
+              data={chartPoints}
+              formatX={formatMetricHistoryAxisLabel}
+              formatY={(value) => `${value.toFixed(0)} ${unit}`}
+            />
           </ChartCard>
         ) : null}
 

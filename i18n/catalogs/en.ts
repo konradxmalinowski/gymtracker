@@ -95,6 +95,9 @@ export const en = {
   },
   profile: {
     editAvatarAccessibilityLabel: 'Change profile photo',
+    avatarPermissionDeniedMessage: 'Photo library access was denied.',
+    avatarPickFailedMessage: "Couldn't process that photo. Try a different one.",
+    avatarUpdateFailedMessage: "Couldn't update your photo. Please try again.",
     settingsRowTitle: 'Settings',
     settingsRowSubtitle: 'Units, haptics, and about',
     loadErrorMessage: 'Could not load your profile.',
@@ -792,6 +795,7 @@ export const en = {
       subtitle: 'Average time per workout',
       emptyTitle: 'No sessions yet',
       emptyMessage: 'Finish a workout to see your average session length.',
+      unitSuffix: 'min',
       accessibilityLabelTemplate:
         'Session duration chart, {{count}} periods, ranging from {{min}} to {{max}} minutes',
     },
@@ -842,6 +846,16 @@ export const en = {
       repsLabelTemplate: '{{reps}}-rep max',
       weightValueTemplate: '{{value}} kg',
       rowAccessibilityLabelTemplate: '{{reps}}-rep max, {{weight}} kg',
+    },
+    bodyWeight: {
+      title: 'Body weight',
+      subtitle: 'Logged body-weight entries',
+      emptyTitle: 'No body-weight entries yet',
+      emptyMessage: 'Log a body-weight entry to see your trend here.',
+      unitSuffix: 'kg',
+      seeAllButtonLabel: 'See all measurements',
+      accessibilityLabelTemplate:
+        'Body weight chart, {{count}} entries, ranging from {{min}} to {{max}} kg',
     },
   },
   calendar: {
@@ -1032,6 +1046,33 @@ export const en = {
       counterDecrementAccessibilityLabelTemplate: 'Subtract one from {{name}}',
       numericAddButtonLabel: 'Add',
       numericAddAccessibilityLabelTemplate: 'Add progress to {{name}}',
+      calendar: {
+        viewDayLabel: 'Day',
+        viewWeekLabel: 'Week',
+        viewMonthLabel: 'Month',
+        todayButtonLabel: 'Today',
+        previousDayAccessibilityLabel: 'Previous day',
+        nextDayAccessibilityLabel: 'Next day',
+        previousWeekAccessibilityLabel: 'Previous week',
+        nextWeekAccessibilityLabel: 'Next week',
+        previousMonthAccessibilityLabel: 'Previous month',
+        nextMonthAccessibilityLabel: 'Next month',
+        weekdayHeaderAccessibilityLabel: 'Days of the week',
+        emptyNoneOnDateTitle: 'Nothing scheduled',
+        emptyNoneOnDateMessage:
+          'None of your goals are active on this day. Adjust which days they run from Manage.',
+        emptyNoneInRangeTitle: 'Nothing scheduled',
+        emptyNoneInRangeMessage:
+          'None of your goals are active in this range. Adjust which days they run from Manage.',
+        weekCellDoneAccessibilityLabelTemplate: '{{name}}, {{day}}, done',
+        weekCellNotDoneAccessibilityLabelTemplate: '{{name}}, {{day}}, not done',
+        weekCellInactiveAccessibilityLabelTemplate: '{{name}}, {{day}}, not scheduled',
+        monthDayAllDoneAccessibilityLabelTemplate: '{{date}}, all goals done',
+        monthDaySomeDoneAccessibilityLabelTemplate:
+          '{{date}}, {{completed}} of {{total}} goals done',
+        monthDayNoneDoneAccessibilityLabelTemplate: '{{date}}, no goals done',
+        monthDayNoGoalsAccessibilityLabelTemplate: '{{date}}, no goals scheduled',
+      },
     },
     manage: {
       screenTitle: 'Manage goals',
@@ -1077,6 +1118,17 @@ export const en = {
       remindersSectionTitle: 'Reminders',
       addReminderButtonLabel: 'Add reminder',
       noRemindersMessage: 'No reminders set for this goal yet.',
+      progressChartSectionTitle: 'Progress',
+      progressChartCompletionTitle: 'Completion trend',
+      progressChartCompletionSubtitle: 'Weekly completion rate, last 30 days',
+      progressChartCompletionAccessibilityLabelTemplate:
+        '{{count}} weeks, completion rate from {{min}}% to {{max}}%',
+      progressChartValueTitle: 'Progress trend',
+      progressChartValueSubtitle: 'Daily progress, last 30 days',
+      progressChartValueAccessibilityLabelTemplate:
+        '{{count}} days logged, ranging from {{min}} to {{max}}',
+      progressChartEmptyTitle: 'No history yet',
+      progressChartEmptyMessage: 'Log progress on this goal to see a trend here.',
       saveLabel: 'Save',
       genericErrorMessage: 'Something went wrong saving this goal. Please try again.',
       loadErrorMessage: 'Could not load this goal.',

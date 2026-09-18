@@ -13,6 +13,8 @@ export const dailyGoalKeys = {
   detail: (id: string) => ['dailyGoals', 'detail', id] as const,
   history: (goalId: string, from: string, to: string) =>
     ['dailyGoals', 'history', goalId, from, to] as const,
+  /** `DailyGoalsScreen`'s week/month calendar-view read - keyed on the exact `[from, to]` range so a week and a month covering overlapping days never collide in cache. */
+  range: (dateFrom: string, dateTo: string) => ['dailyGoals', 'range', dateFrom, dateTo] as const,
 };
 
 export const dailyReminderKeys = {

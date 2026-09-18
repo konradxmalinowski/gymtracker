@@ -28,6 +28,17 @@ export interface ChartCardProps {
    * reviews (P7/P8) have repeatedly flagged and fixed elsewhere.
    */
   contentAccessibilityLabel?: string | undefined;
+  /**
+   * A persistent axis-unit label (e.g. "kg", "workouts", "min") shown next
+   * to the chart for as long as it's visible - distinct from
+   * victory-native's own per-tick `formatYLabel` values (e.g. "120 kg"),
+   * which scroll past with the chart data and are easy to miss at a
+   * glance. A user glancing at the chart for one second should be able to
+   * tell what's being measured without hunting down a specific tick.
+   * Omit for chart content that already conveys its unit persistently on
+   * its own - e.g. `StackedBarChartView`'s real per-row value labels.
+   */
+  unitLabel?: string | undefined;
   testID?: string | undefined;
 }
 
@@ -53,6 +64,7 @@ export function ChartCard({
   emptyMessage,
   children,
   contentAccessibilityLabel,
+  unitLabel,
   testID,
 }: ChartCardProps) {
   return (
@@ -83,17 +95,30 @@ export function ChartCard({
             testID={testID ? `${testID}-empty` : undefined}
           />
         ) : (
-          <View
-            testID={testID}
-            {...(contentAccessibilityLabel
-              ? {
-                  accessible: true,
-                  accessibilityRole: 'image' as const,
-                  accessibilityLabel: contentAccessibilityLabel,
-                }
-              : {})}
-          >
-            {children}
+          <View style={{ gap: space[1] }}>
+            {unitLabel ? (
+              <Text
+                variant="caption"
+                color="tertiary"
+                style={{ paddingLeft: space[1] }}
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+              >
+                {unitLabel}
+              </Text>
+            ) : null}
+            <View
+              testID={testID}
+              {...(contentAccessibilityLabel
+                ? {
+                    accessible: true,
+                    accessibilityRole: 'image' as const,
+                    accessibilityLabel: contentAccessibilityLabel,
+                  }
+                : {})}
+            >
+              {children}
+            </View>
           </View>
         )}
       </Surface>
