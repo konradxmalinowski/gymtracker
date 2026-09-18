@@ -89,4 +89,36 @@ export interface DailyGoalRepository {
     dateRangeTo: string,
     tx?: SqlExecutor,
   ): Promise<DailyGoalEntry[]>;
+
+  /**
+   * Every enabled, non-deleted goal active on each day in
+   * `[dateFrom, dateTo]` (inclusive), one row per `(day, goal)` pair whose
+   * `active_weekdays` bit is set for that day - exactly
+   * {@link listActiveGoalsForWeekday}'s own per-day bitmask filter, applied
+   * across a whole date range in a single query instead of a per-day N+1
+   * loop (the calendar screen's week/month views need N goals x M days - a
+   * `listActiveGoalsForWeekday` call per day in the range would be exactly
+   * that N+1). A goal inactive on a given day simply produces no row for
+   * that day - never a false "not done" - identical to
+   * `listActiveGoalsForWeekday`'s own edge-case behavior. Ordered
+   * `local_date ASC, sort_order ASC`.
+   */
+  listActiveGoalsForDateRange(
+    dateFrom: string,
+    dateTo: string,
+    tx?: SqlExecutor,
+  ): Promise<DailyGoalRangeEntry[]>;
+}
+
+/**
+ * One row of {@link DailyGoalRepository.listActiveGoalsForDateRange}'s flat
+ * result - a goal paired with one specific day's entry (if any) within the
+ * requested range. Distinct from `DailyGoalWithTodayEntry` (which is scoped
+ * to a single, implicit date) since a range result must carry which date
+ * each row belongs to.
+ */
+export interface DailyGoalRangeEntry {
+  localDate: string;
+  goal: DailyGoal;
+  entry: DailyGoalEntry | null;
 }

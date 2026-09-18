@@ -6,6 +6,14 @@ import { useContainer } from '@/services/container';
 
 import { invalidateDailyGoalQueries } from './invalidation';
 import { dailyGoalKeys } from './queryKeys';
+// Re-exported (not barrel-exported from `index.ts` - this type has no
+// cross-feature consumer yet) so this feature's own calendar-view screen and
+// components can type against `listActiveGoalsForDateRange`'s result via
+// this hooks module, without reaching into `../repository/*` directly -
+// `features/*/components` (unlike `features/*/hooks`) is one of this
+// codebase's own ESLint-enforced "presentation never imports a repository
+// directly" zones (`eslint.config.js`, `gymtracker/architecture-layering`).
+export type { DailyGoalRangeEntry } from '../repository/DailyGoalRepository';
 
 /**
  * Confined to `app/(tabs)/goals/**`'s own screens (never barrel-exported) - these
@@ -23,13 +31,35 @@ import { dailyGoalKeys } from './queryKeys';
  * reasons.
  */
 
-/** `DailyGoalsScreen`'s own read - every enabled goal active on `localDate`'s weekday, paired with today's entry. */
+/** `DailyGoalsScreen`'s own read - every enabled goal active on `localDate`'s weekday, paired with that date's entry. Despite the name, `localDate` is caller-chosen - `DailyGoalsScreen`'s day view passes whatever date is currently selected, not always today's. */
 export function useTodaysGoals(localDate: string) {
   const { dailyGoalService } = useContainer();
 
   return useQuery({
     queryKey: dailyGoalKeys.today(localDate),
     queryFn: () => dailyGoalService.listTodaysGoals(localDate),
+  });
+}
+
+/**
+ * `DailyGoalsScreen`'s week/month calendar-view read - every enabled goal
+ * active on any day in `[dateFrom, dateTo]`, paired with that day's entry.
+ * Reaches `dailyGoalRepository` directly rather than through
+ * `dailyGoalService`, mirroring `home`/`statistics`/`calendar`'s own
+ * "read-model repository, no service" precedent (`CLAUDE.md`'s Data layer
+ * section): this is a pure read with nothing to validate, the same shape
+ * those three features' own repository-direct reads already have.
+ * `enabled` lets a caller that renders more than one calendar view keep this
+ * hook's own rules-of-hooks call unconditional while still skipping the
+ * fetch for whichever view isn't currently on screen.
+ */
+export function useDailyGoalsForRange(dateFrom: string, dateTo: string, enabled = true) {
+  const { dailyGoalRepository } = useContainer();
+
+  return useQuery({
+    queryKey: dailyGoalKeys.range(dateFrom, dateTo),
+    queryFn: () => dailyGoalRepository.listActiveGoalsForDateRange(dateFrom, dateTo),
+    enabled,
   });
 }
 
