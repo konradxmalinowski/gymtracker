@@ -21,7 +21,7 @@ import { ExerciseHeader } from './ExerciseHeader';
 import { PlateCalculatorButton } from './PlateCalculatorButton';
 import { PlateCalculatorSheetContent } from './PlateCalculatorSheetContent';
 import { PreviousPerformancePanel } from './PreviousPerformancePanel';
-import { SetRow } from './SetRow';
+import { SetRow, SetRowHeader } from './SetRow';
 
 const PLATE_CALCULATOR_SHEET_ID = 'plate-calculator';
 
@@ -185,6 +185,7 @@ export const SessionExerciseCard = memo(function SessionExerciseCard({
 
         {orderedSets.length > 0 ? (
           <Column style={{ marginHorizontal: -space[2] }}>
+            <SetRowHeader testID={testID ? `${testID}-set-header` : undefined} />
             {orderedSets.map((workoutSet, index) => {
               const displayNumber = displayNumbers.get(workoutSet.id);
               if (!displayNumber) {

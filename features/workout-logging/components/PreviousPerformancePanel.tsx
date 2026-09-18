@@ -1,9 +1,7 @@
 import { View } from 'react-native';
 
-import { Column } from '@/components/layout';
 import { Text } from '@/components/ui';
 import { Skeleton } from '@/components/feedback';
-import { Weight } from '@/domain/Weight';
 import { t } from '@/i18n';
 import { space } from '@/theme/tokens';
 
@@ -30,6 +28,13 @@ function formatShortDate(timestampMs: number): string {
  * `ExerciseHeader`/`SetRow`'s existing prop-driven shape). Renders a genuine
  * "no data yet" state when there is no prior session, the same treatment
  * `ExerciseDetailScreen`'s own performance sections use.
+ *
+ * Reference-layout pass: this panel used to also list every previous set's
+ * weight/reps below the date line - that's now shown inline, per row, in
+ * each `SetRow`'s own "Previous" column (`formatPreviousSetValue`), so
+ * repeating the same values here a second time would just be visual noise.
+ * What's left is the one thing no single row can show on its own: *when*
+ * that previous session happened. The pending/empty states are unchanged.
  */
 export function PreviousPerformancePanel({
   previousPerformance,
@@ -55,25 +60,12 @@ export function PreviousPerformancePanel({
   }
 
   return (
-    <View testID={testID}>
-      <Column gap={1} style={{ paddingVertical: space[1] }}>
-        <Text variant="footnote" color="secondary">
-          {t('workoutLogging.previousPerformance.lastSessionLabelTemplate', {
-            date: formatShortDate(previousPerformance.performedAt),
-          })}
-        </Text>
-        {previousPerformance.sets.map((set, index) =>
-          set.weightKg !== null && set.reps !== null ? (
-            <Text key={set.id} variant="caption" color="tertiary">
-              {t('workoutLogging.previousPerformance.setLineTemplate', {
-                number: index + 1,
-                weight: Weight.fromKilograms(set.weightKg).toDisplayString('kg'),
-                reps: set.reps,
-              })}
-            </Text>
-          ) : null,
-        )}
-      </Column>
+    <View style={{ paddingVertical: space[1] }} testID={testID}>
+      <Text variant="footnote" color="secondary">
+        {t('workoutLogging.previousPerformance.lastSessionLabelTemplate', {
+          date: formatShortDate(previousPerformance.performedAt),
+        })}
+      </Text>
     </View>
   );
 }

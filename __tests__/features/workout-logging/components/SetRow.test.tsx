@@ -155,9 +155,13 @@ describe('SetRow', () => {
     expect(onUncomplete).toHaveBeenCalledWith(workoutSet.id);
   });
 
-  it('tapping the leading number/badge area calls onFocus with the set id', async () => {
-    const { findByText, onFocus, workoutSet } = await renderRow();
-    fireEvent.press(await findByText('1'));
+  it('tapping the Previous cell calls onFocus with the set id', async () => {
+    // Reference-layout pass: the type-badge pill now opens the set-type
+    // picker sheet on tap (see `openTypePicker`), so the old onFocus/expand
+    // trigger moved onto the "Previous" cell instead - it otherwise had no
+    // tap target of its own.
+    const { findByTestId, onFocus, workoutSet } = await renderRow();
+    fireEvent.press(await findByTestId('set-row-previous'));
     expect(onFocus).toHaveBeenCalledWith(workoutSet.id);
   });
 
@@ -168,17 +172,17 @@ describe('SetRow', () => {
     expect(actions).toEqual([expect.objectContaining({ name: 'leftAction', label: 'Delete set' })]);
   });
 
-  it('tapping the leading number/badge area toggles the inline expanded editor (moved off the swipe gesture)', async () => {
-    const { findByText, queryByText } = await renderRow();
+  it('tapping the Previous cell toggles the inline expanded editor (moved off the swipe gesture)', async () => {
+    const { findByTestId, findByText, queryByText } = await renderRow();
     expect(queryByText('RPE')).toBeNull();
 
     await act(async () => {
-      fireEvent.press(await findByText('1'));
+      fireEvent.press(await findByTestId('set-row-previous'));
     });
     expect(await findByText('RPE')).toBeTruthy();
 
     await act(async () => {
-      fireEvent.press(await findByText('1'));
+      fireEvent.press(await findByTestId('set-row-previous'));
     });
     expect(queryByText('RPE')).toBeNull();
   });
@@ -263,7 +267,7 @@ describe('SetRow', () => {
     });
   });
 
-  it('drop segments render indented, badged as "Drop" instead of a set-type pill, and get no "add drop set" action', async () => {
+  it('drop segments render indented with a plain, non-interactive pill (no set-type picker) and get no "add drop set" action', async () => {
     const parent = makeSet({ id: 'parent-1', setIndex: 3 });
     const drop = makeSet({ id: 'drop-1', setIndex: 3, parentSetId: 'parent-1', setType: 'drop' });
     const displayNumber = assignSetDisplayNumbers([
@@ -271,12 +275,25 @@ describe('SetRow', () => {
       { id: drop.id, setIndex: drop.setIndex, parentSetId: 'parent-1' },
     ]).get(drop.id)!;
 
-    const { findByText } = await renderRow({ set: drop, displayNumber });
+    const { findByText, findByTestId, queryByTestId, queryByText } = await renderRow({
+      set: drop,
+      displayNumber,
+    });
     // `assignSetDisplayNumbers` numbers parents 1..n by their position in
     // the input, not by `setIndex` - with a single parent given here, the
     // drop's label is "1.1" (see that function's own doc comment).
+    // Reference-layout pass: the pill now shows this number instead of a
+    // literal "Drop" caption - a drop segment's pill has no `-type-badge`
+    // testID (it's the plain, non-pressable `View` branch, not the
+    // `PressScale` non-drop rows get), same non-interactivity the old
+    // caption had.
     expect(await findByText('1.1')).toBeTruthy();
-    expect(await findByText('Drop')).toBeTruthy();
+    expect(queryByTestId('set-row-type-badge')).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(await findByTestId('set-row-previous'));
+    });
+    expect(queryByText('Add drop set')).toBeNull();
   });
 
   describe('regression: completing a set carries its current on-screen values', () => {

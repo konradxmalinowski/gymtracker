@@ -6,6 +6,7 @@ import { Column, Row } from '@/components/layout';
 import { Checkbox, Chip, NumberField, Text, TextField } from '@/components/ui';
 import { SwipeableRow, type SwipeableRowAction } from '@/components/gestures/SwipeableRow';
 import { PressScale } from '@/components/gestures/PressScale';
+import { Weight } from '@/domain/Weight';
 import type {
   CompleteSetValues,
   PreviousPerformanceSet,
@@ -22,6 +23,74 @@ import { color, radius, space } from '@/theme/tokens';
 import { useDebouncedFieldCommit } from '../hooks/useDebouncedFieldCommit';
 import { setTypeBadgeColor, setTypeLabel } from './setTypeDisplay';
 import { SetTypePickerSheetContent } from './SetTypePickerSheetContent';
+
+/**
+ * Column widths shared between `SetRowHeader` and `SetRow`'s own main row so
+ * the two stay pixel-aligned - the number/type pill and the KG/REPS/check
+ * columns are fixed-width, "Previous" is the one flexible column that
+ * absorbs whatever width is left, exactly like the reference layout's
+ * SET | PREVIOUS | KG | REPS | check header row.
+ */
+const PILL_COLUMN_MIN_WIDTH = 40;
+const NUMBER_FIELD_COLUMN_MIN_WIDTH = 72;
+const CHECK_COLUMN_WIDTH = 32;
+
+/**
+ * Formats a previous-session set's weight/reps for the inline "Previous"
+ * column, the same "both values present or nothing" rule
+ * `PreviousPerformancePanel` already applies (a set with only one of the two
+ * - e.g. a duration-only set last time - has nothing meaningful to show
+ * here either). Kept local rather than imported since
+ * `PreviousPerformancePanel` never extracted this into a standalone
+ * function - it's a two-line inline template there.
+ */
+function formatPreviousSetValue(previousSet: PreviousPerformanceSet | undefined): string {
+  if (!previousSet || previousSet.weightKg === null || previousSet.reps === null) {
+    return t('workoutLogging.set.previousEmptyPlaceholder');
+  }
+  return t('workoutLogging.set.previousValueTemplate', {
+    weight: Weight.fromKilograms(previousSet.weightKg).toDisplayString('kg'),
+    reps: previousSet.reps,
+  });
+}
+
+/**
+ * The column-header row for a `SessionExerciseCard`'s set list (reference
+ * screenshot's "SET | PREVIOUS | KG | REPS | check" row) - `SessionExerciseCard`
+ * renders one of these once, above the mapped `SetRow`s, rather than each row
+ * repeating it. Purely presentational, no props beyond `testID`.
+ */
+export function SetRowHeader({ testID }: { testID?: string | undefined }) {
+  return (
+    <View testID={testID}>
+      <Row gap={2} align="center" style={{ paddingHorizontal: space[2], paddingBottom: space[1] }}>
+        <View style={{ minWidth: PILL_COLUMN_MIN_WIDTH, alignItems: 'flex-start' }}>
+          <Text variant="caption" color="tertiary">
+            {t('workoutLogging.set.columnHeaderSet')}
+          </Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text variant="caption" color="tertiary">
+            {t('workoutLogging.set.columnHeaderPrevious')}
+          </Text>
+        </View>
+        <View style={{ minWidth: NUMBER_FIELD_COLUMN_MIN_WIDTH, alignItems: 'center' }}>
+          <Text variant="caption" color="tertiary">
+            {t('workoutLogging.set.columnHeaderWeight')}
+          </Text>
+        </View>
+        <View style={{ minWidth: NUMBER_FIELD_COLUMN_MIN_WIDTH, alignItems: 'center' }}>
+          <Text variant="caption" color="tertiary">
+            {t('workoutLogging.set.columnHeaderReps')}
+          </Text>
+        </View>
+        <View style={{ width: CHECK_COLUMN_WIDTH, alignItems: 'center' }}>
+          <Ionicons name="checkmark-circle-outline" size={16} color={color.textTertiary} />
+        </View>
+      </Row>
+    </View>
+  );
+}
 
 export interface SetRowProps {
   set: WorkoutSet;
@@ -246,33 +315,37 @@ export const SetRow = memo(function SetRow({
               marginLeft: isDropSegment ? space[6] : 0,
             }}
           >
-            <Column gap={1} style={{ minWidth: 56, alignItems: 'flex-start' }}>
-              <PressScale
-                onPress={() => {
-                  onFocus(set.id);
-                  setExpanded((current) => !current);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={t('workoutLogging.set.focusAccessibilityLabelTemplate', {
-                  number: displayNumber.label,
-                  type: setTypeLabel(set.setType),
-                })}
-                accessibilityHint={t('workoutLogging.set.editAccessibilityHint')}
-              >
-                <Text variant="numeric" color="primary">
-                  {displayNumber.label}
-                </Text>
-              </PressScale>
+            {/* Reference-layout merge: the number/type badge used to be two
+                stacked elements (a plain number above, an abbreviated-type
+                Chip-like badge below opening the picker on tap). They're now
+                one solid colored pill showing the display number (or the
+                drop-segment's decimal label) - `setTypeBadgeColor` keeps a
+                warmup set visually distinct by color exactly like before,
+                and tapping it still opens the same set-type picker sheet for
+                a non-drop set (drop segments have no pickable type of their
+                own, so their pill is a plain, non-pressable indicator, same
+                as the old "Drop" caption's non-interactivity). The old
+                number-tap behavior (`onFocus` + toggle the RPE/note editor)
+                moves onto the new "Previous" cell below, which otherwise had
+                no tap target of its own. */}
+            <View style={{ minWidth: PILL_COLUMN_MIN_WIDTH, alignItems: 'flex-start' }}>
               {isDropSegment ? (
-                <Text variant="caption" color="tertiary">
-                  {t('workoutLogging.set.dropLabel')}
-                </Text>
+                <View
+                  style={{
+                    minWidth: PILL_COLUMN_MIN_WIDTH - space[2],
+                    height: 28,
+                    paddingHorizontal: space[2],
+                    borderRadius: radius.full,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: setTypeBadgeColor(set.setType),
+                  }}
+                >
+                  <Text variant="numeric" color="inverse" numberOfLines={1}>
+                    {displayNumber.label}
+                  </Text>
+                </View>
               ) : (
-                // Item 4 fix: tapping the badge opens the set-type picker as
-                // a bottom sheet (`openTypePicker` above) instead of
-                // expanding this row inline - the badge itself never grows,
-                // so it also doubles as the always-visible "currently
-                // selected type" indicator the row already had.
                 <PressScale
                   onPress={openTypePicker}
                   accessibilityRole="button"
@@ -281,19 +354,41 @@ export const SetRow = memo(function SetRow({
                   })}
                   accessibilityHint={t('workoutLogging.set.typePickerAccessibilityHint')}
                   style={{
-                    paddingHorizontal: space[1],
-                    borderRadius: radius.sm,
+                    minWidth: PILL_COLUMN_MIN_WIDTH - space[2],
+                    height: 28,
+                    paddingHorizontal: space[2],
+                    borderRadius: radius.full,
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     backgroundColor: setTypeBadgeColor(set.setType),
-                    alignSelf: 'flex-start',
                   }}
                   testID={testID ? `${testID}-type-badge` : undefined}
                 >
-                  <Text variant="caption" color="inverse" numberOfLines={1}>
-                    {setTypeLabel(set.setType)}
+                  <Text variant="numeric" color="inverse" numberOfLines={1}>
+                    {displayNumber.label}
                   </Text>
                 </PressScale>
               )}
-            </Column>
+            </View>
+
+            <PressScale
+              onPress={() => {
+                onFocus(set.id);
+                setExpanded((current) => !current);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={t('workoutLogging.set.focusAccessibilityLabelTemplate', {
+                number: displayNumber.label,
+                type: setTypeLabel(set.setType),
+              })}
+              accessibilityHint={t('workoutLogging.set.editAccessibilityHint')}
+              style={{ flex: 1, alignItems: 'flex-start' }}
+              testID={testID ? `${testID}-previous` : undefined}
+            >
+              <Text variant="footnote" color="tertiary" numberOfLines={1}>
+                {formatPreviousSetValue(previousSet)}
+              </Text>
+            </PressScale>
 
             <NumberField
               value={weightDraft}
@@ -313,7 +408,7 @@ export const SetRow = memo(function SetRow({
               testID={testID ? `${testID}-reps` : undefined}
             />
 
-            <View style={{ marginLeft: 'auto' }}>
+            <View style={{ width: CHECK_COLUMN_WIDTH, alignItems: 'center' }}>
               <Checkbox
                 value={set.isCompleted}
                 onValueChange={(next) => (next ? handleComplete() : onUncomplete(set.id))}
