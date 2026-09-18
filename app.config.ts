@@ -57,17 +57,24 @@ const config: ExpoConfig = {
     // means a future Polish catalog is a data-only addition, not a refactor.
     'expo-localization',
     [
-      // P3: onboarding's optional avatar picker. Only `launchImageLibraryAsync`
-      // is ever called (no camera-capture screen exists) - `cameraPermission:
-      // false` tells the plugin to omit the camera permission/entitlement
-      // entirely (NSCameraUsageDescription on iOS, android.permission.CAMERA
-      // on Android) rather than requesting an access scope the app never
-      // exercises. Add a real `cameraPermission` string only if/when a screen
-      // actually calls `launchCameraAsync`.
+      // P3 (onboarding avatar) originally set `cameraPermission: false` here
+      // since only `launchImageLibraryAsync` was called. Body-metrics'
+      // progress-photo sheet (`PhotoSourceSheetContent`) now also calls
+      // `launchCameraAsync`, so `false` was wrong: on Android it makes the
+      // plugin emit `<uses-permission android:name="android.permission.CAMERA"
+      // tools:node="remove"/>`, which strips CAMERA from the merged manifest
+      // entirely - `requestCameraPermissionsAsync()` then resolves denied
+      // without ever showing the OS dialog, since the app declares no camera
+      // use at all. Confirmed live: a real `android/app/src/main/
+      // AndroidManifest.xml` prebuild had exactly that `tools:node="remove"`
+      // line. A real usage string restores the permission declaration on both
+      // platforms (NSCameraUsageDescription on iOS, CAMERA on Android) and
+      // requires a native rebuild (`npx expo prebuild`) to take effect - a
+      // Metro reload alone does not regenerate the manifest/Info.plist.
       'expo-image-picker',
       {
         photosPermission: 'GymTracker uses your photo library to set a profile avatar.',
-        cameraPermission: false,
+        cameraPermission: 'GymTracker uses your camera to take progress photos.',
       },
     ],
     [

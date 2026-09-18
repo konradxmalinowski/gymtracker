@@ -3,13 +3,17 @@ import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Column, Row } from '@/components/layout';
-import { BottomSheet, Button, IconButton, Text, TextField } from '@/components/ui';
+import { Row } from '@/components/layout';
+import { Button, IconButton, Text } from '@/components/ui';
 import { t } from '@/i18n';
 import { useContainer } from '@/services/container';
+import { useSheetStore } from '@/stores/sheetStore';
 import { color, space } from '@/theme/tokens';
 
 import { formatElapsedSeconds } from './formatElapsed';
+import { WorkoutNotesSheetContent } from './WorkoutNotesSheetContent';
+
+const NOTES_SHEET_ID = 'workout-header-notes';
 
 export interface WorkoutHeaderProps {
   title: string;
@@ -45,10 +49,15 @@ const TICK_MS = 1000;
  * existing tap target to overload, and the right cluster is already this
  * header's home for "secondary, not-the-primary-Finish-action" controls, so
  * a notes button reads as one more of those rather than a new kind of
- * control. Opens a `BottomSheet` (not inline) because a workout-level note is
- * open-ended free text entered once per session, not a per-field quick edit -
- * the same shape `PlanDetailScreen`'s rename/add-day sheets already use for
- * "a `TextField` plus a Save button."
+ * control. Opens through `sheetStore.present()` (`WorkoutNotesSheetContent`)
+ * because a workout-level note is open-ended free text entered once per
+ * session, not a per-field quick edit - the same shape `PlanDetailScreen`'s
+ * rename/add-day sheets already use for "a `TextField` plus a Save button."
+ * Presented through the shared root `SheetHost` rather than a local inline
+ * `<BottomSheet>` for the same reason every other sheet in this app is
+ * (CLAUDE.md's Post-P12 bugfix pass) - this header is mounted deep inside
+ * `ActiveWorkoutScreen`, not at the app root, so a locally-mounted
+ * `<BottomSheet>` here would only ever position correctly by accident.
  *
  * The clock (`elapsedMs`) is a local `setInterval`, deliberately not backed
  * by `activeWorkoutStore` - a ticking value re-rendering this header every
@@ -79,8 +88,6 @@ export function WorkoutHeader({
   const { clock } = useContainer();
   const insets = useSafeAreaInsets();
   const [now, setNow] = useState(() => clock.now());
-  const [notesSheetVisible, setNotesSheetVisible] = useState(false);
-  const [notesDraft, setNotesDraft] = useState(notes ?? '');
 
   useEffect(() => {
     const interval = setInterval(() => setNow(clock.now()), TICK_MS);
@@ -88,13 +95,20 @@ export function WorkoutHeader({
   }, [clock]);
 
   function openNotesSheet() {
-    setNotesDraft(notes ?? '');
-    setNotesSheetVisible(true);
-  }
-
-  function handleSaveNotes() {
-    onUpdateNotes(notesDraft.trim() === '' ? null : notesDraft);
-    setNotesSheetVisible(false);
+    useSheetStore.getState().present({
+      id: NOTES_SHEET_ID,
+      content: (
+        <WorkoutNotesSheetContent
+          initialNotes={notes}
+          onSave={(nextNotes) => {
+            onUpdateNotes(nextNotes);
+            useSheetStore.getState().dismissCurrent();
+          }}
+          testID={testID ? `${testID}-notes-sheet` : undefined}
+        />
+      ),
+      snapPoints: [0.5],
+    });
   }
 
   const hasNotes = notes !== null && notes.trim() !== '';
@@ -165,33 +179,6 @@ export function WorkoutHeader({
           />
         </Row>
       </Row>
-
-      <BottomSheet
-        visible={notesSheetVisible}
-        onDismiss={() => setNotesSheetVisible(false)}
-        snapPoints={[0.5]}
-        testID={testID ? `${testID}-notes-sheet` : undefined}
-      >
-        <Column gap={4} style={{ paddingTop: space[2] }}>
-          <Text variant="title3" color="primary">
-            {t('workoutLogging.header.notesSheetTitle')}
-          </Text>
-          <TextField
-            label={t('workoutLogging.header.notesFieldLabel')}
-            value={notesDraft}
-            onChangeText={setNotesDraft}
-            placeholder={t('workoutLogging.header.notesPlaceholder')}
-            testID={testID ? `${testID}-notes-field` : undefined}
-          />
-          <Button
-            variant="primary"
-            label={t('common.save')}
-            onPress={handleSaveNotes}
-            fullWidth
-            testID={testID ? `${testID}-notes-save` : undefined}
-          />
-        </Column>
-      </BottomSheet>
     </View>
   );
 }

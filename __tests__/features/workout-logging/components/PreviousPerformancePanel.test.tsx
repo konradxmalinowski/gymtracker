@@ -56,8 +56,13 @@ describe('PreviousPerformancePanel', () => {
     ).toBeTruthy();
   });
 
-  it('renders the last session date and each set once data resolves', async () => {
-    const { findByText } = await render(
+  it('renders the last session date once data resolves', async () => {
+    // Reference-layout pass: this panel used to also list each previous
+    // set's weight/reps below the date line - that now shows inline, per
+    // row, in each `SetRow`'s own "Previous" column instead (see that
+    // component's `formatPreviousSetValue`), so this panel only renders the
+    // date line now (see `PreviousPerformancePanel`'s own doc comment).
+    const { findByText, queryByText } = await render(
       <PreviousPerformancePanel
         previousPerformance={makePreviousPerformance()}
         isPending={false}
@@ -66,6 +71,6 @@ describe('PreviousPerformancePanel', () => {
     );
 
     expect(await findByText(/Last time - Aug 10/)).toBeTruthy();
-    expect(await findByText('1. 60 kg x 8')).toBeTruthy();
+    expect(queryByText(/60 kg x 8/)).toBeNull();
   });
 });

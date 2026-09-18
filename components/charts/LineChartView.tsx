@@ -1,5 +1,5 @@
 import { View } from 'react-native';
-import { CartesianChart, Line } from 'victory-native';
+import { CartesianChart, Line, Scatter } from 'victory-native';
 
 import { color as tokenColor } from '@/theme/tokens';
 
@@ -22,6 +22,17 @@ export interface LineChartViewProps {
  * `axisOptions` - Victory Native XL falls back to its own bundled default
  * Skia font when omitted, which is sufficient for this app's tick labels;
  * a custom typeface is out of scope here.
+ *
+ * A confirmed real-device bug: a series with exactly one point (e.g. a
+ * single logged body-weight entry) rendered nothing at all - `Line` draws a
+ * stroke between *consecutive* points, so with only one point there is no
+ * segment to draw, and the axes rendered with an otherwise-blank plot area
+ * that looked identical to the "no data" empty state this component's
+ * callers already render separately for a genuinely empty series (so it
+ * wasn't caught by that isEmpty check - one real point still isn't empty).
+ * `Scatter` draws a small filled circle per point regardless of its
+ * neighbors, so every logged value is visible on its own, not just once a
+ * second point exists to connect it to.
  */
 export function LineChartView({
   data,
@@ -50,13 +61,16 @@ export function LineChartView({
         }}
       >
         {({ points }) => (
-          <Line
-            points={points.value}
-            color={color}
-            strokeWidth={2}
-            curveType="natural"
-            connectMissingData={false}
-          />
+          <>
+            <Line
+              points={points.value}
+              color={color}
+              strokeWidth={2}
+              curveType="natural"
+              connectMissingData={false}
+            />
+            <Scatter points={points.value} color={color} radius={4} />
+          </>
         )}
       </CartesianChart>
     </View>

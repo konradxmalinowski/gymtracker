@@ -40,3 +40,7 @@ export function Line({ points }: { points: readonly unknown[] }) {
 export function Bar({ points }: { points: readonly unknown[] }) {
   return <View testID="mock-bar-chart" accessibilityLabel={`${points.length} points`} />;
 }
+
+export function Scatter({ points }: { points: readonly unknown[] }) {
+  return <View testID="mock-scatter-chart" accessibilityLabel={`${points.length} points`} />;
+}
