@@ -2,12 +2,20 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { AccessibilityInfo } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { ReactNode } from 'react';
 
+import { SheetHost } from '@/components/feedback/SheetHost';
 import { createTestDatabase } from '@/database/node/createTestDatabase';
 import type { DatabaseContext } from '@/repositories/contracts/database';
 import { WorkoutHistoryDetailScreen } from '@/features/workout-logging/screens/WorkoutHistoryDetailScreen';
 import { ContainerProvider, createContainer, type AppContainer } from '@/services/container';
+import { useSheetStore } from '@/stores/sheetStore';
+
+const SAFE_AREA_METRICS = {
+  insets: { top: 0, left: 0, right: 0, bottom: 0 },
+  frame: { x: 0, y: 0, width: 390, height: 844 },
+};
 
 jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
@@ -64,6 +72,7 @@ afterEach(() => {
   activeQueryClient?.unmount();
   activeQueryClient = undefined;
   jest.clearAllMocks();
+  useSheetStore.setState({ current: null, queue: [] });
 });
 
 async function renderScreen(container: AppContainer, sessionId: string) {
@@ -77,13 +86,26 @@ async function renderScreen(container: AppContainer, sessionId: string) {
 
   function Wrapper({ children }: { children: ReactNode }) {
     return (
-      <ContainerProvider container={container}>
-        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-      </ContainerProvider>
+      <SafeAreaProvider initialMetrics={SAFE_AREA_METRICS}>
+        <ContainerProvider container={container}>
+          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        </ContainerProvider>
+      </SafeAreaProvider>
     );
   }
 
-  return render(<WorkoutHistoryDetailScreen sessionId={sessionId} />, { wrapper: Wrapper });
+  // The exercise-card header's move/remove actions are presented through
+  // `sheetStore` now (see `ExerciseHeader.openActionsSheet`), not separate
+  // always-visible icon buttons - a `SheetHost` sibling is required for that
+  // sheet's content to appear in this render tree at all, same pattern
+  // `WorkoutHeader.test.tsx`/`PlanDetailScreen.test.tsx` use.
+  return render(
+    <>
+      <WorkoutHistoryDetailScreen sessionId={sessionId} />
+      <SheetHost />
+    </>,
+    { wrapper: Wrapper },
+  );
 }
 
 describe('WorkoutHistoryDetailScreen', () => {
@@ -149,7 +171,8 @@ describe('WorkoutHistoryDetailScreen', () => {
     await fireEvent.press(await findByTestId('workout-history-detail-edit-toggle'));
 
     const cardTestId = `workout-history-exercise-card-${sessionExerciseId}`;
-    await fireEvent.press(await findByTestId(`${cardTestId}-header-remove`));
+    await fireEvent.press(await findByTestId(`${cardTestId}-header-actions`));
+    await fireEvent.press(await findByTestId('exercise-actions-remove'));
 
     await waitFor(async () => {
       const session = await container.sessionService.getSession(sessionId);
@@ -169,7 +192,8 @@ describe('WorkoutHistoryDetailScreen', () => {
     await fireEvent.press(await findByTestId('workout-history-detail-edit-toggle'));
 
     const firstCardTestId = `workout-history-exercise-card-${firstExerciseId}`;
-    await fireEvent.press(await findByTestId(`${firstCardTestId}-header-move-down`));
+    await fireEvent.press(await findByTestId(`${firstCardTestId}-header-actions`));
+    await fireEvent.press(await findByTestId('exercise-actions-move-down'));
 
     await waitFor(async () => {
       const session = await container.sessionService.getSession(sessionId);
