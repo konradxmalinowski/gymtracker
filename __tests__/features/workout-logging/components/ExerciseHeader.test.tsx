@@ -46,6 +46,7 @@ async function renderHeader(overrides: Partial<Parameters<typeof ExerciseHeader>
     onMoveDown: jest.fn(),
     onRemove: jest.fn(),
     onUpdateNote: jest.fn(),
+    onOpenPlateCalculator: jest.fn(),
   };
 
   const view = await render(
@@ -57,6 +58,7 @@ async function renderHeader(overrides: Partial<Parameters<typeof ExerciseHeader>
       onMoveDown={handlers.onMoveDown}
       onRemove={handlers.onRemove}
       onUpdateNote={handlers.onUpdateNote}
+      onOpenPlateCalculator={handlers.onOpenPlateCalculator}
       testID="exercise-header"
       {...overrides}
     />,
@@ -81,15 +83,15 @@ describe('ExerciseHeader note editing', () => {
     expect(await findByDisplayValue('Elbows tucked')).toBeTruthy();
   });
 
-  it('renders the filled note icon only when a note is present, outline otherwise', async () => {
-    // The mocked Ionicons renders its `name` prop as plain text (see
-    // `__mocks__/vectorIconsMock.tsx`), so the filled/outline distinction is
-    // directly observable as which icon name text is on screen.
+  it('shows the note text when present, the placeholder otherwise', async () => {
+    // Reference-layout pass: the note toggle is now an inline text
+    // placeholder (not an icon), so presence/absence of a note is directly
+    // observable as which text renders in that placeholder.
     const withNote = await renderHeader({ exercise: makeExercise({ note: 'has a note' }) });
-    expect(await withNote.findByText('chatbubble')).toBeTruthy();
+    expect(await withNote.findByText('has a note')).toBeTruthy();
 
     const withoutNote = await renderHeader({ exercise: makeExercise({ note: null }) });
-    expect(await withoutNote.findByText('chatbubble-outline')).toBeTruthy();
+    expect(await withoutNote.findByText('Anything worth remembering about this set')).toBeTruthy();
   });
 
   describe('debounced commit', () => {

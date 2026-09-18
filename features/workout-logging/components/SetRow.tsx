@@ -178,6 +178,11 @@ export const SetRow = memo(function SetRow({
 
   const [expanded, setExpanded] = useState(false);
   const isDropSegment = displayNumber.isDropSegment;
+  // Reference layout shows a literal "W" for a warmup set rather than its
+  // positional number - presentational only, `assignSetDisplayNumbers` stays
+  // purely positional since drop-segment decimal labels and multi-set
+  // counting elsewhere still need the real number.
+  const pillLabel = !isDropSegment && set.setType === 'warmup' ? 'W' : displayNumber.label;
 
   const [weightDraft, setWeightDraft, cancelWeightCommit] = useDebouncedFieldCommit(
     set.weightKg,
@@ -365,7 +370,7 @@ export const SetRow = memo(function SetRow({
                   testID={testID ? `${testID}-type-badge` : undefined}
                 >
                   <Text variant="numeric" color="inverse" numberOfLines={1}>
-                    {displayNumber.label}
+                    {pillLabel}
                   </Text>
                 </PressScale>
               )}
