@@ -14,6 +14,7 @@ import { routes } from '@/navigation/routes';
 import { useContainer } from '@/services/container';
 import { useActiveWorkoutStore } from '@/stores/activeWorkoutStore';
 import { useRestTimerStore } from '@/stores/restTimerStore';
+import { useSheetStore } from '@/stores/sheetStore';
 import { color, space } from '@/theme/tokens';
 
 import { AddExerciseButton } from '../components/AddExerciseButton';
@@ -43,6 +44,8 @@ import {
 
 /** How long a `PRBadge` stays visible before `activeWorkoutStore.latestPR` self-clears - long enough to notice, short enough that it reads as "just happened" rather than a permanent tag on that set. */
 const LATEST_PR_DISPLAY_MS = 4000;
+
+const EXIT_SHEET_ID = 'workout-exit';
 
 function findSet(exercises: readonly SessionExercise[], setId: string | null): WorkoutSet | null {
   if (!setId) {
@@ -105,7 +108,6 @@ export function ActiveWorkoutScreen() {
   const restTimerDeadlineAt = useRestTimerStore((state) => state.deadlineAt);
   const restTimerTotalSeconds = useRestTimerStore((state) => state.totalSeconds);
 
-  const [exitSheetVisible, setExitSheetVisible] = useState(false);
   const [discardConfirmVisible, setDiscardConfirmVisible] = useState(false);
   const [appendingExerciseId, setAppendingExerciseId] = useState<string | null>(null);
 
@@ -125,13 +127,80 @@ export function ActiveWorkoutScreen() {
   const skipRestTimer = useSkipRestTimer();
   const { syncFocusedExercise, syncScrollOffset } = useActiveStateSync(session?.id);
 
+  // Shared with `handleDiscardRequest` below (used by `WorkoutHeader`'s
+  // discard icon) - `useCallback`, not a plain function declaration, so it
+  // can safely sit in `handleExitSheetRequest`'s dep array without dragging
+  // in `activeSession` (see that callback's own comment for why closing
+  // over `activeSession` here specifically would be unsafe).
+  const requestDiscard = useCallback(
+    async (sessionId: string) => {
+      const requiresConfirm = await sessionService.shouldConfirmDiscard();
+      if (requiresConfirm) {
+        setDiscardConfirmVisible(true);
+      } else {
+        void discard(sessionId);
+      }
+    },
+    [sessionService, discard],
+  );
+
+  // Presents the Minimize/Finish/Discard/Cancel choice through `sheetStore`
+  // (`WorkoutExitActionSheet`, migrated off a local inline `<BottomSheet>` -
+  // see that file's doc comment) rather than a local `exitSheetVisible`
+  // boolean. Deliberately reads the session fresh via
+  // `useActiveWorkoutStore.getState()` instead of closing over this render's
+  // `activeSession` (which isn't declared until after the `isHydrated`/
+  // `session` early returns below): this callback is wired into the
+  // `hardwareBackPress` listener registered by the effect right after it,
+  // and Rules of Hooks require that effect to run unconditionally before
+  // those early returns. If a render where hydration hadn't finished yet
+  // ever ended up being the one whose closure stays registered, closing over
+  // `activeSession` would mean reading a `const` this render's call never
+  // reached the declaration of - a real TDZ crash, not a hypothetical one.
+  // Reading through `getState()` at call time sidesteps this entirely, same
+  // pattern `handleMoveExercise`/`handleRemoveExercise` above already use.
+  const handleExitSheetRequest = useCallback(() => {
+    const currentSession = useActiveWorkoutStore.getState().session;
+    if (!currentSession) {
+      return;
+    }
+    const sessionId = currentSession.id;
+    useSheetStore.getState().present({
+      id: EXIT_SHEET_ID,
+      content: (
+        <WorkoutExitActionSheet
+          onMinimize={() => {
+            useSheetStore.getState().dismissCurrent();
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace(routes.tabs.home());
+            }
+          }}
+          onFinish={() => {
+            useSheetStore.getState().dismissCurrent();
+            void finish(sessionId);
+          }}
+          onDiscard={() => {
+            useSheetStore.getState().dismissCurrent();
+            void requestDiscard(sessionId);
+          }}
+          onCancel={() => useSheetStore.getState().dismissCurrent()}
+          isFinishing={isFinishing}
+          testID="workout-exit-sheet"
+        />
+      ),
+      snapPoints: [0.4],
+    });
+  }, [finish, requestDiscard, isFinishing]);
+
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      setExitSheetVisible(true);
+      handleExitSheetRequest();
       return true;
     });
     return () => subscription.remove();
-  }, []);
+  }, [handleExitSheetRequest]);
 
   // P8: `latestPR` is a one-shot celebratory badge, not persisted state - it
   // clears itself a few seconds after appearing rather than staying attached
@@ -417,12 +486,7 @@ export function ActiveWorkoutScreen() {
   }
 
   async function handleDiscardRequest() {
-    const requiresConfirm = await sessionService.shouldConfirmDiscard();
-    if (requiresConfirm) {
-      setDiscardConfirmVisible(true);
-    } else {
-      void discard(activeSession.id);
-    }
+    await requestDiscard(activeSession.id);
   }
 
   function handleOpenRestTimerSettings() {
@@ -513,25 +577,6 @@ export function ActiveWorkoutScreen() {
           testID="active-workout-add-exercise-button"
         />
       </View>
-
-      <WorkoutExitActionSheet
-        visible={exitSheetVisible}
-        onDismiss={() => setExitSheetVisible(false)}
-        onMinimize={() => {
-          setExitSheetVisible(false);
-          handleMinimize();
-        }}
-        onFinish={() => {
-          setExitSheetVisible(false);
-          void finish(activeSession.id);
-        }}
-        onDiscard={() => {
-          setExitSheetVisible(false);
-          void handleDiscardRequest();
-        }}
-        isFinishing={isFinishing}
-        testID="workout-exit-sheet"
-      />
 
       <ConfirmDialog
         visible={discardConfirmVisible}
