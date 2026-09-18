@@ -38,7 +38,18 @@ export function EmptyState({
         </Text>
       ) : null}
       {actionLabel && onAction ? (
-        <Button variant="secondary" label={actionLabel} onPress={onAction} />
+        // `Button` always sets its own `alignSelf: 'flex-start'` when not
+        // `fullWidth` (its own default posture for a button dropped into an
+        // arbitrary layout), which overrides this container's
+        // `alignItems: 'center'` and left-aligns the button under otherwise
+        // centered title/message text. A plain wrapping `View` sized to its
+        // content (the default for a non-flex child) restores centering:
+        // the wrapper itself is centered by this container, and its width
+        // already matches the button, so the button's own `flex-start`
+        // makes no visible difference inside it.
+        <View>
+          <Button variant="secondary" label={actionLabel} onPress={onAction} />
+        </View>
       ) : null}
     </View>
   );
