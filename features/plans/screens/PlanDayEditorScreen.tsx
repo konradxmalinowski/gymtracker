@@ -151,9 +151,22 @@ export function PlanDayEditorScreen({ planId, dayId }: PlanDayEditorScreenProps)
     useExercisePickerStore.getState().open({
       alreadySelectedIds: day.exercises.map((exercise) => exercise.exerciseId),
       onConfirm: (selectedExerciseIds) => {
-        selectedExerciseIds.forEach((exerciseId) => {
-          addExerciseToDay.mutate({ dayId: day.id, input: { exerciseId } });
-        });
+        // Sequential, not `Promise.all`/unawaited `forEach` - concurrent
+        // `addExerciseToDay` calls race the same day's `sort_order`
+        // read-then-insert in `SqlitePlanRepository.addExerciseToDay`,
+        // corrupting sort order and triggering rapid successive
+        // invalidation refetches mid-batch that can make the UI appear to
+        // only keep the last exercise added. Same fix as
+        // `ActiveWorkoutScreen`'s `AddExerciseButton onSelect` handler.
+        void (async () => {
+          try {
+            for (const exerciseId of selectedExerciseIds) {
+              await addExerciseToDay.mutateAsync({ dayId: day.id, input: { exerciseId } });
+            }
+          } catch {
+            useToastStore.getState().show({ message: t('plans.day.genericErrorMessage') });
+          }
+        })();
       },
     });
     router.push(routes.modals.exercisePicker());

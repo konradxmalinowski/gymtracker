@@ -500,9 +500,10 @@ export function ActiveWorkoutScreen() {
           onSelect={(exerciseIds) => {
             // Sequential, not `Promise.all`/unawaited `forEach` - concurrent
             // `addExercise` calls race on the same session's `sort_order`
-            // write, the exact bug class already found and fixed once in
-            // `PlanDayEditorScreen`'s own multi-select add handler (see
-            // CLAUDE.md's P9 code-review history).
+            // write. The same fix was also applied to
+            // `PlanDayEditorScreen.tsx`'s own multi-select add handler
+            // (`features/plans/screens/PlanDayEditorScreen.tsx`), which had
+            // the identical unawaited-`forEach` bug independently.
             void (async () => {
               for (const exerciseId of exerciseIds) {
                 await addExercise(activeSession.id, exerciseId);
