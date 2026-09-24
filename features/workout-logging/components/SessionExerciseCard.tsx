@@ -1,7 +1,8 @@
 import { memo, useMemo } from 'react';
+import { View } from 'react-native';
 
 import { Column } from '@/components/layout';
-import { Card, Divider } from '@/components/ui';
+import { Divider } from '@/components/ui';
 import {
   assignSetDisplayNumbers,
   orderSetsForDisplay,
@@ -56,6 +57,16 @@ export interface SessionExerciseCardProps {
  * `ActiveWorkoutScreen` - sets inside are a plain mapped list, never their
  * own virtualized list, per the same section's explicit "nested virtualized
  * lists are a known source of scroll jank" note.
+ *
+ * Reference-layout pass: no longer wrapped in a `Card` (rounded, elevated
+ * surface) - the reference screenshot has no per-exercise "bubble," just
+ * flat content directly on the screen background, exercises separated by
+ * plain spacing (`ActiveWorkoutScreen`'s own `renderItem` already adds a
+ * `marginBottom` between rows, independent of this component's own
+ * styling). `WorkoutHistoryDetailScreen`'s edit mode reuses this same
+ * component, so it goes flat there too - deliberate, for the same "one
+ * shared look" reason the rest of this component is shared between both
+ * screens.
  *
  * P15 (performance hardening): wrapped in `React.memo` with the default
  * shallow prop comparison - no custom comparator, since `ActiveWorkoutScreen`
@@ -148,7 +159,7 @@ export const SessionExerciseCard = memo(function SessionExerciseCard({
   }
 
   return (
-    <Card variant="elevated" padding={4} testID={testID}>
+    <View testID={testID}>
       <Column gap={3}>
         <ExerciseHeader
           exercise={exercise}
@@ -210,6 +221,6 @@ export const SessionExerciseCard = memo(function SessionExerciseCard({
           testID={testID ? `${testID}-add-set` : undefined}
         />
       </Column>
-    </Card>
+    </View>
   );
 });
