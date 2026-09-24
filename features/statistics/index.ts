@@ -25,6 +25,8 @@ export type {
   BodyWeightPoint,
   DayIntensity,
   HeatmapLevel,
+  DaySleep,
+  SleepLevel,
 } from './repository/StatisticsRepository';
 
 export { statisticsKeys, useStatisticsDashboard } from './hooks/useStatisticsDashboard';
