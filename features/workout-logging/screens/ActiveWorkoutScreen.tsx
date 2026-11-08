@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Column } from '@/components/layout';
+import { Divider } from '@/components/ui';
 import { ConfirmDialog, EmptyState, Skeleton } from '@/components/feedback';
 import { RestTimerBar, useRestTimerTick } from '@/features/rest-timer';
 import type { SessionExercise, WorkoutSet } from '@/features/workout-logging';
@@ -409,6 +410,17 @@ export function ActiveWorkoutScreen() {
       );
       return (
         <View style={{ marginBottom: space[3] }}>
+          {/* Reference-layout feedback: now that SessionExerciseCard is flat
+              (no more per-exercise "bubble"), a plain hairline between
+              exercises is the only thing separating one exercise's content
+              from the next - added here rather than inside
+              SessionExerciseCard, which has no notion of its own position in
+              the list. */}
+          {index > 0 ? (
+            <View style={{ paddingBottom: space[3] }}>
+              <Divider />
+            </View>
+          ) : null}
           {exercise.supersetGroup !== null ? (
             <SupersetBracket
               group={exercise.supersetGroup}

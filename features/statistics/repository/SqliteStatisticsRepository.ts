@@ -13,6 +13,7 @@ import {
   type ProgressionMetric,
   type SeriesPoint,
 } from '../domain/exerciseProgressionReducer';
+import { computeSleepHeatmap, type DaySleep } from '../domain/sleepBinning';
 import type { BucketGranularity } from '../domain/statRange';
 import { computeYearlyHeatmap, type DayIntensity } from '../domain/yearlyHeatmapBinning';
 import type {
@@ -49,6 +50,11 @@ interface MuscleVolumeRow {
 }
 
 interface BodyWeightRow {
+  local_date: string;
+  value: number;
+}
+
+interface SleepRow {
   local_date: string;
   value: number;
 }
@@ -245,6 +251,23 @@ export class SqliteStatisticsRepository implements StatisticsRepository {
       [localDateFrom, localDateTo],
     );
     return rows.map((row) => ({ localDate: row.local_date, valueKg: row.value }));
+  }
+
+  async sleepHeatmap(year: number, tx?: SqlExecutor): Promise<DaySleep[]> {
+    const executor = tx ?? this.deps.db;
+    // Same "bare column takes the min/max row" SQLite behavior `bodyWeightTrend` relies on - returns each day's *last* sleep entry.
+    const rows = await executor.select<SleepRow>(
+      `SELECT local_date, value, MAX(measured_at)
+       FROM body_metric_entry
+       WHERE metric = 'sleep_hours' AND deleted_at IS NULL AND local_date BETWEEN ? AND ?
+       GROUP BY local_date
+       ORDER BY local_date ASC`,
+      [`${year}-01-01`, `${year}-12-31`],
+    );
+    return computeSleepHeatmap(
+      rows.map((row) => ({ localDate: row.local_date, hours: row.value })),
+      year,
+    );
   }
 
   /** Same `oneRm.formula` resolution `SqlitePersonalRecordRepository.resolveFormula` already establishes (ADR-0015) - only called for `metric === 'e1rm'`, never for `top_set`/`volume`. */

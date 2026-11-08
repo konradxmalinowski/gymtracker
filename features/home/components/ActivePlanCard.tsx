@@ -105,8 +105,13 @@ export function ActivePlanCard({
               {t('home.activePlan.suggestedDayLabelTemplate', { name: suggestedDay.name })}
             </Text>
           </Column>
+          {/* `secondary`, not `primary` - direct user feedback that Home read
+              as "too much red" with two solid-accent CTAs stacked near the
+              top (this one and Quick Start above it). Quick Start stays the
+              sole primary action; this is still a full, clear button, just
+              visually quieter. */}
           <Button
-            variant="primary"
+            variant="secondary"
             label={t('home.activePlan.startButtonLabelTemplate', { name: suggestedDay.name })}
             onPress={() => onStart(suggestedDay.id)}
             loading={isStarting}

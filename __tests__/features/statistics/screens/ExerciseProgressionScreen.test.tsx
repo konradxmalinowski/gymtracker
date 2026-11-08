@@ -64,6 +64,7 @@ function buildFakeStatisticsRepository(): jest.Mocked<StatisticsRepository> {
     exerciseProgression: jest.fn().mockResolvedValue([{ bucketStart: '2026-08-01', value: 100 }]),
     bodyWeightTrend: jest.fn().mockResolvedValue([]),
     yearlyHeatmap: jest.fn().mockResolvedValue([]),
+    sleepHeatmap: jest.fn().mockResolvedValue([]),
   };
 }
 
