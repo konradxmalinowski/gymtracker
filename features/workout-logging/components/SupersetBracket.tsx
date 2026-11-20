@@ -17,8 +17,8 @@ export interface SupersetBracketProps extends PropsWithChildren {
  * kept just as simple here (no accessibility-action merging: unlike
  * `PlanDayExerciseRow`, `SessionExerciseCard` is not itself a single
  * `Pressable` whose accessibility node this wrapper needs to preserve - it's
- * a `Card` containing several independent interactive children, each already
- * independently reachable). Grouping itself (`superset_group`, carried from
+ * a flat container with several independent interactive children, each
+ * already independently reachable). Grouping itself (`superset_group`, carried from
  * the plan day per this phase's roadmap entry) is read-only in P6 - no
  * in-workout "create/edit a superset" UI ships this phase, mirroring how
  * P6's brief scopes reordering to move-up/move-down rather than a full

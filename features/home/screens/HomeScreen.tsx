@@ -121,9 +121,13 @@ export function HomeScreen() {
             </Text>
           </Column>
 
+          {/* `md`, not `lg` - direct user feedback that the full-height
+              primary block read as too dominant right under the header.
+              Still full-width (the dashboard's one real primary action), just
+              a less tall/bold slab. */}
           <Button
             variant="primary"
-            size="lg"
+            size="md"
             label={t('workoutLogging.quickStartButtonLabel')}
             onPress={() => void startEmpty()}
             loading={isStarting}

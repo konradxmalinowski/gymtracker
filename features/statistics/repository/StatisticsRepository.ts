@@ -2,6 +2,7 @@ import type { SqlExecutor } from '@/repositories/contracts/database';
 import type { EntityId } from '@/repositories/contracts/repository';
 
 import type { ProgressionMetric, SeriesPoint } from '../domain/exerciseProgressionReducer';
+import type { DaySleep } from '../domain/sleepBinning';
 import type { BucketGranularity } from '../domain/statRange';
 import type { DayIntensity } from '../domain/yearlyHeatmapBinning';
 
@@ -25,6 +26,7 @@ export interface BodyWeightPoint {
 }
 
 export type { ProgressionMetric, SeriesPoint } from '../domain/exerciseProgressionReducer';
+export type { DaySleep, SleepLevel } from '../domain/sleepBinning';
 export type { DayIntensity, HeatmapLevel } from '../domain/yearlyHeatmapBinning';
 
 /**
@@ -109,4 +111,15 @@ export interface StatisticsRepository {
     localDateTo: string,
     tx?: SqlExecutor,
   ): Promise<BodyWeightPoint[]>;
+
+  /**
+   * Every day of `year`, gap-filled and binned into the fixed red/yellow/
+   * green scale `computeSleepHeatmap` defines - the sleep-table equivalent of
+   * `yearlyHeatmap()`, reading `body_metric_entry` where
+   * `metric = 'sleep_hours'` (same ADR-0019/ADR-0020 direct-SQL-read
+   * precedent `bodyWeightTrend` above already uses for this table). A day
+   * with more than one entry keeps only its last measurement, same rule
+   * `bodyWeightTrend` applies.
+   */
+  sleepHeatmap(year: number, tx?: SqlExecutor): Promise<DaySleep[]>;
 }

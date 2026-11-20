@@ -6,6 +6,7 @@ import { resolveStatRange, type StatRange } from '../domain/statRange';
 import type {
   BodyWeightPoint,
   DayIntensity,
+  DaySleep,
   MuscleVolumeSlice,
   StatisticsRepository,
   TimeBucket,
@@ -26,6 +27,7 @@ export interface StatisticsDashboardData {
   bodyWeight: BodyWeightPoint[];
   heatmap: DayIntensity[];
   heatmapYear: number;
+  sleep: DaySleep[];
 }
 
 /**
@@ -49,16 +51,18 @@ export function useStatisticsDashboard(
       const { localDateFrom, localDateTo, bucket } = resolveStatRange(range, today);
       const heatmapYear = Number(today.slice(0, 4));
 
-      const [volume, frequency, duration, muscleVolume, bodyWeight, heatmap] = await Promise.all([
-        statisticsRepository.volumeByPeriod(localDateFrom, localDateTo, bucket),
-        statisticsRepository.sessionFrequency(localDateFrom, localDateTo, bucket),
-        statisticsRepository.durationTrend(localDateFrom, localDateTo, bucket),
-        statisticsRepository.muscleGroupVolume(localDateFrom, localDateTo),
-        statisticsRepository.bodyWeightTrend(localDateFrom, localDateTo),
-        statisticsRepository.yearlyHeatmap(heatmapYear),
-      ]);
+      const [volume, frequency, duration, muscleVolume, bodyWeight, heatmap, sleep] =
+        await Promise.all([
+          statisticsRepository.volumeByPeriod(localDateFrom, localDateTo, bucket),
+          statisticsRepository.sessionFrequency(localDateFrom, localDateTo, bucket),
+          statisticsRepository.durationTrend(localDateFrom, localDateTo, bucket),
+          statisticsRepository.muscleGroupVolume(localDateFrom, localDateTo),
+          statisticsRepository.bodyWeightTrend(localDateFrom, localDateTo),
+          statisticsRepository.yearlyHeatmap(heatmapYear),
+          statisticsRepository.sleepHeatmap(heatmapYear),
+        ]);
 
-      return { volume, frequency, duration, muscleVolume, bodyWeight, heatmap, heatmapYear };
+      return { volume, frequency, duration, muscleVolume, bodyWeight, heatmap, heatmapYear, sleep };
     },
   });
 }

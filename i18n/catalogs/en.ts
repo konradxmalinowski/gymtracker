@@ -864,6 +864,20 @@ export const en = {
       accessibilityLabelTemplate:
         'Body weight chart, {{count}} entries, ranging from {{min}} to {{max}} kg',
     },
+    sleep: {
+      titleTemplate: '{{year}} sleep',
+      emptyTitle: 'No sleep entries yet',
+      emptyMessage: 'Log a sleep entry to see your sleep table here.',
+      accessibilityLabel: {
+        one: '{{year}} sleep table, {{count}} night logged',
+        other: '{{year}} sleep table, {{count}} nights logged',
+      },
+      legend: {
+        poorLabel: 'Under 6h',
+        okLabel: '6-8h',
+        greatLabel: '8h or more',
+      },
+    },
   },
   calendar: {
     screenTitle: 'Training calendar',

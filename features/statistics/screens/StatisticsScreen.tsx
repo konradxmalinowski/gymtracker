@@ -12,6 +12,7 @@ import { BodyWeightTrendCard } from '../components/BodyWeightTrendCard';
 import { DurationTrendCard } from '../components/DurationTrendCard';
 import { FrequencyChartCard } from '../components/FrequencyChartCard';
 import { MuscleVolumeCard } from '../components/MuscleVolumeCard';
+import { SleepHeatmapCard } from '../components/SleepHeatmapCard';
 import { StatRangeSelector } from '../components/StatRangeSelector';
 import { VolumeChartCard } from '../components/VolumeChartCard';
 import { YearlyHeatmapCard } from '../components/YearlyHeatmapCard';
@@ -118,6 +119,12 @@ export function StatisticsScreen() {
           isPending={isFetching}
           testID="statistics-heatmap-card"
         />
+        <SleepHeatmapCard
+          data={data.sleep}
+          year={data.heatmapYear}
+          isPending={isFetching}
+          testID="statistics-sleep-card"
+        />
       </Column>
     </Screen>
   );
@@ -128,7 +135,7 @@ function StatisticsSkeleton() {
     <Column gap={4} style={{ paddingVertical: space[4] }}>
       <Skeleton width="50%" height={40} />
       <Skeleton width="100%" height={40} radius="xl" />
-      {[0, 1, 2, 3, 4, 5].map((index) => (
+      {[0, 1, 2, 3, 4, 5, 6].map((index) => (
         <Skeleton key={index} width="100%" height={220} radius="xl" />
       ))}
     </Column>
